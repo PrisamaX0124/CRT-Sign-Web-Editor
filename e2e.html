@@ -1313,6 +1313,80 @@
         ' draggable=' + $$('.palette-card')[0].getAttribute('draggable'));
     }
 
+    // S39：移动端高牌面不挤飞底部属性带（回归：行多 / 动态宽度 → 牌面变高，
+    // 底部属性带被挤出视口，元素表单滚到底也够不到删除按钮）
+    async function s39_mobileTallSignBand() {
+      var w = W();
+      var frameEl = frame;
+      frameEl.style.width = '375px';
+      W().dispatchEvent(new (W().Event)('resize'));
+      var switched = await waitFor(function () {
+        return w.App.isMobileView() && $$('.palette-chip').length === 7;
+      }, 6000);
+      ok('S39 窄视口进入移动布局', switched,
+        'mobile=' + w.App.isMobileView() + ' chips=' + $$('.palette-chip').length);
+      if (!switched) return;
+
+      var S = w.SignState;
+      // 选中一个元素（元素表单底部才有删除按钮）
+      var elId = null;
+      w.App.update(function (st) {
+        var el = S.createElement('bilingual-text', {});
+        elId = el.id;
+        return S.addElement(st, st.rows[0].id, el);
+      });
+      w.App.select(elId);
+
+      function bandState() {
+        var vh = W().innerHeight;
+        var rp = rectOf($('#right-panel'));
+        return { vh: vh, rpBottom: rp.y + rp.h };
+      }
+      function delBtnAfterBottomScroll() {
+        var body = $('#right-panel-body');
+        body.scrollTop = body.scrollHeight; // 属性带内部滚到底
+        var btns = $$('#right-panel-body .btn-danger').filter(function (b) {
+          return b.textContent.indexOf('删除元素') !== -1;
+        });
+        if (!btns.length) return null;
+        var r = rectOf(btns[0]);
+        return r.y + r.h;
+      }
+
+      // 触发一：固定宽度下行数多（行高累加）
+      while (w.App.state.rows.length < 15) w.App.update(S.addRow);
+      var rowsCase = bandState();
+      var rowsDel = delBtnAfterBottomScroll();
+      var cs = w.document.getElementById('canvas-scroll');
+      ok('S39 多行高牌面：底部属性带仍在视口内', rowsCase.rpBottom <= rowsCase.vh + 0.5,
+        'bandBottom=' + rowsCase.rpBottom + ' vh=' + rowsCase.vh);
+      ok('S39 多行高牌面：删除按钮滚到底后可达', rowsDel !== null && rowsDel <= rowsCase.vh + 0.5,
+        'delBottom=' + rowsDel + ' vh=' + rowsCase.vh);
+      ok('S39 多行高牌面：画布在滚动容器内溢出（而非撑破布局）',
+        cs.scrollHeight > cs.clientHeight + 40,
+        'scrollHeight=' + cs.scrollHeight + ' clientHeight=' + cs.clientHeight);
+
+      // 触发二：动态宽度（牌面宽度收窄到内容 → 同样行数下显示高度暴涨）
+      w.App.update(function (st) {
+        return S.updateSignSettings(st, { widthMode: 'dynamic' });
+      });
+      var dyn = bandState();
+      var dynDel = delBtnAfterBottomScroll();
+      ok('S39 动态宽度高牌面：底部属性带仍在视口内', dyn.rpBottom <= dyn.vh + 0.5,
+        'bandBottom=' + dyn.rpBottom + ' vh=' + dyn.vh);
+      ok('S39 动态宽度高牌面：删除按钮滚到底后可达', dynDel !== null && dynDel <= dyn.vh + 0.5,
+        'delBottom=' + dynDel + ' vh=' + dyn.vh);
+
+      w.App.select(null);
+      // 还原桌面视口
+      frameEl.style.width = '1280px';
+      W().dispatchEvent(new (W().Event)('resize'));
+      var restored = await waitFor(function () {
+        return !w.App.isMobileView() && $$('.palette-category').length === 7;
+      }, 6000);
+      ok('S39 回宽视口恢复桌面布局', restored, 'mobile=' + w.App.isMobileView());
+    }
+
     // ─── 主流程 ───────────────────────────────────────────
 
     var frameEl = document.getElementById('app-frame');
@@ -1357,6 +1431,7 @@
         s36_canvasZoomFit();
         await s37_pagehideFlush();
         await s38_mobileShell();
+        await s39_mobileTallSignBand();
       }).then(function () {
         var passed = results.filter(function (r) { return r.pass; }).length;
         var total = results.length;

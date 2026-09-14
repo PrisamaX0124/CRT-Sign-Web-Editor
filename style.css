@@ -976,6 +976,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* 中部：画布。touch-action:none 把原生滚动交给 interact.js 的手势层
      （单指平移 / pinch 缩放 / 双击复位），鼠标滚轮不受影响 */
+  /* min-height:0 解除纵向 flex item 的内容最小高度：牌面多行/动态宽变高时
+     画布在 #canvas-scroll 内滚动，不把底部属性带挤出视口（删除按钮不可达） */
+  #center-panel { min-height: 0; }
   #canvas-scroll {
     padding: 12px;
     touch-action: none;
