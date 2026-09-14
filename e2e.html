@@ -1387,6 +1387,76 @@
       ok('S39 回宽视口恢复桌面布局', restored, 'mobile=' + w.App.isMobileView());
     }
 
+    // S40：移动端切换元素分类不得重置 chip 行横向滑动位置（回归：buildPalette
+    // 整树重建 → .palette-chips scrollLeft 归零；用户把 chip 行滑到右侧点选
+    // 分类后，chip 行立刻弹回最左，刚点中的分类飞出视口）
+    async function s40_mobileChipScrollKeeps() {
+      var w = W();
+      var frameEl = frame;
+      frameEl.style.width = '375px';
+      W().dispatchEvent(new (W().Event)('resize'));
+      var switched = await waitFor(function () {
+        return w.App.isMobileView() && $$('.palette-chip').length === 7;
+      }, 6000);
+      ok('S40 窄视口进入移动布局', switched,
+        'mobile=' + w.App.isMobileView() + ' chips=' + $$('.palette-chip').length);
+      if (!switched) return;
+
+      function chipRow() { return $('.palette-chips'); }
+      // 前置条件：chip 行确实可横向滑动（否则本用例无意义）
+      var row = chipRow();
+      ok('S40 chip 行可横向滑动（前置条件）', row.scrollWidth > row.clientWidth + 20,
+        'scrollWidth=' + row.scrollWidth + ' clientWidth=' + row.clientWidth +
+        ' viewport=' + W().innerWidth);
+
+      // 滑到最右端（末位「预设」chip 进入视口）
+      row.scrollLeft = row.scrollWidth;
+      var before = chipRow().scrollLeft;
+      ok('S40 chip 行已滑到右端', before > 20, 'scrollLeft=' + before);
+
+      // 点选最右侧分类 chip → 触发卡片条重建
+      var rowNode = chipRow();
+      var chipNode = $$('.palette-chip')[6];
+      chipNode.click();
+      ok('S40 点选末位分类 chip 生效（卡片条已切换）',
+        $$('.palette-chip')[6].classList.contains('active'));
+
+      // chip 行结构不随分类变化：同一 DOM 节点原地保留（滑动惯性/焦点不被打断）
+      ok('S40 切换分类不重建 chip 行（节点原地保留）',
+        chipRow() === rowNode && $$('.palette-chip')[6] === chipNode,
+        'rowSame=' + (chipRow() === rowNode) + ' chipSame=' + ($$('.palette-chip')[6] === chipNode));
+
+      var after = chipRow().scrollLeft;
+      ok('S40 切换分类后 chip 行滑动位置保持', Math.abs(after - before) <= 2,
+        'before=' + before + ' after=' + after);
+
+      // 用户症状：刚点中的分类 chip 仍在可视区内（未被弹回左侧挤出视口）
+      var chipR = rectOf($$('.palette-chip')[6]);
+      var rowR = rectOf(chipRow());
+      ok('S40 被点选分类 chip 仍在 chip 行视口内',
+        chipR.x >= rowR.x - 0.5 && chipR.x + chipR.w <= rowR.x + rowR.w + 0.5,
+        'chip=' + (chipR.x + '..' + (chipR.x + chipR.w)) + ' row=' + (rowR.x + '..' + (rowR.x + rowR.w)));
+
+      // 同一分类重复点选不重建，滑动位置同样不受影响
+      $$('.palette-chip')[6].click();
+      ok('S40 重复点选同分类不动滑动位置', Math.abs(chipRow().scrollLeft - before) <= 2,
+        'scrollLeft=' + chipRow().scrollLeft);
+
+      // 结构重建路径（存预设 → Presets.onChange → buildPalette 整树重建）同样不得重置
+      w.SignPresets.save('S40 预设', w.App.state.rows[0].elements);
+      ok('S40 存预设（结构重建）后 chip 行滑动位置保持',
+        Math.abs(chipRow().scrollLeft - before) <= 2, 'scrollLeft=' + chipRow().scrollLeft);
+
+      // 回方向指示分类；还原桌面视口
+      $$('.palette-chip')[0].click();
+      frameEl.style.width = '1280px';
+      W().dispatchEvent(new (W().Event)('resize'));
+      var restored = await waitFor(function () {
+        return !w.App.isMobileView() && $$('.palette-category').length === 7;
+      }, 6000);
+      ok('S40 回宽视口恢复桌面布局', restored, 'mobile=' + w.App.isMobileView());
+    }
+
     // ─── 主流程 ───────────────────────────────────────────
 
     var frameEl = document.getElementById('app-frame');
@@ -1432,6 +1502,7 @@
         await s37_pagehideFlush();
         await s38_mobileShell();
         await s39_mobileTallSignBand();
+        await s40_mobileChipScrollKeeps();
       }).then(function () {
         var passed = results.filter(function (r) { return r.pass; }).length;
         var total = results.length;

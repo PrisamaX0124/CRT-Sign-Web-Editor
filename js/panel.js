@@ -129,9 +129,15 @@
 
   function buildPalette() {
     var root = document.getElementById('palette');
+    // chip 行滑动位置跨结构重建保留（预设增删、断点跨越）：整树重建会把
+    // scrollLeft 归零，用户滑到右侧后 chip 行弹回最左、刚点中的分类飞出视口。
+    var prevChips = root.querySelector('.palette-chips');
+    var chipsScroll = prevChips ? prevChips.scrollLeft : 0;
     root.innerHTML = '';
     if (App.isMobileView && App.isMobileView()) {
       buildPaletteMobile(root);
+      var chips = root.querySelector('.palette-chips');
+      if (chips && chipsScroll > 0) chips.scrollLeft = chipsScroll;
       return;
     }
     CATEGORIES.forEach(function (cat) {
@@ -142,6 +148,24 @@
 
   /** 移动端当前分类（chip 态，跨 palette 重建保留）；-1 = 预设 */
   var activeCategory = 0;
+
+  /** chip 下标 → 分类下标（末位 chip 为预设，故映射为 -1） */
+  function chipCategoryIndex(chipIndex) {
+    return chipIndex < CATEGORIES.length ? chipIndex : -1;
+  }
+
+  /** 当前分类的卡片节点（预设分类出预设卡，其余出元素卡） */
+  function buildActiveCards() {
+    if (activeCategory === -1) return buildPresetCards();
+    return CATEGORIES[activeCategory].items.map(function (item) { return buildItemCard(item); });
+  }
+
+  /** 当前分类的横向卡片条 */
+  function buildCardStrip() {
+    var strip = h('div', { class: 'palette-strip' });
+    buildActiveCards().forEach(function (n) { strip.appendChild(n); });
+    return strip;
+  }
 
   /** ≤768px：顶部 chip 行（6 分类 + 预设）+ 当前分类横向卡片条 */
   function buildPaletteMobile(root) {
@@ -154,31 +178,31 @@
     }
     CATEGORIES.forEach(function (cat, i) {
       var c = chip(cat.name, i);
-      c.addEventListener('click', function () {
-        if (activeCategory === i) return;
-        activeCategory = i;
-        buildPalette();
-      });
+      c.addEventListener('click', function () { selectPaletteCategory(i); });
       chips.appendChild(c);
     });
     var presetChip = chip('预设', -1);
-    presetChip.addEventListener('click', function () {
-      if (activeCategory === -1) return;
-      activeCategory = -1;
-      buildPalette();
-    });
+    presetChip.addEventListener('click', function () { selectPaletteCategory(-1); });
     chips.appendChild(presetChip);
     root.appendChild(chips);
+    root.appendChild(buildCardStrip());
+  }
 
-    var strip = h('div', { class: 'palette-strip' });
-    if (activeCategory === -1) {
-      buildPresetCards().forEach(function (n) { strip.appendChild(n); });
-    } else {
-      CATEGORIES[activeCategory].items.forEach(function (item) {
-        strip.appendChild(buildItemCard(item));
-      });
+  /**
+   * 切换当前分类：chip 行的结构不随分类变化，故只翻转 active 态、就地替换
+   * 下方卡片条，不整树重建——重建会归零 chip 行的 scrollLeft（chip 行滑到
+   * 右侧点选分类后弹回最左、刚点中的分类飞出视口），也会打断滑动惯性。
+   */
+  function selectPaletteCategory(idx) {
+    if (activeCategory === idx) return;
+    activeCategory = idx;
+    var root = document.getElementById('palette');
+    var chips = root.querySelectorAll('.palette-chip');
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].classList.toggle('active', chipCategoryIndex(i) === idx);
     }
-    root.appendChild(strip);
+    var strip = root.querySelector('.palette-strip');
+    if (strip) strip.parentNode.replaceChild(buildCardStrip(), strip);
   }
 
   function buildDesktopCategory(cat) {
