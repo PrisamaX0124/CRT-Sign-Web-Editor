@@ -78,6 +78,7 @@ test/                 Node 单元测试
 docs/                 开发文档（ADR、开发指南）
 CONTEXT.md            领域术语表
 AGENTS.md             AI 协作指引
+LICENSE               开源协议文件（Apache-2.0）
 ```
 
 ## 文档
@@ -94,3 +95,8 @@ AGENTS.md             AI 协作指引
 
 - `fonts/` 与 `fonts-data.js` 为构建产物：思源黑体子集化（GB2312 全量字符，fonttools 生成）+ Helvetica / Frutiger（数字与西文）。**不要手工编辑**，再生成管线见 [docs/development.md](docs/development.md)。
 - 服务设施与方向图标移植自 signmaker-main 项目的 `icon` 目录，已内嵌为 SVG path 数据。
+
+## 开源协议
+
+本项目采用 [Apache License 2.0](LICENSE) 开源协议。
+
