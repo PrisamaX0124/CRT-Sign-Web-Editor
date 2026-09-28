@@ -611,7 +611,10 @@
       ok('S23 图标元素已添加', last.type === 'icon');
       w.App.select(last.id);
       var iconBtns = $$('#right-panel-body .icon-pick');
-      ok('S23 图标选择器仅列服务设施', iconBtns.length === 17, 'n=' + iconBtns.length);
+      ok('S23 图标选择器仅列服务设施（含出口三向变体）', iconBtns.length === 19, 'n=' + iconBtns.length);
+      ok('S23 出口三向变体均在选择器中', ['出口', '出口（向左）', '出口（向右）'].every(function (t) {
+        return iconBtns.some(function (b) { return b.title === t; });
+      }));
       var active = iconBtns.filter(function (b) { return b.classList.contains('active'); });
       ok('S23 当前图标高亮', active.length === 1, 'n=' + active.length);
       var stairsBtn = iconBtns.filter(function (b) { return b.title === '楼梯'; })[0];

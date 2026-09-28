@@ -18,7 +18,7 @@
 ## 测试（改动后必须全绿）
 
 ```bash
-node --test                        # 状态 + 纯几何（假 measurer，Node 内置 runner）
+node --test                        # 状态 + 纯几何 + 图标生成脚本纯函数（假 measurer，Node 内置 runner）
 # 浏览器打开 test.html             # DOM + 真实字体墨区断言（标题应为 ✔ 全部通过）
 # 浏览器打开 e2e.html              # 端到端交互（标题应为 ✔ E2E 全部通过）
 ```
