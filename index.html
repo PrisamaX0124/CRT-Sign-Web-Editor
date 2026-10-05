@@ -1,10 +1,11 @@
 <!DOCTYPE html>
+<!-- Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>导向标识生成器</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=public-c3a402667e4b">
 </head>
 <body>
 
@@ -22,6 +23,7 @@
         <span class="panel-title">元素选择区</span>
         <button class="icon-btn collapse-btn" id="left-collapse" title="收起元素选择区">⟨</button>
       </div>
+      <a class="editor-page-link" href="platform.html">站台吊板 / 线路图 ↗</a>
       <div class="panel-body" id="palette">
         <!-- panel.js 填充：分类元素卡片 + 预设 -->
       </div>
@@ -30,6 +32,13 @@
 
     <!-- ══ 中栏：SVG 编辑区 ══ -->
     <main id="center-panel">
+      <div id="edit-actions" role="toolbar" aria-label="选择与剪贴板">
+        <button type="button" data-edit-action="select-all" title="全选元素（Ctrl+A）">全选</button>
+        <button type="button" data-edit-action="copy" title="复制选中元素（Ctrl+C）" disabled>复制</button>
+        <button type="button" data-edit-action="cut" title="剪切选中元素（Ctrl+X）" disabled>剪切</button>
+        <button type="button" data-edit-action="paste" title="粘贴元素（Ctrl+V）">粘贴</button>
+        <span id="selection-status" aria-live="polite">Ctrl 单击加选 · Shift 单击范围选择</span>
+      </div>
       <div id="canvas-scroll">
         <div id="canvas-area">
           <div id="canvas-wrap">
@@ -46,17 +55,18 @@
       </div>
       <!-- 画布缩放徽标：仅移动布局显示，interact.js 更新倍率并接线复位 -->
       <button id="zoom-badge" title="当前缩放，点按复位">100%</button>
+      <div id="element-toolbar" role="toolbar" aria-label="元素快捷操作" hidden></div>
     </main>
 
     <!-- ══ 右栏：属性 / 导出 ══ -->
     <button id="right-expander" class="expander expander-right" title="展开属性面板" hidden>⟨</button>
     <aside id="right-panel" class="side-panel">
       <div class="panel-header">
-        <span class="panel-title" id="right-panel-title">标识牌设置</span>
-        <span style="display:flex;gap:2px">
-          <button class="icon-btn" id="close-element-btn" title="关闭元素属性" hidden>✕</button>
-          <button class="icon-btn collapse-btn" id="right-collapse" title="收起属性面板">⟩</button>
-        </span>
+        <div class="panel-heading">
+          <button class="icon-btn" id="close-element-btn" title="返回标识牌设置" aria-label="返回标识牌设置" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <span class="panel-title" id="right-panel-title">标识牌设置</span>
+        </div>
+        <button class="icon-btn collapse-btn" id="right-collapse" title="收起属性面板">⟩</button>
       </div>
       <div class="panel-body" id="right-panel-body">
         <!-- panel.js 填充：标识牌设置 / 元素属性 / 预设预览 -->
@@ -69,16 +79,18 @@
   <div id="toasts"></div>
   <div id="modal-root"></div>
 
-  <script src="js/core.js"></script>
-  <script src="js/icons.js"></script>
-  <script src="js/state.js"></script>
-  <script src="js/render.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/presets.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/exporters.js"></script>
-  <script src="js/panel.js"></script>
-  <script src="js/interact.js"></script>
-  <script src="js/main.js"></script>
+  <script src="js/core.js?v=public-6f1dc050e68a"></script>
+  <script src="js/icons.js?v=public-e04b96ca843c"></script>
+  <script src="js/state.js?v=public-821e25ad8636"></script>
+  <script src="js/render.js?v=public-02d87d9bea0d"></script>
+  <script src="js/ui.js?v=public-e1501c309354"></script>
+  <script src="js/clipboard.js?v=public-d58c305be636"></script>
+  <script src="js/presets.js?v=public-f7f554e94cdf"></script>
+  <script src="js/storage.js?v=public-fe3d229c7864"></script>
+  <script src="js/exporters.js?v=public-56da7d254b51"></script>
+  <script src="js/color-picker.js?v=public-c7a1c292cabc"></script>
+  <script src="js/panel.js?v=public-77d4ca4e199b"></script>
+  <script src="js/interact.js?v=public-0409ab7f584e"></script>
+  <script src="js/main.js?v=public-5e0e07b88f2a"></script>
 </body>
 </html>

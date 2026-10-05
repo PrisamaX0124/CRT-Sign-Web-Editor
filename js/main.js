@@ -1,3 +1,4 @@
+/* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * main.js — 启动装配
  *
@@ -22,12 +23,12 @@
   /**
    * 预加载全部字体面（度量依赖，未就绪不进界面）。
    * 超过 FONT_TIMEOUT_MS 仍不齐则带系统回退放行（resolve(false)），
-   * 单面失败不算超时（catch 后继续等其余面）。
+   * 单面失败继续等其余面，最终返回 false 提示度量可能不准。
    */
   function loadFonts() {
     var all = Promise.all(SignCore.FONT_LOAD_SPECS.map(function (s) {
-      return document.fonts.load(s.css).catch(function () { /* 单面失败继续 */ });
-    })).then(function () { return true; });
+      return document.fonts.load(s.css).then(function () { return true; }, function () { return false; });
+    })).then(function (loaded) { return loaded.every(function (ready) { return ready; }); });
     var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(false); }, FONT_TIMEOUT_MS); });
     var slowHint = setTimeout(function () {
       showLoading('字体加载较慢，仍在等待…（可检查网络后刷新）');
@@ -177,16 +178,14 @@
         showBlockedNotice();
         return;
       }
-      showLoading('正在加载字体…（首次访问约 6 MB）');
-      // 并行预载导出用内嵌字体（fonts-data.js 约 7 MB）：不阻塞进界面，
-      // 但通常在用户点导出前已就绪；失败时点导出会重试并有忙碌提示。
-      SignExporters.ensureFontData().catch(function () { /* 导出时重试 */ });
+      showLoading('正在加载 MiSans 与编号字体…');
       loadFonts().then(function (fontsReady) {
         App.measure = SignCore.createCanvasMeasurer();
         App.state = SignStorage.loadAutosave() || SignState.createSign();
         App.prefs = SignStorage.loadPrefs();
 
         SignInteract.init();
+        SignClipboard.init();
         wireStaticButtons();
         SignPanel.buildPalette();
         App.renderAll();

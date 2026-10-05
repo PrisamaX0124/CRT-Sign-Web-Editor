@@ -1,3 +1,5 @@
+/* Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * storage.js — 自动保存 / 多标签页检测 / 项目 JSON 导入导出（issue 06）
  */
@@ -5,9 +7,9 @@
   'use strict';
 
   var State = global.SignState;
-  var AUTOSAVE_KEY = 'sign-autosave';
-  var INSTANCE_KEY = 'sign-instance';
-  var PREFS_KEY = 'sign-prefs';
+  var AUTOSAVE_KEY = 'public-sign-autosave';
+  var INSTANCE_KEY = 'public-sign-instance';
+  var PREFS_KEY = 'public-sign-prefs';
   var HEARTBEAT_MS = 2000;
   var FRESH_WINDOW_MS = 5000;
 
@@ -26,7 +28,9 @@
       var data = JSON.parse(raw);
       if (data && typeof data === 'object') {
         if (typeof data.autoLineColor === 'boolean') prefs.autoLineColor = data.autoLineColor;
-        if (typeof data.paletteCity === 'string') prefs.paletteCity = data.paletteCity;
+        if (typeof data.paletteCity === 'string' && global.SignCore.CITY_PALETTES[data.paletteCity]) {
+          prefs.paletteCity = data.paletteCity;
+        }
       }
     } catch (e) { /* 损坏存档按默认处理 */ }
     return prefs;

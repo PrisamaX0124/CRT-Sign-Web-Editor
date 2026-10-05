@@ -1,3 +1,4 @@
+/* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * render.js — SVG 渲染引擎（ADR-0001）
  *
@@ -7,7 +8,7 @@
  *
  * 关键比例均移植自 sign_jr.py（PRD 指定参考实现）：
  *   双语文本字号  size × 506/800（中）/ × 285/800（英）
- *   大文本/编号   size × 1.3，Frutiger（中文经 FONT_NUM 栈回退思源黑体）
+ *   大文本/编号   size × 1.3，使用Frutiger，无字形时回退MiSans
  *   线路色条宽    size × 10/28
  *   箭头          双 45° 梯形箭头头 + 矩形箭柄（柄厚 = thickness/√2）
  */
@@ -19,16 +20,17 @@
 
   // ─── 布局常量（相对内容尺寸 s 的比例）──────────────────────
 
-  var ZH_FONT_RATIO = 506 / 800;   // 0.6325  中文字号（= 中文字面高 0.58s ÷ 思源墨高比 0.92）
-  var EN_FONT_RATIO = 285 / 800;   // 0.35625 英文字号（= 英文 cap 高 0.2565s ÷ cap 比 0.72）
+  var ZH_FONT_RATIO = 506 / 800;   // 0.6325  中文字号，保留参考实现的比例
+  var EN_FONT_RATIO = 285 / 800;   // 0.35625 英文字号，保留参考实现的比例
   var NUM_FONT_RATIO = 1.3;        // 大文本/编号字号
   var STRIPE_RATIO = 10 / 28;      // 线路色条宽
   var LABEL_BOX_RATIO = 0.75;      // 组合元素尾部双语标签的内容盒高
   var EN_ALIGN_OFFSET = 1 / 30;    // 英文左右对齐时的额外缩进
 
-  // ─── 排版解剖常数（每 em 字号的墨区，实测思源黑体/Helvetica/Frutiger）──
+  // ─── 墨区锚定与参考实现的解剖常数 ──────────────────────────
   // 首行墨区顶距内容顶的引导（全文本类统一 → 同顶内边距时墨区顶齐平，基线按各自上伸部推导）
   var INK_TOP_LEADING = 0.036;
+  // 下列字体解剖值仅用于参考比例校验；当前基线由 measure.ascent/descent 得出。
   var CJK_FACE = 0.92;   // 思源黑体字面高（墨区上伸+下伸，实测 站）
   var CJK_ASC = 0.84;    // 思源黑体墨区上伸
   var CJK_DESC = 0.08;   // 思源黑体墨区下伸
@@ -141,8 +143,11 @@
     var zhInk = measure.ink(textZh, Core.FONT_ZH, weight, zhSize);
     var enInk = measure.ink(textEn, Core.FONT_EN, weight, enSize);
     // 垂直解剖锚定：zh 墨区顶 = 内容顶 + 顶部引导；en 墨区顶 = zh 墨区底 + 间隙
-    var zhBase = INK_TOP_LEADING * content + CJK_ASC * zhSize;
-    var enBase = zhBase + CJK_DESC * zhSize + ZH_EN_GAP * content + EN_CAP * enSize;
+    var zhAscent = measure.ascent(textZh, Core.FONT_ZH, weight, zhSize);
+    var zhDescent = measure.descent(textZh, Core.FONT_ZH, weight, zhSize);
+    var enAscent = measure.ascent(textEn, Core.FONT_EN, weight, enSize);
+    var zhBase = INK_TOP_LEADING * content + zhAscent;
+    var enBase = zhBase + zhDescent + ZH_EN_GAP * content + enAscent;
     return {
       width: Math.max(zhW, enW),
       zhSize: zhSize,
@@ -154,7 +159,9 @@
       zhAbl: zhInk.abl, zhAbr: zhInk.abr,
       enAbl: enInk.abl, enAbr: enInk.abr,
       weight: weight,
-      zhAscent: measure.ascent(textZh, Core.FONT_ZH, weight, zhSize), // 墨区上升高，用于顶对齐
+      zhAscent: zhAscent,
+      zhDescent: zhDescent,
+      enAscent: enAscent,
     };
   }
 
@@ -169,8 +176,36 @@
   }
 
   function bilingualTextMetrics(el, h, m) {
+    return standaloneBilingualMetrics(el, h, m, 1);
+  }
+
+  // 小号双语文本复用出口/出入口标签的 0.75 倍内容盒字号，
+  // 但保留独立文本元素自己的内边距、对齐和颜色。
+  function smallBilingualTextMetrics(el, h, m) {
+    return standaloneBilingualMetrics(el, h, m, LABEL_BOX_RATIO);
+  }
+
+  function standaloneBilingualMetrics(el, h, m, boxRatio) {
     var p = contentBox(el.props.padding, h);
-    var bi = bilingualMetrics(el.props.textZh, el.props.textEn, p.size, m, el.props.bold, p.size);
+    var bi = bilingualMetrics(el.props.textZh, el.props.textEn, p.size * boxRatio, m, el.props.bold, p.size);
+    // 大号两行文字按完整墨区居中。真实字面高（含英文下伸部）可能超过内容盒，
+    // 顶部引导线会使整组文字偏下；小号仍沿用组合标签的顶对齐。
+    if (boxRatio === 1) {
+      var tops = [], bottoms = [];
+      if (el.props.textZh.trim()) {
+        tops.push(bi.zhBase - bi.zhAscent);
+        bottoms.push(bi.zhBase + bi.zhDescent);
+      }
+      if (el.props.textEn.trim()) {
+        tops.push(bi.enBase - bi.enAscent);
+        bottoms.push(bi.enBase + m.descent(el.props.textEn, Core.FONT_EN, bi.weight, bi.enSize));
+      }
+      if (tops.length) {
+        var shift = (p.size - Math.max.apply(null, bottoms) - Math.min.apply(null, tops)) / 2;
+        bi.zhBase += shift;
+        bi.enBase += shift;
+      }
+    }
     bi.pad = p;
     bi.textW = bi.width;
     bi.width = bi.width + p.l + p.r;
@@ -182,13 +217,14 @@
     var size = p.size * NUM_FONT_RATIO;
     var text = String(el.props.text == null ? '' : el.props.text);
     // 垂直解剖锚定：数字墨区顶（cap 顶）= 内容顶 + 顶部引导（与双语文本墨区顶统一）
-    var base = p.t + INK_TOP_LEADING * p.size + NUM_ASC * size;
-    var t = inkTextLayout(text, p.size, size, m, Core.FONT_NUM, 'lsb');
+    var font = Core.FONT_NUM;
+    var base = p.t + INK_TOP_LEADING * p.size + m.ascent(text, font, 400, size);
+    var t = inkTextLayout(text, p.size, size, m, font, 'lsb');
     // 光学居中：首末字形的字距边距不对称（「1」左空大、「2」右空小），
     // 整体平移使左右墨区间距相等——独立文本元素的边界即视觉边界
     var optical = (t.firstInkLeft - (t.textW - t.lastInkRight)) / 2;
     return {
-      pad: p, fontSize: size, textW: t.textW,
+      pad: p, font: font, fontSize: size, textW: t.textW,
       digits: t.chars.map(function (d) { return { ch: d.ch, x: d.x - optical }; }),
       base: base,
       width: t.textW + p.l + p.r,
@@ -466,6 +502,7 @@
   var METRICS_FNS = {
     'arrow': arrowMetrics,
     'bilingual-text': bilingualTextMetrics,
+    'small-bilingual-text': smallBilingualTextMetrics,
     'big-number': bigNumberMetrics,
     'number-line': numberLineMetrics,
     'text-line': textLineMetrics,
@@ -554,6 +591,18 @@
       return { id: row.id, y: ri * h, height: h, elements: elements, contentWidth: contentWidth };
     });
     return { width: width, height: height, rows: rows };
+  }
+
+  /** 灰框几何：相邻行各承担共享分割线的一半，外缘保持完整宽度。 */
+  function rowFrameRects(signWidth, rowY, rowHeight, fw, first, last) {
+    var top = first ? fw : fw / 2;
+    var bottom = last ? fw : fw / 2;
+    return [
+      { x: 0, y: rowY, width: fw, height: rowHeight },
+      { x: signWidth - fw, y: rowY, width: fw, height: rowHeight },
+      { x: 0, y: rowY, width: signWidth, height: top },
+      { x: 0, y: rowY + rowHeight - bottom, width: signWidth, height: bottom },
+    ];
   }
 
   // ══════════════════════════════════════════════════════════
@@ -651,7 +700,7 @@
       g.appendChild(mkText(d.ch, {
         x: mt.pad.l + d.x, y: mt.base,
         'text-anchor': 'middle',
-        'font-family': Core.FONT_NUM, 'font-size': mt.fontSize, fill: el.props.color,
+        'font-family': mt.font, 'font-size': mt.fontSize, fill: el.props.color,
       }));
     });
   }
@@ -731,10 +780,17 @@
     if (!HAS_DOM || !lib) return;
     var icon = lib.get(el.props.icon);
     var color = el.props.color || '#000000';
+    // 旋转功能只作用于服务设施；方向图标已有固定方向，不受该属性影响。
+    var rotation = icon.cat === 'service' ? Number(el.props.rotation) : 0;
+    if ([-90, 90, 180].indexOf(rotation) === -1) rotation = 0;
     var nested = mk('svg', {
       x: mt.pad.l, y: mt.pad.t, width: mt.size, height: mt.size,
       viewBox: icon.vb, preserveAspectRatio: 'xMidYMid meet',
     });
+    if (rotation) {
+      nested.setAttribute('transform', 'rotate(' + rotation + ' ' +
+        (mt.pad.l + mt.size / 2) + ' ' + (mt.pad.t + mt.size / 2) + ')');
+    }
     nested.innerHTML = icon.body.replace(/fill="black"/g, 'fill="' + color + '"');
     g.appendChild(nested);
   }
@@ -742,6 +798,7 @@
   DRAW_FNS = {
     'arrow': drawArrow,
     'bilingual-text': drawBilingualText,
+    'small-bilingual-text': drawBilingualText,
     'big-number': drawBigNumber,
     'number-line': drawNumberLine,
     'text-line': drawTextLine,
@@ -780,17 +837,11 @@
     return { node: g, width: w };
   }
 
-  /** 标识牌灰框：从行边界向内的四条矩形（左右通高、上下通宽），模拟真实牌面边框。
+  /** 标识牌灰框：消费纯几何，相邻行共享分割线厚度。
    *  渲染在所有元素之上（遮挡越界内容）；pointer-events 关闭，不拦截元素点击。 */
-  function appendFrameRects(g, signWidth, rowY, rowHeight, fw) {
-    var strips = [
-      { x: 0, y: rowY, width: fw, height: rowHeight },                  // 左
-      { x: signWidth - fw, y: rowY, width: fw, height: rowHeight },     // 右
-      { x: 0, y: rowY, width: signWidth, height: fw },                  // 上
-      { x: 0, y: rowY + rowHeight - fw, width: signWidth, height: fw }, // 下
-    ];
+  function appendFrameRects(g, strips, color) {
     strips.forEach(function (s) {
-      var attrs = Object.assign({ class: 'sign-frame', fill: Core.SIGN_FRAME_COLOR }, s);
+      var attrs = Object.assign({ class: 'sign-frame', fill: color }, s);
       attrs['pointer-events'] = 'none';
       g.appendChild(mk('rect', attrs));
     });
@@ -798,7 +849,7 @@
 
   /**
    * 将整个标识牌渲染进 <svg> 元素（原地清空重绘）。
-   * opts: { selectedElementId, clean }
+   * opts: { selectedElementId, selectedElementIds, clean }
    * 返回 layout（见 layoutSign）。
    */
   function renderSignInto(svg, sign, measure, opts) {
@@ -816,12 +867,17 @@
       var rowLayout = layout.rows[ri];
       var rowG = mk('g', { class: 'sign-row' });
       if (!options.clean) rowG.setAttribute('data-row-id', row.id);
+      rowG.appendChild(mk('rect', {
+        class: 'row-bg', x: 0, y: rowLayout.y,
+        width: layout.width, height: sign.rowHeight,
+        fill: row.backgroundColor || sign.backgroundColor,
+      }));
       for (var ei = 0; ei < row.elements.length; ei++) {
         var el = row.elements[ei];
         var rendered = renderElement(el, sign.rowHeight, measure, { clean: options.clean });
         // 平移向下取整：相邻元素背景边界落在整数像素上，避免抗锯齿透明缝
         rendered.node.setAttribute('transform', 'translate(' + Math.floor(rowLayout.elements[ei].x) + ',' + rowLayout.y + ')');
-        if (options.selectedElementId === el.id) {
+        if (!options.clean && (options.selectedElementId === el.id || (options.selectedElementIds || []).indexOf(el.id) >= 0)) {
           rendered.node.setAttribute('class', 'element selected');
         }
         if (!options.clean) {
@@ -831,7 +887,9 @@
       }
       // 灰框在所有元素之上（真实边框遮挡越界内容），pointer-events 关闭不影响点击
       if (sign.frameWidth > 0) {
-        appendFrameRects(rowG, layout.width, rowLayout.y, sign.rowHeight, sign.frameWidth);
+        appendFrameRects(rowG, rowFrameRects(layout.width, rowLayout.y, sign.rowHeight, sign.frameWidth,
+          ri === 0, ri === sign.rows.length - 1),
+          sign.frameColor || Core.LEGACY_SIGN_FRAME_COLOR);
       }
       svg.appendChild(rowG);
     }
@@ -874,6 +932,7 @@
     computeRowWidth: computeRowWidth,
     computeSignWidth: computeSignWidth,
     layoutSign: layoutSign,
+    rowFrameRects: rowFrameRects,
     renderElement: renderElement,
     renderSignInto: renderSignInto,
     renderElementStandalone: renderElementStandalone,

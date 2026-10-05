@@ -1,10 +1,11 @@
+/* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * state.js — SignState 状态模型纯函数
  *
  * 所有变更函数返回新对象，绝不修改传入状态（不可变更新）。
  * 数据模型（PRD）：
- *   SignState { widthMode, width, rowHeight, aspectLocked, backgroundColor, rows }
- *   Row   { id, elements }
+ *   SignState { widthMode, width, rowHeight, aspectLocked, backgroundColor, frameWidth, frameColor, rows }
+ *   Row   { id, backgroundColor, elements } — backgroundColor=null 时继承整牌背景
  *   Element { id, type, props }
  *
  * padding 为比例值（相对行高），渲染时乘以行高得到像素。
@@ -17,12 +18,15 @@
   var uuid = Core.uuid;
 
   var ELEMENT_TYPES = [
-    'arrow', 'bilingual-text', 'big-number', 'number-line',
+    'arrow', 'bilingual-text', 'small-bilingual-text', 'big-number', 'number-line',
     'text-line', 'entrance', 'exit', 'space', 'icon',
   ];
 
   // 支持内容对齐（align: left|right，元素内部镜像排版）的元素类型
   var CONTENT_ALIGN_TYPES = ['number-line', 'text-line', 'exit'];
+
+  // 服务图标支持的旋转角度（SVG 坐标系中正值为顺时针）
+  var ICON_ROTATIONS = [-90, 0, 90, 180];
 
   // 各元素类型默认属性。padding 一律为相对行高的比例。
   // elementAlign 为固定宽度模式下的元素对齐（left|center|right），动态宽度忽略；
@@ -42,6 +46,16 @@
       color: '#000000',
       bold: false,
       align: 'center',              // 文字对齐（left|center|right）
+      backgroundColor: null,
+      elementAlign: 'left',
+      padding: { top: 0.2, right: 0.2, bottom: 0.2, left: 0.2 },
+    },
+    'small-bilingual-text': {
+      textZh: '站名',
+      textEn: 'Station',
+      color: '#000000',
+      bold: false,
+      align: 'center',
       backgroundColor: null,
       elementAlign: 'left',
       padding: { top: 0.2, right: 0.2, bottom: 0.2, left: 0.2 },
@@ -96,6 +110,7 @@
     'icon': {
       icon: 'elevator',             // 图标 id，见 js/icons.js
       color: '#000000',
+      rotation: 0,                 // -90|0|90|180，绕图标中心旋转
       backgroundColor: null,
       elementAlign: 'left',
       padding: { top: 0.2, right: 0.2, bottom: 0.2, left: 0.2 },
@@ -105,7 +120,7 @@
   // ─── 工厂 ──────────────────────────────────────────────────
 
   function createRow(elements) {
-    return { id: uuid(), elements: elements ? elements.slice() : [] };
+    return { id: uuid(), backgroundColor: null, elements: elements ? elements.slice() : [] };
   }
 
   function createElement(type, props) {
@@ -127,10 +142,11 @@
     return {
       widthMode: 'fixed',           // fixed | dynamic
       width: 2048,
-      rowHeight: 256,
+      rowHeight: Core.DEFAULT_ROW_HEIGHT,
       aspectLocked: false,
       backgroundColor: '#FFFFFF',
       frameWidth: 0,                // 灰框宽度（px），从牌面边界向内；0 = 不显示
+      frameColor: Core.SIGN_FRAME_COLOR,
       rows: [createRow()],
     };
   }
@@ -168,6 +184,19 @@
     var row = rows.splice(fromIndex, 1)[0];
     rows.splice(toIndex, 0, row);
     return Object.assign({}, sign, { rows: rows });
+  }
+
+  /** 按行 id 更新背景色；null/非法颜色恢复继承，颜色随行一起移动。 */
+  function updateRowSettings(sign, rowId, patch) {
+    if (patch.backgroundColor === undefined) return sign;
+    var color = sanitizeColor(patch.backgroundColor, null);
+    var changed = false;
+    var rows = sign.rows.map(function (row) {
+      if (row.id !== rowId || (row.backgroundColor || null) === color) return row;
+      changed = true;
+      return Object.assign({}, row, { backgroundColor: color });
+    });
+    return changed ? Object.assign({}, sign, { rows: rows }) : sign;
   }
 
   // ─── 元素操作 ──────────────────────────────────────────────
@@ -229,6 +258,49 @@
     return Object.assign({}, sign, { rows: rows });
   }
 
+  /** 屏幕方向的一步移动：贴右通道的数组顺序与视觉左右相反。 */
+  function stepNeighbor(sign, elementId, direction) {
+    if (direction !== -1 && direction !== 1) return null;
+    var found = findElement(sign, elementId);
+    if (!found) return null;
+    var lane = sign.widthMode === 'fixed' ? (found.element.props.elementAlign || 'left') : 'left';
+    var indices = [];
+    sign.rows[found.rowIndex].elements.forEach(function (el, i) {
+      if (sign.widthMode !== 'fixed' || (el.props.elementAlign || 'left') === lane) indices.push(i);
+    });
+    var step = lane === 'right' ? -direction : direction;
+    var neighbor = indices[indices.indexOf(found.index) + step];
+    return neighbor === undefined ? null : { found: found, index: neighbor };
+  }
+
+  function canMoveElementBy(sign, elementId, direction) {
+    return !!stepNeighbor(sign, elementId, direction);
+  }
+
+  function moveElementBy(sign, elementId, direction) {
+    var target = stepNeighbor(sign, elementId, direction);
+    if (!target) return sign;
+    var found = target.found;
+    var rows = sign.rows.map(function (row, i) {
+      if (i !== found.rowIndex) return row;
+      var elements = row.elements.slice();
+      elements[found.index] = row.elements[target.index];
+      elements[target.index] = found.element;
+      return Object.assign({}, row, { elements: elements });
+    });
+    return Object.assign({}, sign, { rows: rows });
+  }
+
+  function adjustElementPadding(sign, elementId, side, delta) {
+    if ((side !== 'left' && side !== 'right') || typeof delta !== 'number' || !isFinite(delta)) return sign;
+    var found = findElement(sign, elementId);
+    if (!found || found.element.type === 'space') return sign;
+    var p = found.element.props.padding;
+    var value = Math.round(Core.clamp(p[side] + delta, 0, 8) * 10000) / 10000;
+    var patch = {}; patch[side] = value;
+    return updateElementProps(sign, elementId, { padding: patch });
+  }
+
   /** 更新元素属性（浅合并 patch；padding 单独深合并一层）。
    *  写入左右内边距视为手动编辑 → 钉住（paddingAuto=false），
    *  自动重算走 applyPaddingAuto，不经过此函数。 */
@@ -249,6 +321,114 @@
           return Object.assign({}, e, { props: props });
         }),
       });
+    });
+    return Object.assign({}, sign, { rows: rows });
+  }
+
+  // ─── 批量元素操作与剪贴板纯函数 ────────────────────────────
+  function updateElementsProps(sign, ids, patch) {
+    return ids.reduce(function (st, id) { return updateElementProps(st, id, patch); }, sign);
+  }
+
+  function deleteElements(sign, ids) {
+    var selected = new Set(ids);
+    var rows = sign.rows.map(function (row) {
+      var elements = row.elements.filter(function (el) { return !selected.has(el.id); });
+      return elements.length === row.elements.length ? row : Object.assign({}, row, { elements: elements });
+    });
+    return Object.assign({}, sign, { rows: rows });
+  }
+
+  /** 按各行/通道视觉方向移动选中块，组内顺序不变。 */
+  function moveElementsBy(sign, ids, direction) {
+    if (direction !== -1 && direction !== 1) return sign;
+    var selected = new Set(ids), changed = false;
+    var rows = sign.rows.map(function (row) {
+      var elements = row.elements.slice(), touched = false;
+      ['left', 'center', 'right'].forEach(function (lane) {
+        var indices = [];
+        row.elements.forEach(function (el, i) { if (elementLane(el, sign.widthMode === 'fixed') === lane) indices.push(i); });
+        if (indices.length < 2) return;
+        if (lane === 'right') indices.reverse();
+        var start = direction < 0 ? 1 : indices.length - 2;
+        var stop = direction < 0 ? indices.length : -1;
+        for (var j = start; j !== stop; j -= direction) {
+          var a = indices[j], b = indices[j + direction];
+          if (selected.has(elements[a].id) && !selected.has(elements[b].id)) {
+            var temp = elements[a]; elements[a] = elements[b]; elements[b] = temp;
+            touched = changed = true;
+          }
+        }
+      });
+      return touched ? Object.assign({}, row, { elements: elements }) : row;
+    });
+    return changed ? Object.assign({}, sign, { rows: rows }) : sign;
+  }
+
+  /** 拖动一组到当前布局的间隙，扣除目标间隙之前被移走的元素。 */
+  function moveElements(sign, ids, toRowId, gapIndex) {
+    var target = sign.rows.find(function (row) { return row.id === toRowId; });
+    if (!target || !Number.isInteger(gapIndex)) return sign;
+    var selected = new Set(ids), moved = [];
+    sign.rows.forEach(function (row) { row.elements.forEach(function (el) { if (selected.has(el.id)) moved.push(el); }); });
+    if (!moved.length) return sign;
+    var gap = Core.clamp(gapIndex, 0, target.elements.length);
+    var removedBefore = target.elements.slice(0, gap).filter(function (el) { return selected.has(el.id); }).length;
+    var rows = sign.rows.map(function (row) {
+      var elements = row.elements.filter(function (el) { return !selected.has(el.id); });
+      if (row.id === toRowId) elements.splice.apply(elements, [gap - removedBefore, 0].concat(moved));
+      return Object.assign({}, row, { elements: elements });
+    });
+    return Object.assign({}, sign, { rows: rows });
+  }
+
+  /** 元素剪贴板使用独立格式，保留相对行偏移；不包含整牌设置或选择。 */
+  function serializeElements(sign, ids) {
+    var selected = new Set(ids), firstRow = -1, rows = [];
+    sign.rows.forEach(function (row, i) {
+      var elements = row.elements.filter(function (el) { return selected.has(el.id); });
+      if (!elements.length) return;
+      if (firstRow < 0) firstRow = i;
+      rows.push({ offset: i - firstRow, elements: Core.deepClone(elements) });
+    });
+    return JSON.stringify({ kind: 'jr-sign-elements', version: 1, rows: rows });
+  }
+
+  function deserializeElements(json) {
+    var data = typeof json === 'string' ? JSON.parse(json) : json;
+    if (!isPlainObject(data) || data.kind !== 'jr-sign-elements' || data.version !== 1 ||
+        !Array.isArray(data.rows) || !data.rows.length || data.rows.length > 1000) throw new Error('剪贴板中没有有效的标识牌元素');
+    var previous = -1, count = 0;
+    var rows = data.rows.map(function (row) {
+      if (!isPlainObject(row) || !Number.isInteger(row.offset) || row.offset < 0 || row.offset > 999 || row.offset <= previous ||
+          !Array.isArray(row.elements) || !row.elements.length) throw new Error('剪贴板行结构无效');
+      previous = row.offset;
+      count += row.elements.length;
+      if (count > 10000) throw new Error('剪贴板元素过多');
+      var elements = row.elements.map(function (el) {
+        var clean = sanitizeElement(el);
+        if (!clean) throw new Error('剪贴板包含未知元素');
+        return clean;
+      });
+      return { offset: row.offset, elements: elements };
+    });
+    if (rows[0].offset !== 0) throw new Error('剪贴板首行偏移无效');
+    return { kind: 'jr-sign-elements', version: 1, rows: rows };
+  }
+
+  function pasteElements(sign, payload, rowId, gapIndex) {
+    var data = deserializeElements(payload);
+    var targetIndex = sign.rows.findIndex(function (row) { return row.id === rowId; });
+    if (targetIndex < 0) return sign;
+    var rows = sign.rows.slice();
+    data.rows.forEach(function (group) {
+      var index = targetIndex + group.offset;
+      while (rows.length <= index) rows.push(createRow());
+      var row = rows[index], elements = row.elements.slice();
+      var clones = group.elements.map(function (el) { return { id: uuid(), type: el.type, props: Core.deepClone(el.props) }; });
+      var gap = group.offset === 0 && Number.isInteger(gapIndex) ? Core.clamp(gapIndex, 0, elements.length) : elements.length;
+      elements.splice.apply(elements, [gap, 0].concat(clones));
+      rows[index] = Object.assign({}, row, { elements: elements });
     });
     return Object.assign({}, sign, { rows: rows });
   }
@@ -281,6 +461,21 @@
       next.rowHeight = Math.round(sign.rowHeight * (next.width / sign.width));
     }
     return next;
+  }
+
+  /** 宽度每格固定256px，独立于行高；主动选择格数关闭比例锁。 */
+  function setSignWidthUnits(sign, units) {
+    if (typeof units !== 'number' || !isFinite(units) || units !== Math.round(units) || units < 1 || units > 15) {
+      return sign;
+    }
+    return Object.assign({}, sign, { widthMode: 'fixed', width: Core.SIGN_GRID_SIZE * units, aspectLocked: false });
+  }
+
+  /** 返回当前 1–15 快捷倍率；动态宽度或自定义像素宽度返回 null。 */
+  function signWidthUnits(sign) {
+    if (sign.widthMode !== 'fixed') return null;
+    var units = sign.width / Core.SIGN_GRID_SIZE;
+    return units >= 1 && units <= 15 && units === Math.round(units) ? units : null;
   }
 
   /** 清空标识牌：保留设置，恢复为一行空白 */
@@ -420,12 +615,16 @@
     if (props.elementAlign !== 'center' && props.elementAlign !== 'right') props.elementAlign = 'left';
     // 内容对齐仅这三类元素支持，且只有 left|right 两档；双语文本的 align（left|center|right）不受影响
     if (CONTENT_ALIGN_TYPES.indexOf(el.type) !== -1 && props.align !== 'right') props.align = 'left';
-    if (el.type === 'icon' && typeof props.icon !== 'string') props.icon = 'elevator';
+    if (el.type === 'icon') {
+      if (typeof props.icon !== 'string') props.icon = 'elevator';
+      var rotation = Number(props.rotation);
+      props.rotation = ICON_ROTATIONS.indexOf(rotation) !== -1 ? rotation : 0;
+    }
 
     if (el.type === 'arrow') {
       if (ARROW_DIRECTIONS.indexOf(props.direction) === -1) props.direction = 'left';
       props.thicknessRatio = sanitizeNumber(props.thicknessRatio, 0.05, 0.95, defaults.thicknessRatio);
-    } else if (el.type === 'bilingual-text') {
+    } else if (el.type === 'bilingual-text' || el.type === 'small-bilingual-text') {
       props.textZh = sanitizeText(props.textZh, defaults.textZh);
       props.textEn = sanitizeText(props.textEn, defaults.textEn);
       props.bold = !!props.bold;
@@ -472,9 +671,9 @@
 
     var widthMode = sign.widthMode === 'dynamic' ? 'dynamic' : 'fixed';
     var width = Math.round(Number(sign.width));
-    if (!isFinite(width) || width < 64 || width > 32768) width = 2048;
+    if (!isFinite(width) || width < 32 || width > 32768) width = 2048;
     var rowHeight = Math.round(Number(sign.rowHeight));
-    if (!isFinite(rowHeight) || rowHeight < 32 || rowHeight > 2048) rowHeight = 256;
+    if (!isFinite(rowHeight) || rowHeight < 32 || rowHeight > 2048) rowHeight = Core.DEFAULT_ROW_HEIGHT;
     var frameWidth = Math.round(Number(sign.frameWidth));
     if (!isFinite(frameWidth) || frameWidth < 0) frameWidth = 0;
     if (frameWidth > 512) frameWidth = 512;
@@ -503,6 +702,7 @@
       });
       return {
         id: pickUniqueId(row.id, seenRowIds),
+        backgroundColor: sanitizeColor(row.backgroundColor, null),
         elements: elements,
       };
     });
@@ -514,6 +714,7 @@
       aspectLocked: !!sign.aspectLocked,
       backgroundColor: sanitizeColor(sign.backgroundColor, '#FFFFFF'),
       frameWidth: frameWidth,
+      frameColor: sanitizeColor(sign.frameColor, Core.LEGACY_SIGN_FRAME_COLOR),
       rows: rows,
     };
   }
@@ -528,11 +729,24 @@
     addRow: addRow,
     deleteRow: deleteRow,
     moveRow: moveRow,
+    updateRowSettings: updateRowSettings,
     addElement: addElement,
     deleteElement: deleteElement,
     moveElement: moveElement,
+    canMoveElementBy: canMoveElementBy,
+    moveElementBy: moveElementBy,
+    adjustElementPadding: adjustElementPadding,
     updateElementProps: updateElementProps,
+    updateElementsProps: updateElementsProps,
+    deleteElements: deleteElements,
+    moveElementsBy: moveElementsBy,
+    moveElements: moveElements,
+    serializeElements: serializeElements,
+    deserializeElements: deserializeElements,
+    pasteElements: pasteElements,
     updateSignSettings: updateSignSettings,
+    setSignWidthUnits: setSignWidthUnits,
+    signWidthUnits: signWidthUnits,
     findElement: findElement,
     clearSign: clearSign,
     applyPaddingAuto: applyPaddingAuto,

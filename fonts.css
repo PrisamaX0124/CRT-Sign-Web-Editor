@@ -1,0 +1,36 @@
+/* 字体源保持原文件；编辑器与浏览器测试共用声明。 */
+@font-face {
+  font-family: 'MiSans';
+  src: url('fonts/MiSans-Regular.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'MiSans';
+  src: url('fonts/MiSans-Semibold.ttf') format('truetype');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'MiSans';
+  src: url('fonts/MiSans-Bold.ttf') format('truetype');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Frutiger';
+  src: url('fonts/Frutiger-Regular.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Frutiger';
+  src: url('fonts/Frutiger-Bold.ttf') format('truetype');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Frutiger Condensed';
+  src: url('fonts/FrutigerCondensed-Regular.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Frutiger Condensed';
+  src: url('fonts/FrutigerCondensed-Bold.ttf') format('truetype');
+  font-weight: 700; font-style: normal; font-display: swap;
+}

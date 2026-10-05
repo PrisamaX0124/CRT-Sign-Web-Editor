@@ -1,3 +1,5 @@
+/* Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * core.js — 常量、工具函数、字体度量、文本测量
  *
@@ -14,7 +16,10 @@
   var EXIT_COLOR = '#F7D917';     // 出口黄（DB31 规范）
   var SUBURBAN_COLOR = '#026AA7'; // 市域机场线
   var GREY_COLOR = '#424A52';     // 灰色
-  var SIGN_FRAME_COLOR = '#808080'; // 标识牌灰框（模拟真实牌面的边框）
+  var SIGN_FRAME_COLOR = '#4A4A4A'; // 新标识牌的默认深灰框
+  var LEGACY_SIGN_FRAME_COLOR = '#808080'; // 旧项目缺少灰框颜色时保留原有显示
+  var SIGN_GRID_SIZE = 256;      // 服务器贴图的一格；宽度不随行高变化
+  var DEFAULT_ROW_HEIGHT = 192;  // 单行标识牌默认0.75格
 
   // ─── 城市线路配色 ──────────────────────────────────────────
   // 硬编码不依赖运行时加载。数字线路色供「输入线路号自动配色」与选色板共用；
@@ -172,26 +177,21 @@
 
   // ─── 字体族 ────────────────────────────────────────────────
 
-  var FONT_ZH = "'Source Han Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
-  var FONT_EN = "'Helvetica', 'Frutiger', Arial, sans-serif";
-  // 数字/西文栈：Frutiger 优先；无 CJK 字形，中文经栈回退到思源黑体（大文本等元素的中文）
-  var FONT_NUM = "'Frutiger', 'Helvetica', 'Source Han Sans SC', Arial, sans-serif";
+  var FONT_ZH = "'MiSans', 'Microsoft YaHei', sans-serif";
+  var FONT_EN = FONT_ZH;
+  // 大文本/编号字体栈：Frutiger优先，无字形时回退MiSans。
+  var FONT_NUM = "'Frutiger', 'MiSans', Arial, sans-serif";
   var FONT_NUM_CONDENSED = "'Frutiger Condensed', 'Frutiger', Arial, sans-serif";
 
-  // 字体度量（hhea ascent / em，从字体文件提取，用于基线定位）
-  // zhAsc 1.16 复现 sign_jr 中 PIL ascender 定位；numAsc 0.75 为 Frutiger hhea。
+  // 参考实现的旧度量常数，仅保留兼容；当前基线由实际文字墨区测量计算。
   var FONT_METRICS = { zhAsc: 1.16, enAsc: 0.9277, numAsc: 0.75 };
 
-  // 需要预加载的字体规格：[css font 简写, family key]
+  // 预加载编辑器实际使用的字体面；旧的编号粗体/窄体声明仅保留兼容。
   var FONT_LOAD_SPECS = [
-    { css: '400 32px "Source Han Sans SC"', key: 'zh400' },
-    { css: '700 32px "Source Han Sans SC"', key: 'zh700' },
-    { css: '400 32px Helvetica', key: 'en400' },
-    { css: '700 32px Helvetica', key: 'en700' },
+    { css: '400 32px "MiSans"', key: 'zh400' },
+    { css: '600 32px "MiSans"', key: 'zh600' },
+    { css: '700 32px "MiSans"', key: 'zh700' },
     { css: '400 32px Frutiger', key: 'num400' },
-    { css: '700 32px Frutiger', key: 'num700' },
-    { css: '400 32px "Frutiger Condensed"', key: 'cond400' },
-    { css: '700 32px "Frutiger Condensed"', key: 'cond700' },
   ];
 
   // ─── 通用工具 ──────────────────────────────────────────────
@@ -272,7 +272,7 @@
     }
     def.lines.forEach(function (c) { push(c.name || (c.line + '号线'), c.bg); });
     def.extras.forEach(function (c) { push(c.name, c.bg); });
-    UNIVERSAL_SWATCHES.forEach(function (c) { push(c.name, c.bg); });
+    (def.universal || UNIVERSAL_SWATCHES).forEach(function (c) { push(c.name, c.bg); });
     return out;
   }
 
@@ -330,6 +330,9 @@
     SVG_NS: SVG_NS,
     EXIT_COLOR: EXIT_COLOR,
     SIGN_FRAME_COLOR: SIGN_FRAME_COLOR,
+    LEGACY_SIGN_FRAME_COLOR: LEGACY_SIGN_FRAME_COLOR,
+    SIGN_GRID_SIZE: SIGN_GRID_SIZE,
+    DEFAULT_ROW_HEIGHT: DEFAULT_ROW_HEIGHT,
     SUBURBAN_COLOR: SUBURBAN_COLOR,
     GREY_COLOR: GREY_COLOR,
     LINE_COLORS: LINE_COLORS,

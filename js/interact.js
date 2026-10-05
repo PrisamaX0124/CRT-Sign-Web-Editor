@@ -1,3 +1,4 @@
+/* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * interact.js — 编辑区交互层
  *
@@ -20,8 +21,12 @@
   var App = global.App;
   var h = UI.h;
 
-  var overlay, svg, elIndicator, rowIndicator, canvasScroll, zoomBadge;
+  var overlay, svg, elIndicator, rowIndicator, canvasScroll, zoomBadge, elementToolbar;
+  var toolbarAlignments = [];
+  var toolbarPaddingControls = [];
   var suppressClick = false;
+  var pagePointer = null;
+  var selectionControls = 'button, input, select, textarea, label, a, summary, [contenteditable], [role="button"], [role="tab"], .palette-card, .preset-card, .row-handle, .field, .panel-section, .padding-editor, .panel-header, #element-toolbar, .modal-mask, .toast';
 
   var MIME_NEW = 'application/x-sign-new';
   var MIME_PRESET = 'application/x-sign-preset';
@@ -31,6 +36,11 @@
     svg = document.getElementById('sign-svg');
     canvasScroll = document.getElementById('canvas-scroll');
     zoomBadge = document.getElementById('zoom-badge');
+    elementToolbar = document.getElementById('element-toolbar');
+    buildElementToolbar();
+    canvasScroll.addEventListener('scroll', positionElementToolbar);
+    window.addEventListener('resize', positionElementToolbar);
+    if (window.ResizeObserver) new ResizeObserver(positionElementToolbar).observe(canvasScroll);
 
     elIndicator = h('div', { id: 'element-drop-indicator' });
     rowIndicator = h('div', { id: 'row-drop-indicator' });
@@ -39,7 +49,12 @@
 
     // Pointer Events 一套代码服务鼠标 + 触屏 + 笔（会话按 pointerId 锁定）
     svg.addEventListener('pointerdown', onElementPointerDown);
-    svg.addEventListener('click', onSvgClick);
+    document.addEventListener('pointerdown', onPagePointerDown, true);
+    document.addEventListener('pointermove', onPagePointerMove, true);
+    document.addEventListener('pointerup', onPagePointerUp, true);
+    document.addEventListener('pointercancel', onPagePointerCancel, true);
+    window.addEventListener('blur', function () { pagePointer = null; });
+    document.addEventListener('click', onPageClick);
     document.addEventListener('keydown', onKeyDown);
     document.getElementById('add-row-btn').addEventListener('click', function () {
       App.update(State.addRow);
@@ -121,6 +136,196 @@
     var empty = state.rows.every(function (r) { return r.elements.length === 0; });
     document.getElementById('empty-hint').hidden = !empty;
     renderRowStrip(state);
+    syncElementToolbar();
+  }
+
+  // ─── 选中元素的浮动操作栏（HTML，不参与SVG导出）──────────────
+
+  function actionIcon(path) {
+    var icon = document.createElementNS(Core.SVG_NS, 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = '<path d="' + path + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+    return icon;
+  }
+
+  function buildToolbarPadding(side) {
+    var label = side === 'left' ? '左内边距' : '右内边距';
+    var trigger = h('button', { type: 'button', class: 'padding-trigger', 'aria-label': '自定义' + label }, [UI.paddingIcon(side)]);
+    var input = h('input', {
+      type: 'number', min: '0', max: '8', step: 'any', tabindex: '-1',
+      'aria-label': '自定义' + label + '（行高比例）', title: label + '（行高比例，0–8）',
+    });
+    var valueBox = h('div', { class: 'padding-value' }, [trigger, input]);
+    var stepper = h('div', { class: 'padding-stepper' });
+    var group = h('div', { class: 'toolbar-group toolbar-padding', 'data-padding': side, role: 'group', 'aria-label': label }, [valueBox, stepper]);
+    var boundId = null;
+    function current() { return State.findElement(App.state, App.selection.elementId); }
+    function reset() {
+      var value = App.paddingValue(side);
+      input.value = value === null ? '' : value;
+      input.placeholder = value === null ? '不同' : '';
+    }
+    function commit() {
+      var found = current(), raw = input.value.trim(), value = Number(raw);
+      if (!found || !App.paddingIds().length || !raw || !isFinite(value)) { reset(); return; }
+      App.setPadding(side, Core.clamp(value, 0, 8));
+      reset();
+    }
+    UI.bindPaddingScrub(trigger, side, function () { return App.selection.elementId; });
+    trigger.addEventListener('click', function () {
+      reset();
+      valueBox.classList.add('editing');
+      input.focus();
+      input.select();
+    });
+    input.addEventListener('change', commit);
+    input.addEventListener('focus', function () { valueBox.classList.add('editing'); });
+    input.addEventListener('blur', function () {
+      reset();
+      valueBox.classList.remove('editing');
+    });
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (ev.key === 'Enter') commit();
+        else reset();
+        input.blur();
+      }
+    });
+    [true, false].forEach(function (increase) {
+      var btn = h('button', {
+        type: 'button', 'data-action': side + (increase ? '-plus' : '-minus'),
+        'aria-label': (increase ? '增加' : '减少') + label,
+        title: (increase ? '增加' : '减少') + label + '（每次 0.05 行高）',
+      }, [actionIcon(increase ? 'm7 14 5-5 5 5' : 'm7 10 5 5 5-5')]);
+      btn.addEventListener('click', function () {
+        App.adjustPadding(side, increase ? 0.05 : -0.05);
+      });
+      stepper.appendChild(btn);
+    });
+    toolbarPaddingControls.push(function (found) {
+      var disabled = !App.paddingIds().length;
+      input.disabled = trigger.disabled = disabled;
+      var signature = App.selectedIds().join(',');
+      if (boundId !== signature || document.activeElement !== input) reset();
+      boundId = signature;
+      trigger.title = label + '：' + input.value + ' × 行高（左右拖动，每档0.05；点击输入）';
+    });
+    return group;
+  }
+
+  function buildElementToolbar() {
+    var actions = [
+      { key: 'move-left', group: '移动元素', label: '向左移动元素', path: 'M19 12H5m6-6-6 6 6 6' },
+      { key: 'move-right', group: '移动元素', label: '向右移动元素', path: 'M5 12h14m-6-6 6 6-6 6' },
+      { key: 'delete', group: '管理元素', label: '删除元素', path: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 10v7m4-7v7' },
+    ];
+    var actionRow = h('div', { class: 'toolbar-actions' });
+    var groups = {};
+    elementToolbar.appendChild(actionRow);
+    actions.forEach(function (action) {
+      if (action.key === 'delete') {
+        actionRow.appendChild(buildToolbarPadding('left'));
+        actionRow.appendChild(buildToolbarPadding('right'));
+      }
+      if (!groups[action.group]) {
+        groups[action.group] = h('div', { class: 'toolbar-group', role: 'group', 'aria-label': action.group });
+        actionRow.appendChild(groups[action.group]);
+      }
+      var btn = h('button', {
+        type: 'button', 'data-action': action.key, 'aria-label': action.label,
+        title: action.label,
+        class: action.key === 'delete' ? 'toolbar-danger' : '',
+      }, [actionIcon(action.path)]);
+      btn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var id = App.selection.elementId;
+        if (!id || !State.findElement(App.state, id)) return;
+        if (action.key === 'delete') {
+          App.deleteSelection();
+          UI.toast('选中元素已删除');
+          return;
+        }
+        if (action.key === 'move-left' || action.key === 'move-right') {
+          var direction = action.key === 'move-left' ? -1 : 1;
+          var ids = App.selectedIds();
+          App.update(function (st) { return State.moveElementsBy(st, ids, direction); });
+        }
+      });
+      groups[action.group].appendChild(btn);
+    });
+    var alignRow = h('div', { class: 'toolbar-alignments' });
+    elementToolbar.appendChild(alignRow);
+    [
+      { key: 'elementAlign', prop: 'elementAlign', label: '元素对齐', labels: ['元素贴左', '元素居中', '元素贴右'], types: null },
+      { key: 'align', prop: 'align', label: '文字对齐', labels: ['文字左对齐', '文字居中', '文字右对齐'], types: ['bilingual-text', 'small-bilingual-text'] },
+      { key: 'contentAlign', prop: 'align', label: '内容对齐', labels: ['内容左对齐', '内容右对齐'], types: ['number-line', 'text-line', 'exit'] },
+    ].forEach(function (config) {
+      var values = config.labels.length === 2 ? ['left', 'right'] : ['left', 'center', 'right'];
+      var control = UI.alignmentControl(values.map(function (value, i) {
+        return { value: value, label: config.labels[i] };
+      }), function () {
+        return App.alignmentValue(config.key);
+      }, function (value) {
+        var id = App.selection.elementId;
+        if (!id || !State.findElement(App.state, id) || control.node.hidden) return;
+        App.setAlignment(config.key, value);
+      }, config.label, config.key);
+      alignRow.appendChild(control.node);
+      toolbarAlignments.push({ config: config, control: control });
+    });
+  }
+
+  function syncElementToolbar() {
+    if (!elementToolbar) return;
+    var id = App.selection.elementId;
+    var found = id && State.findElement(App.state, id);
+    document.getElementById('center-panel').classList.toggle('has-element-selection', !!found);
+    elementToolbar.hidden = !found;
+    if (!found) return;
+    toolbarPaddingControls.forEach(function (sync) { sync(found); });
+    toolbarAlignments.forEach(function (item) {
+      item.control.node.hidden = item.config.types
+        ? !App.alignmentTargets(item.config.key).length
+        : App.state.widthMode !== 'fixed';
+      item.control.sync();
+    });
+    elementToolbar.querySelector('.toolbar-alignments').hidden = toolbarAlignments.every(function (item) { return item.control.node.hidden; });
+    elementToolbar.querySelector('[data-action="move-left"]').disabled = State.moveElementsBy(App.state, App.selectedIds(), -1) === App.state;
+    elementToolbar.querySelector('[data-action="move-right"]').disabled = State.moveElementsBy(App.state, App.selectedIds(), 1) === App.state;
+    ['left', 'right'].forEach(function (side) {
+      var values = App.paddingIds().map(function (paddingId) { return State.findElement(App.state, paddingId).element.props.padding[side]; });
+      elementToolbar.querySelector('[data-action="' + side + '-minus"]').disabled = !values.some(function (v) { return v > 0; });
+      elementToolbar.querySelector('[data-action="' + side + '-plus"]').disabled = !values.some(function (v) { return v < 8; });
+    });
+    positionElementToolbar();
+  }
+
+  function positionElementToolbar() {
+    if (!elementToolbar || elementToolbar.hidden || !svg) return;
+    // 不插入DOM，也不重建按钮：移动/调边距后焦点仍留在当前按钮。
+    var selected = Array.prototype.slice.call(svg.querySelectorAll('g.element.selected'));
+    if (!selected.length) { elementToolbar.hidden = true; return; }
+    var area = canvasScroll.getBoundingClientRect();
+    var centerPanel = document.getElementById('center-panel');
+    var center = centerPanel.getBoundingClientRect();
+    var rects = selected.map(function (node) { return node.getBoundingClientRect(); });
+    var el = { left: Math.min.apply(null, rects.map(function (r) { return r.left; })),
+      right: Math.max.apply(null, rects.map(function (r) { return r.right; })),
+      top: Math.min.apply(null, rects.map(function (r) { return r.top; })),
+      bottom: Math.max.apply(null, rects.map(function (r) { return r.bottom; })) };
+    elementToolbar.style.maxWidth = Math.max(80, area.width - 16) + 'px';
+    var size = elementToolbar.getBoundingClientRect();
+    // 窄屏换行时按实际操作栏高度留白，避免盖住行管理按钮。
+    centerPanel.style.setProperty('--element-toolbar-gap', Math.ceil(size.height + 12) + 'px');
+    var left = Core.clamp((el.left + el.right - size.width) / 2, area.left + 8, area.right - size.width - 8);
+    var top = el.bottom + 8;
+    if (top + size.height > area.bottom - 8) top = el.top - size.height - 8;
+    top = Core.clamp(top, area.top + 8, Math.max(area.top + 8, area.bottom - size.height - 8));
+    elementToolbar.style.left = Math.round(left - center.left) + 'px';
+    elementToolbar.style.top = Math.round(top - center.top) + 'px';
   }
 
   /** 移动端行管理条：每行一枚芯片（▲▼ 调序 / 存预设 / 删行），悬于牌面下方零遮挡 */
@@ -260,27 +465,77 @@
 
   // ─── 点击选中 ──────────────────────────────────────────────
 
-  function onSvgClick(ev) {
-    if (suppressClick) { suppressClick = false; return; }
-    var g = ev.target.closest ? ev.target.closest('g.element') : null;
-    App.select(g ? g.getAttribute('data-element-id') : null);
+  function onPagePointerDown(ev) {
+    if (ev.button !== 0 || ev.isPrimary === false) return;
+    var target = ev.target;
+    pagePointer = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: false,
+      control: !!(target && target.closest && target.closest(selectionControls)) };
   }
 
-  // ─── 键盘：Del 删除选中元素 ────────────────────────────────
+  function onPagePointerMove(ev) {
+    if (!pagePointer || pagePointer.id !== ev.pointerId) return;
+    pagePointer.moved = pagePointer.moved || Math.hypot(ev.clientX - pagePointer.x, ev.clientY - pagePointer.y) > 5;
+  }
+
+  function onPagePointerUp(ev) {
+    if (!pagePointer || pagePointer.id !== ev.pointerId) return;
+    onPagePointerMove(ev);
+    // 拖选跨出输入框时，click落在共同祖先；必须保留按下位置的语义。
+    if (pagePointer.control || pagePointer.moved) suppressNextClick();
+    pagePointer = null;
+  }
+
+  function onPagePointerCancel(ev) {
+    if (pagePointer && pagePointer.id === ev.pointerId) pagePointer = null;
+  }
+
+  function onPageClick(ev) {
+    if (suppressClick) { suppressClick = false; return; }
+    var target = ev.target;
+    if (!target || !target.closest || ev.defaultPrevented) return;
+    if (document.querySelector('.modal-mask')) return;
+    var g = target.closest('g.element');
+    if (g && svg.contains(g)) {
+      App.select(g.getAttribute('data-element-id'), { toggle: ev.ctrlKey || ev.metaKey, range: ev.shiftKey });
+      return;
+    }
+    if (!App.selection.elementId) return;
+    // 页面空白取消选择，编辑控件及其标签/分组仍用于当前元素。
+    if (target.closest(selectionControls)) return;
+    App.select(null);
+  }
+
+  function suppressNextClick() {
+    suppressClick = true;
+    // pointerup 后紧跟的 click 属于刚结束的拖拽/手势；未产生 click 时立即过期。
+    setTimeout(function () { suppressClick = false; }, 0);
+  }
+
+  // ─── 键盘：撤销/重做与删除（输入控件保留原生文本编辑）──────
 
   function onKeyDown(ev) {
-    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
-    if (!App.selection.elementId) return;
+    if (ev.defaultPrevented || ev.isComposing) return;
     // 焦点在输入控件内时不拦截（文本编辑优先）
     var t = ev.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
-              t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     // 模态对话框打开时不响应
     if (document.querySelector('.modal-mask')) return;
+    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === 'a') {
+      ev.preventDefault(); App.selectAll(); return;
+    }
+    if (ev.key === 'Escape' && App.selection.elementId) {
+      ev.preventDefault(); cancelElementDrag(); App.select(null); return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === 'z') {
+      ev.preventDefault();
+      if (ev.shiftKey) App.redo();
+      else App.undo();
+      return;
+    }
+    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
+    if (!App.selection.elementId) return;
     ev.preventDefault();
-    var id = App.selection.elementId;
-    App.update(function (st) { return State.deleteElement(st, id); });
-    App.select(null);
+    App.deleteSelection();
   }
 
   // ─── 元素指针拖拽（行内排序 / 跨行移动）────────────────────
@@ -288,7 +543,7 @@
   var elemDrag = null; // {elementId, rowId, pointerId, active, ghost, dx, dy, startX, startY, target}
 
   function onElementPointerDown(ev) {
-    if (ev.button !== 0) return;
+    if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
     var g = ev.target.closest ? ev.target.closest('g.element') : null;
     if (!g) return; // 空白处按下 → 冒泡为取消选中（click 处理）
 
@@ -296,6 +551,7 @@
     var rowId = g.getAttribute('data-row-id');
     elemDrag = {
       elementId: elementId,
+      ids: App.selectedIds().indexOf(elementId) >= 0 ? App.selectedIds() : [elementId],
       rowId: rowId,
       pointerId: ev.pointerId, // 会话锁定该指针：其他指针（如捏合第二指）的事件一律忽略
       active: false,
@@ -311,6 +567,7 @@
   }
 
   function activateElementDrag(ev) {
+    if (App.selectedIds().indexOf(elemDrag.elementId) < 0) App.select(elemDrag.elementId);
     var g = svg.querySelector('g.element[data-element-id="' + elemDrag.elementId + '"]');
     if (!g) { elemDrag = null; return; }
     var rect = g.getBoundingClientRect();
@@ -321,19 +578,30 @@
     var slot = layoutRow && layoutRow.elements.find(function (s) { return s.id === elemDrag.elementId; });
     if (!slot) { elemDrag = null; return; }
 
-    var viewBoxW = slot.width;
-    var viewBoxH = App.state.rowHeight;
+    var slots = [];
+    App.layout.rows.forEach(function (row) { row.elements.forEach(function (s) {
+      if (elemDrag.ids.indexOf(s.id) >= 0) slots.push({ id: s.id, x: s.x, y: row.y, width: s.width });
+    }); });
+    var left = Math.min.apply(null, slots.map(function (s) { return s.x; }));
+    var top = Math.min.apply(null, slots.map(function (s) { return s.y; }));
+    var viewBoxW = Math.max.apply(null, slots.map(function (s) { return s.x + s.width; })) - left;
+    var viewBoxH = Math.max.apply(null, slots.map(function (s) { return s.y + App.state.rowHeight; })) - top;
+    var svgRect = svg.getBoundingClientRect(), scale = svgRect.width / App.layout.width;
+    rect = { left: svgRect.left + left * scale, top: svgRect.top + top * scale, width: viewBoxW * scale, height: viewBoxH * scale };
 
     var ghostSvg = document.createElementNS(Core.SVG_NS, 'svg');
-    ghostSvg.setAttribute('viewBox', '0 0 ' + viewBoxW + ' ' + viewBoxH);
+    ghostSvg.setAttribute('viewBox', left + ' ' + top + ' ' + Math.max(1, viewBoxW) + ' ' + viewBoxH);
     ghostSvg.style.width = rect.width + 'px';
     ghostSvg.style.height = rect.height + 'px';
-    var clone = g.cloneNode(true);
-    clone.removeAttribute('transform');
-    clone.removeAttribute('class');
-    var hit = clone.querySelector('.hitbox');
-    if (hit) hit.remove();
-    ghostSvg.appendChild(clone);
+    slots.forEach(function (s) {
+      var node = svg.querySelector('g.element[data-element-id="' + s.id + '"]');
+      if (!node) return;
+      var clone = node.cloneNode(true);
+      clone.removeAttribute('class');
+      var hit = clone.querySelector('.hitbox'); if (hit) hit.remove();
+      ghostSvg.appendChild(clone);
+      node.classList.add('dragging');
+    });
 
     var ghost = h('div', { class: 'drag-ghost' });
     ghost.appendChild(ghostSvg);
@@ -360,6 +628,7 @@
     elemDrag.ghost.style.left = (ev.clientX - elemDrag.dx) + 'px';
     elemDrag.ghost.style.top = (ev.clientY - elemDrag.dy) + 'px';
 
+    elemDrag.target = null;
     var pt = toSignPoint(ev);
     clearRowHighlights();
     if (!pt) return;
@@ -373,7 +642,10 @@
     var dragWidth = 0;
     App.layout.rows.forEach(function (r) {
       r.elements.forEach(function (s) {
-        if (s.id === elemDrag.elementId) dragWidth = s.width;
+        if (elemDrag.ids.indexOf(s.id) >= 0) {
+          var candidate = State.findElement(App.state, s.id);
+          if (App.state.widthMode !== 'fixed' || (candidate && candidate.element.props.elementAlign === dragAlign)) dragWidth += s.width;
+        }
       });
     });
     var target = dropTargetAt(ri, pt.x, dragAlign, dragWidth);
@@ -399,20 +671,18 @@
     document.body.classList.remove('drag-in-progress');
 
     if (session.ghost) session.ghost.remove();
-    var g = svg.querySelector('g.element[data-element-id="' + session.elementId + '"]');
-    if (g) g.classList.remove('dragging');
+    session.ids.forEach(function (id) {
+      var g = svg.querySelector('g.element[data-element-id="' + id + '"]');
+      if (g) g.classList.remove('dragging');
+    });
     hideIndicators();
 
     if (!session.active) return; // 未构成拖拽 → 交给 click 处理选中
-    suppressClick = true;
-    // click 事件在 pointerup 同一任务内同步派发，先于本超时；
-    // 若落点与按下点不同元素导致浏览器不产生 click，标志立即过期，
-    // 避免残留吞掉用户下一次点击选中。
-    setTimeout(function () { suppressClick = false; }, 0);
+    suppressNextClick();
 
-    if (session.target) {
+    if (session.target && ev.type !== 'pointercancel') {
       App.update(function (st) {
-        return State.moveElement(st, session.elementId, session.target.rowId, session.target.gap);
+        return State.moveElements(st, session.ids, session.target.rowId, session.target.gap);
       });
     }
   }
@@ -430,8 +700,10 @@
     var session = elemDrag;
     elemDrag = null;
     if (session.ghost) session.ghost.remove();
-    var g = svg.querySelector('g.element[data-element-id="' + session.elementId + '"]');
-    if (g) g.classList.remove('dragging');
+    session.ids.forEach(function (id) {
+      var g = svg.querySelector('g.element[data-element-id="' + id + '"]');
+      if (g) g.classList.remove('dragging');
+    });
     hideIndicators();
     document.body.classList.remove('drag-in-progress');
   }
@@ -610,7 +882,7 @@
   function hitInteractive(t) {
     if (!t || !t.closest) return false;
     return !!(t.closest('g.element') || t.closest('.row-handle') ||
-      t.closest('.row-actions') || t.closest('#add-row-btn'));
+      t.closest('.row-actions') || t.closest('#element-toolbar') || t.closest('#add-row-btn'));
   }
 
   function gestureDragActive() {
@@ -635,6 +907,7 @@
         captureGesturePointer(ev.pointerId);
       }
     } else if (gesture.count === 2) {
+      gesture.panMoved = true; // 两指手势不能作为空白轻点取消选择。
       // 第二指落下：未激活的拖拽会话让位
       if (elemDrag && !elemDrag.active) cancelElementDrag();
       if (rowDrag && rowDrag.boundary === undefined) cancelRowDrag();
@@ -685,6 +958,7 @@
     if (!App.isMobileView || !App.isMobileView() || ev.pointerType !== 'touch') return;
     if (!(ev.pointerId in gesture.pointers)) return;
     var wasTap = !!gesture.pan && !gesture.panMoved && !gestureDragActive();
+    if (gesture.panMoved || gesture.pinch) suppressNextClick();
     var tapX = gesture.pan ? gesture.pan.x : 0, tapY = gesture.pan ? gesture.pan.y : 0;
     delete gesture.pointers[ev.pointerId];
     gesture.count--;
@@ -791,6 +1065,7 @@
     rowIndexAt: rowIndexAt,
     gapIndexAt: gapIndexAt,
     setCanvasZoom: setCanvasZoom,
+    positionElementToolbar: positionElementToolbar,
     MIME_NEW: MIME_NEW,
     MIME_PRESET: MIME_PRESET,
   };

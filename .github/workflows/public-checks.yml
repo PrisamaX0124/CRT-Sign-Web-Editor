@@ -1,0 +1,33 @@
+# Modified by PrisamaX0124, 2026-10-05; see docs/fork-changes.md.
+name: Public editor checks
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: node --test
+  remove-previous-build:
+    if: github.repository == 'PrisamaX0124/CRT-Sign-Web-Editor' && github.run_number == 1
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Remove superseded Pages build and its artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          node --input-type=module <<'NODE'
+          const response = await fetch('https://api.github.com/repos/' + process.env.GH_REPO + '/actions/runs/37326631235', {
+            method: 'DELETE',
+            headers: { Authorization: 'Bearer ' + process.env.GH_TOKEN, Accept: 'application/vnd.github+json' }
+          });
+          if (![204, 404].includes(response.status)) throw new Error('Previous build removal failed: ' + response.status + ' ' + await response.text());
+          console.log('Previous build and its artifact are absent.');
+          NODE

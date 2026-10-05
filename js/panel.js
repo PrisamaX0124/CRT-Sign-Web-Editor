@@ -1,7 +1,8 @@
+/* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * panel.js — 左栏元素选择区 + 右栏属性/设置面板 + 颜色选择器
  *
- * 右栏三种模式：元素属性（选中元素时）/ 预设预览 / 标识牌设置（默认）。
+ * 右栏：元素属性 / 多选批量属性 / 预设预览 / 标识牌设置（默认）。
  * syncRightPanel() 采用签名机制：结构变化才重建 DOM，
  * 否则只做值同步（跳过焦点元素），保证输入过程不掉焦点。
  */
@@ -19,6 +20,7 @@
   var TYPE_NAMES = {
     'arrow': '箭头',
     'bilingual-text': '双语文本',
+    'small-bilingual-text': '小号双语文本',
     'big-number': '大文本',
     'number-line': '数字线路',
     'text-line': '文本线路',
@@ -51,9 +53,16 @@
     { name: '方向指示', items: DIRECTION_ICONS },
     { name: '线路标识', items: ['number-line', 'text-line', 'big-number'] },
     { name: '位置标识', items: ['entrance', 'exit'] },
-    { name: '文本', items: ['bilingual-text'] },
+    { name: '文本', items: ['bilingual-text', 'small-bilingual-text'] },
     { name: '服务图标', items: [{ type: 'icon', icon: 'elevator', name: '图标' }] },
     { name: '辅助', items: ['space'] },
+  ];
+
+  // 桌面不需要为每一种元素单开分组：方向、常用文字标识、辅助元素三组即可。
+  var DESKTOP_CATEGORIES = [
+    CATEGORIES[0],
+    { name: '标识与文字', items: ['number-line', 'text-line', 'big-number', 'entrance', 'exit', 'bilingual-text', 'small-bilingual-text'] },
+    { name: '图标与间隔', items: [{ type: 'icon', icon: 'elevator', name: '图标' }, 'space'] },
   ];
 
   function itemTypeOf(item) {
@@ -80,6 +89,7 @@
       case 'entrance': return State.createElement('entrance', { code: 'C' });
       case 'exit': return State.createElement('exit', { code: '1' });
       case 'bilingual-text': return State.createElement('bilingual-text', { textZh: '站名', textEn: 'Station' });
+      case 'small-bilingual-text': return State.createElement('small-bilingual-text', { textZh: '站名', textEn: 'Station' });
       default: return State.createElement(type);
     }
   }
@@ -127,36 +137,99 @@
     card.addEventListener('dragend', function () { card.classList.remove('dragging'); });
   }
 
+  var activePaletteTab = 'elements';
+  var activeCategory = 0;
+  var paletteChipsScroll = 0;
+
+  function rememberPaletteScroll(root) {
+    var chips = root.querySelector('.palette-chips');
+    if (chips) paletteChipsScroll = chips.scrollLeft;
+  }
+
+  function buildPaletteTabs() {
+    var tabs = h('div', { class: 'palette-tabs', role: 'tablist', 'aria-label': '选择区内容' });
+    [['elements', '元素'], ['presets', '预设']].forEach(function (entry) {
+      var selected = activePaletteTab === entry[0];
+      var tab = h('button', {
+        class: 'palette-tab' + (selected ? ' active' : ''),
+        type: 'button', role: 'tab', id: 'palette-tab-' + entry[0],
+        'data-value': entry[0], 'aria-selected': String(selected),
+        'aria-controls': 'palette-content', tabindex: selected ? '0' : '-1', text: entry[1],
+      });
+      tab.addEventListener('click', function () { selectPaletteTab(entry[0]); });
+      tab.addEventListener('keydown', function (ev) {
+        if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(ev.key) === -1) return;
+        ev.preventDefault();
+        var next = ev.key === 'Home' ? 'elements' : ev.key === 'End' ? 'presets' :
+          (activePaletteTab === 'elements' ? 'presets' : 'elements');
+        selectPaletteTab(next);
+        tabs.querySelector('[data-value="' + next + '"]').focus();
+      });
+      tabs.appendChild(tab);
+    });
+    return tabs;
+  }
+
+  function buildPaletteContent() {
+    var content = h('div', {
+      class: 'palette-content', id: 'palette-content', role: 'tabpanel',
+      'aria-labelledby': 'palette-tab-' + activePaletteTab,
+    });
+    var mobile = App.isMobileView && App.isMobileView();
+    if (activePaletteTab === 'presets') {
+      if (mobile) {
+        var strip = h('div', { class: 'palette-strip palette-preset-strip' });
+        buildPresetCards().forEach(function (card) { strip.appendChild(card); });
+        content.appendChild(strip);
+      } else {
+        var list = h('div', { class: 'palette-presets' });
+        buildPresetCards().forEach(function (card) { list.appendChild(card); });
+        content.appendChild(list);
+      }
+    } else if (mobile) {
+      buildPaletteMobile(content);
+    } else {
+      DESKTOP_CATEGORIES.forEach(function (cat) { content.appendChild(buildDesktopCategory(cat)); });
+    }
+    return content;
+  }
+
+  function restorePaletteScroll(root) {
+    var chips = root.querySelector('.palette-chips');
+    if (chips) chips.scrollLeft = paletteChipsScroll;
+  }
+
   function buildPalette() {
     var root = document.getElementById('palette');
     // chip 行滑动位置跨结构重建保留（预设增删、断点跨越）：整树重建会把
     // scrollLeft 归零，用户滑到右侧后 chip 行弹回最左、刚点中的分类飞出视口。
-    var prevChips = root.querySelector('.palette-chips');
-    var chipsScroll = prevChips ? prevChips.scrollLeft : 0;
+    rememberPaletteScroll(root);
     root.innerHTML = '';
-    if (App.isMobileView && App.isMobileView()) {
-      buildPaletteMobile(root);
-      var chips = root.querySelector('.palette-chips');
-      if (chips && chipsScroll > 0) chips.scrollLeft = chipsScroll;
-      return;
+    root.appendChild(buildPaletteTabs());
+    root.appendChild(buildPaletteContent());
+    restorePaletteScroll(root);
+  }
+
+  /** 选项卡切换只更新活动态与内容，保留选项卡的焦点和 DOM。 */
+  function selectPaletteTab(tab) {
+    if (activePaletteTab === tab) return;
+    var root = document.getElementById('palette');
+    rememberPaletteScroll(root);
+    activePaletteTab = tab;
+    var tabs = root.querySelectorAll('.palette-tab');
+    for (var i = 0; i < tabs.length; i++) {
+      var selected = tabs[i].getAttribute('data-value') === tab;
+      tabs[i].classList.toggle('active', selected);
+      tabs[i].setAttribute('aria-selected', String(selected));
+      tabs[i].setAttribute('tabindex', selected ? '0' : '-1');
     }
-    CATEGORIES.forEach(function (cat) {
-      root.appendChild(buildDesktopCategory(cat));
-    });
-    buildPresetCategory(root);
+    var content = root.querySelector('.palette-content');
+    content.parentNode.replaceChild(buildPaletteContent(), content);
+    restorePaletteScroll(root);
   }
 
-  /** 移动端当前分类（chip 态，跨 palette 重建保留）；-1 = 预设 */
-  var activeCategory = 0;
-
-  /** chip 下标 → 分类下标（末位 chip 为预设，故映射为 -1） */
-  function chipCategoryIndex(chipIndex) {
-    return chipIndex < CATEGORIES.length ? chipIndex : -1;
-  }
-
-  /** 当前分类的卡片节点（预设分类出预设卡，其余出元素卡） */
+  /** 移动端当前元素分类的卡片节点。 */
   function buildActiveCards() {
-    if (activeCategory === -1) return buildPresetCards();
     return CATEGORIES[activeCategory].items.map(function (item) { return buildItemCard(item); });
   }
 
@@ -167,7 +240,7 @@
     return strip;
   }
 
-  /** ≤768px：顶部 chip 行（6 分类 + 预设）+ 当前分类横向卡片条 */
+  /** ≤768px：元素页的六个分类 chip + 当前分类横向卡片条。 */
   function buildPaletteMobile(root) {
     var chips = h('div', { class: 'palette-chips' });
     function chip(label, idx) {
@@ -181,9 +254,6 @@
       c.addEventListener('click', function () { selectPaletteCategory(i); });
       chips.appendChild(c);
     });
-    var presetChip = chip('预设', -1);
-    presetChip.addEventListener('click', function () { selectPaletteCategory(-1); });
-    chips.appendChild(presetChip);
     root.appendChild(chips);
     root.appendChild(buildCardStrip());
   }
@@ -199,14 +269,14 @@
     var root = document.getElementById('palette');
     var chips = root.querySelectorAll('.palette-chip');
     for (var i = 0; i < chips.length; i++) {
-      chips[i].classList.toggle('active', chipCategoryIndex(i) === idx);
+      chips[i].classList.toggle('active', i === idx);
     }
     var strip = root.querySelector('.palette-strip');
     if (strip) strip.parentNode.replaceChild(buildCardStrip(), strip);
   }
 
   function buildDesktopCategory(cat) {
-    var grid = h('div', { class: 'palette-grid' });
+    var grid = h('div', { class: 'palette-grid' + (cat.items === DIRECTION_ICONS ? ' direction-grid' : '') });
     cat.items.forEach(function (item) { grid.appendChild(buildItemCard(item)); });
     return h('div', { class: 'palette-category' }, [
       h('div', { class: 'palette-category-title', text: cat.name }),
@@ -224,10 +294,12 @@
     var preview = itemTypeOf(item) === 'space'
       ? spaceIcon()
       : Render.renderElementStandalone(sample, 36, App.measure).node;
-    var card = h('div', {
-      class: 'palette-card',
+    var direction = typeof item !== 'string' && item.icon.indexOf('arrow_') === 0;
+    var card = h('button', {
+      class: 'palette-card' + (direction ? ' direction-card' : ''), type: 'button',
       draggable: cardDraggableAttr(),
-      title: '点击添加到当前行，或拖入编辑区',
+      title: itemDisplayName(item) + '：点击添加到当前行，或拖入编辑区',
+      'aria-label': '添加' + itemDisplayName(item),
     }, [
       h('div', { class: 'card-icon' }, [preview]),
       h('div', { class: 'card-name', text: itemDisplayName(item) }),
@@ -289,12 +361,13 @@
     var nodes = [];
     var items = Presets.list();
     if (items.length === 0) {
-      nodes.push(h('div', { class: 'palette-empty', text: '悬停行右上角「存为预设」可保存当前行' }));
+      nodes.push(h('div', { class: 'palette-empty', text: '还没有预设。使用行上的「存为预设」保存一行，方便下次使用。' }));
       return nodes;
     }
     items.forEach(function (p) {
       var del = h('button', {
-        class: 'preset-delete', title: '删除预设', text: '✕',
+        class: 'preset-delete', type: 'button', title: '删除预设',
+        'aria-label': '删除预设：' + p.name, text: '✕',
       });
       del.addEventListener('click', function (ev) {
         ev.stopPropagation();
@@ -306,7 +379,8 @@
         });
       });
       var card = h('div', {
-        class: 'preset-card',
+        class: 'preset-card', role: 'button', tabindex: '0',
+        'aria-label': '预览预设：' + p.name,
         draggable: cardDraggableAttr(),
         title: '拖入空行使用；点击预览',
       }, [
@@ -318,17 +392,14 @@
       card.addEventListener('click', function () {
         App.previewPreset(p.id);
       });
+      card.addEventListener('keydown', function (ev) {
+        if (ev.target !== card || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+        ev.preventDefault();
+        card.click();
+      });
       nodes.push(card);
     });
     return nodes;
-  }
-
-  function buildPresetCategory(root) {
-    var cat = h('div', { class: 'palette-category' }, [
-      h('div', { class: 'palette-category-title', text: '预设' }),
-    ]);
-    buildPresetCards().forEach(function (n) { cat.appendChild(n); });
-    root.appendChild(cat);
   }
 
   Presets.onChange(function () {
@@ -361,115 +432,12 @@
    * 可选 getValue：注册到 syncFns，外部（如线路号自动配色）改色后同步显示。
    */
   function buildColorPicker(opts) {
-    var value = opts.value || null;
-    var nullable = !!opts.nullable;
-    var onChange = opts.onChange || function () {};
-
-    if (opts.getValue) {
-      var readValue = opts.getValue;
-      syncFns.push(function () {
-        var v = readValue() || null;
-        if (v !== value) {
-          value = v;
-          paint();
-        }
-      });
-    }
-
-    var current = h('button', { class: 'cp-current', title: '当前颜色' });
-    var hex = h('input', {
-      class: 'hex-input', type: 'text', spellcheck: 'false',
-      placeholder: '#RRGGBB', maxlength: '7',
-    });
-    var native = h('input', { class: 'cp-native', type: 'color', title: '自定义颜色' });
-    var nullBtn = nullable ? h('button', { class: 'cp-null-btn', text: '透明', title: '清除颜色（透明）' }) : null;
-
-    function paint() {
-      // hex 输入框聚焦中（用户正在打字）时不得改写其文本，否则输入被规整化
-      // 改写、光标跳末尾，与用户的编辑互相打架（删除 '#'/退格均被顶回）。
-      var hexIdle = document.activeElement !== hex;
-      if (value === null) {
-        current.classList.add('nullable-null');
-        current.removeAttribute('style');
-        if (hexIdle) hex.value = '';
-        if (nullBtn) nullBtn.classList.add('active');
-      } else {
-        current.classList.remove('nullable-null');
-        current.style.background = value;
-        if (hexIdle) hex.value = value;
-        native.value = value;
-        if (nullBtn) nullBtn.classList.remove('active');
-      }
-      swatchBtns.forEach(function (b) {
-        b.classList.toggle('active', b.dataset.color === value);
-      });
-    }
-
-    function commit(v) {
-      value = v;
-      paint();
-      onChange(v);
-    }
-
-    hex.addEventListener('input', function () {
-      var raw = hex.value.trim();
-      // 无 # 前缀的 6 位写法（如 7378be）也接受：只规整提交值，不改写输入框文本
-      var v = raw && raw.charAt(0) !== '#' ? '#' + raw : raw;
-      if (Core.isHexColor(v)) {
-        hex.classList.remove('invalid');
-        commit(Core.normalizeHex(v));
-      } else {
-        hex.classList.toggle('invalid', raw.length > 0);
-      }
-    });
-    hex.addEventListener('blur', function () { paint(); });
-    native.addEventListener('input', function () {
-      commit(Core.normalizeHex(native.value));
-    });
-    if (nullBtn) {
-      nullBtn.addEventListener('click', function () { commit(null); });
-    }
-
-    // 城市快捷切换：按城市调整选色板线路配色（下拉菜单，新增城市自动带出）
-    var citySelect = h('select', { class: 'cp-city-select', title: '按城市调整选色板线路配色' });
-    Core.PALETTE_CITY_ORDER.forEach(function (city) {
-      citySelect.appendChild(h('option', {
-        value: city, text: Core.CITY_PALETTES[city].name + '线路配色',
-      }));
-    });
-    citySelect.addEventListener('change', function () { setPaletteCity(citySelect.value); });
-    function paintCities() {
-      citySelect.value = App.prefs.paletteCity;
-    }
-    paintCities(); // 构建时立即回显
-
-    var swatchBtns = [];
-    var swatches = h('div', { class: 'cp-swatches' });
-    function renderSwatches() {
-      swatchBtns = [];
-      while (swatches.firstChild) swatches.removeChild(swatches.firstChild);
-      Core.citySwatches(App.prefs.paletteCity).forEach(function (c) {
-        var b = h('button', {
-          class: 'cp-swatch', title: c.name, 'data-color': c.bg,
-          style: 'background:' + c.bg,
-        });
-        b.addEventListener('click', function () { commit(c.bg); });
-        swatchBtns.push(b);
-        swatches.appendChild(b);
-      });
-      paint();
-    }
-    renderSwatches();
-
-    var row = h('div', { class: 'cp-row' }, [current, hex, native]);
-    if (nullBtn) row.appendChild(nullBtn);
-    var root = h('div', { class: 'color-picker' + (opts.mini ? ' mini' : '') }, [row, citySelect, swatches]);
-    paletteCityFns.push(function () {
-      if (!root.isConnected) return; // 选择器已随面板重建移除
-      renderSwatches();
-      paintCities();
-    });
-    paint();
+    var root = global.SignColorPicker.create(Object.assign({}, opts, {
+      getCity: function () { return App.prefs.paletteCity; },
+      onCityChange: setPaletteCity,
+    }));
+    if (opts.getValue) syncFns.push(root.sync);
+    paletteCityFns.push(function () { if (root.isConnected) root.sync(); });
     return root;
   }
 
@@ -477,8 +445,10 @@
 
   var lastSignature = null;
   var syncFns = [];
+  var rowBackgroundId = null;
 
   function panelMode() {
+    if (App.selectedIds().length > 1) return 'batch';
     if (App.selection.elementId) return 'element';
     if (App.presetPreviewId) return 'preset';
     return 'settings';
@@ -489,6 +459,9 @@
    *  否则每次切换都会整面板重建，重建出的控件不带任何选中态。 */
   function panelSignature() {
     var mode = panelMode();
+    if (mode === 'batch') return 'batch:' + App.selectedIds().slice().sort().map(function (id) {
+      return id + ':' + State.findElement(App.state, id).element.type;
+    }).join(',');
     if (mode === 'element') {
       var found = App.state && State.findElement(App.state, App.selection.elementId);
       if (!found) return 'element:none';
@@ -497,7 +470,7 @@
       return 'element:' + found.element.id + ':' + found.element.type + extra;
     }
     if (mode === 'preset') return 'preset:' + App.presetPreviewId + ':' + Presets.list().length;
-    return 'settings';
+    return 'settings:' + App.state.rows.map(function (row) { return row.id; }).join(',');
   }
 
   function syncRightPanel() {
@@ -509,14 +482,13 @@
     } else {
       syncFns.forEach(function (fn) { fn(); });
     }
-    // 标题与关闭按钮
+    // 标题与返回按钮
     var mode = panelMode();
     document.getElementById('right-panel-title').textContent =
-      mode === 'element' ? '元素属性'
+      mode === 'batch' ? '批量属性' : mode === 'element' ? '元素属性'
         : mode === 'preset' ? '预设预览' : '标识牌设置';
     document.getElementById('close-element-btn').hidden = mode === 'settings';
-    document.getElementById('close-element-btn').title =
-      mode === 'preset' ? '关闭预览' : '关闭元素属性';
+    document.getElementById('close-element-btn').title = '返回标识牌设置';
     // 移动端：选中元素/进预览时底部属性带自动展开（折叠只由用户手动控制）
     if (mode !== 'settings' && App.isMobileView && App.isMobileView()) {
       var band = document.getElementById('right-panel');
@@ -533,17 +505,43 @@
     var body = document.getElementById('right-panel-body');
     body.innerHTML = '';
     var mode = panelMode();
-    if (mode === 'element') body.appendChild(buildElementPanel());
+    if (mode === 'batch') body.appendChild(buildBatchPanel());
+    else if (mode === 'element') body.appendChild(buildElementPanel());
     else if (mode === 'preset') body.appendChild(buildPresetPreviewPanel());
     else body.appendChild(buildSettingsPanel());
   }
 
   // ─── 表单控件工厂 ──────────────────────────────────────────
 
+  var fieldId = 0;
   function field(labelText, control, hint) {
-    var children = [h('label', { text: labelText }), control];
+    var id = 'panel-field-' + (++fieldId);
+    var label = h('label', { text: labelText, id: id + '-label' });
+    if (/^(INPUT|SELECT)$/.test(control.tagName)) {
+      control.id = id;
+      label.htmlFor = id;
+    } else if (control.tagName !== 'BUTTON') {
+      control.setAttribute('aria-labelledby', id + '-label');
+      if (control.classList.contains('alignment-control')) {
+        control.querySelector('select').id = id;
+        label.htmlFor = id;
+      }
+    }
+    var children = [label, control];
     if (hint) children.push(h('div', { class: 'hint-text', text: hint }));
-    return h('div', { class: 'field' }, children);
+    return h('div', { class: 'field' + (control.classList.contains('color-picker') ? ' color-field' : '') }, children);
+  }
+
+  function panelSection(title, key) {
+    return h('section', { class: 'panel-section', 'data-section': key }, [h('h3', { class: 'section-title', text: title })]);
+  }
+
+  var toolIcon = UI.toolIcon;
+
+  function alignmentDropdown(options, getValue, onPick, label, key) {
+    var control = UI.alignmentControl(options, getValue, onPick, label, key);
+    syncFns.push(control.sync);
+    return control.node;
   }
 
   function numberInput(attrs, onCommit) {
@@ -559,13 +557,19 @@
   function textInput(attrs, onInput) {
     var input = h('input', Object.assign({ type: 'text' }, attrs));
     input.addEventListener('input', function () { onInput(input.value); });
+    input.addEventListener('blur', function () { App.breakHistoryGroup(); });
     return input;
   }
 
   function segGroup(options, getValue, onPick) {
     var group = h('div', { class: 'seg-group' });
     var buttons = options.map(function (opt) {
-      var b = h('button', { text: opt.label, title: opt.title || '', 'data-value': opt.value });
+      var b = h('button', { title: opt.title || opt.label, 'aria-label': opt.title || opt.label, 'data-value': opt.value });
+      if (opt.icon) {
+        b.appendChild(toolIcon(opt.icon));
+        b.appendChild(h('span', { class: 'sr-only', text: opt.label }));
+        group.classList.add('icon-seg-group');
+      } else b.textContent = opt.label;
       b.addEventListener('click', function () { onPick(opt.value); });
       group.appendChild(b);
       return b;
@@ -574,6 +578,7 @@
       var cur = getValue();
       buttons.forEach(function (b) {
         b.classList.toggle('active', b.dataset.value === String(cur));
+        b.setAttribute('aria-pressed', String(b.dataset.value === String(cur)));
       });
     }
     syncFns.push(paint);
@@ -581,15 +586,28 @@
     return group;
   }
 
+  function boldButton(getValue, onChange) {
+    var b = h('button', { class: 'format-btn', title: '加粗', 'aria-label': '加粗' }, [toolIcon('bold'), h('span', { class: 'sr-only', text: '加粗' })]);
+    function paint() {
+      b.classList.toggle('active', !!getValue());
+      b.setAttribute('aria-pressed', String(!!getValue()));
+    }
+    b.addEventListener('click', function () { onChange(!getValue()); });
+    syncFns.push(paint);
+    paint();
+    return b;
+  }
+
   function checkbox(labelText, getValue, onChange) {
-    var input = h('input', { type: 'checkbox' });
+    var id = 'panel-checkbox-' + (++fieldId);
+    var input = h('input', { type: 'checkbox', id: id });
     input.addEventListener('change', function () { onChange(input.checked); });
     input.checked = !!getValue(); // 构建时立即回显
     syncFns.push(function () {
       if (document.activeElement !== input) input.checked = !!getValue();
     });
     return h('div', { class: 'field field-inline' }, [
-      h('label', { text: labelText }), input,
+      h('label', { text: labelText, for: id }), input,
     ]);
   }
 
@@ -617,7 +635,7 @@
     });
     rowHeightInput.value = s.rowHeight;
     bindSync(rowHeightInput, function () { return App.state.rowHeight; });
-    root.appendChild(field('行高（px）', rowHeightInput, '元素与内边距按行高等比适配'));
+    root.appendChild(field('行高（px）', rowHeightInput, '默认 192 px（0.75 格）；元素与内边距按行高适配'));
 
     var rowCount = h('input', { type: 'number', value: s.rows.length, disabled: 'disabled' });
     bindSync(rowCount, function () { return App.state.rows.length; });
@@ -630,9 +648,29 @@
       App.update(function (st) { return State.updateSignSettings(st, { widthMode: v }); });
     })));
 
-    var widthInput = numberInput({ min: '64', max: '32768', step: '16' }, function (v) {
+    var unitsSelect = h('select', { class: 'width-units-select' });
+    unitsSelect.appendChild(h('option', { value: 'custom', text: '自定义像素宽度' }));
+    for (var unit = 1; unit <= 15; unit++) {
+      unitsSelect.appendChild(h('option', { value: String(unit), text: String(unit) }));
+    }
+    unitsSelect.addEventListener('change', function () {
+      if (unitsSelect.value === 'custom') { widthInput.focus(); return; }
+      App.update(function (st) { return State.setSignWidthUnits(st, Number(unitsSelect.value)); });
+    });
+    function paintUnits() {
+      unitsSelect.value = String(State.signWidthUnits(App.state) || 'custom');
+    }
+    paintUnits();
+    syncFns.push(paintUnits);
+    var unitsField = field('标识牌宽度（1–15 格）', unitsSelect, '每格固定 256 px，例如 8 格 = 2048 px；选择格数后行高独立调整');
+    function paintUnitsField() { unitsField.hidden = App.state.widthMode !== 'fixed'; }
+    paintUnitsField();
+    syncFns.push(paintUnitsField);
+    root.appendChild(unitsField);
+
+    var widthInput = numberInput({ class: 'sign-width-input', min: '32', max: '32768', step: '16' }, function (v) {
       App.update(function (st) {
-        return State.updateSignSettings(st, { width: Math.round(Core.clamp(v, 64, 32768)) });
+        return State.updateSignSettings(st, { width: Math.round(Core.clamp(v, 32, 32768)) });
       });
     });
     widthInput.value = s.width;
@@ -658,13 +696,17 @@
 
     var bgColor = buildColorPicker({
       value: s.backgroundColor,
+      scope: '标识牌背景色',
+      getValue: function () { return App.state.backgroundColor; },
       onChange: function (v) {
         App.update(function (st) {
           return State.updateSignSettings(st, { backgroundColor: v || '#FFFFFF' });
         });
       },
     });
-    root.appendChild(field('标识牌背景色', bgColor));
+    root.appendChild(h('div', { class: 'section-title', text: '牌面颜色与灰框' }));
+    root.appendChild(field('标识牌背景色', bgColor, '未单独设色的行沿用此颜色；元素背景可覆盖它'));
+    root.appendChild(buildRowBackgroundSettings());
 
     var frameWidthInput = numberInput({ class: 'frame-width-input', min: '0', max: '512', step: '1' }, function (v) {
       App.update(function (st) {
@@ -674,7 +716,15 @@
     frameWidthInput.value = s.frameWidth;
     bindSync(frameWidthInput, function () { return App.state.frameWidth; });
     root.appendChild(field('灰框宽度（px）', frameWidthInput,
-      '每行牌面从边缘向内延伸的直角灰框，模拟真实标识牌边框；0 为不显示'));
+      '外缘与行间分割线使用相同宽度；0 为不显示'));
+    root.appendChild(field('灰框颜色', buildColorPicker({
+      value: s.frameColor,
+      scope: '灰框颜色',
+      getValue: function () { return App.state.frameColor; },
+      onChange: function (v) {
+        App.update(function (st) { return State.updateSignSettings(st, { frameColor: v }); });
+      },
+    }), '作用于每行灰框，宽度为 0 时隐藏'));
 
     root.appendChild(h('div', { class: 'divider' }));
     root.appendChild(h('div', { class: 'section-title', text: '编辑器' }));
@@ -683,7 +733,7 @@
     }));
     root.appendChild(h('div', {
       class: 'hint-text',
-      text: '开启后在线路列表输入线路号时自动填充当前城市的线路色；城市可在任意颜色选择器顶部的下拉菜单切换。',
+      text: '开启后输入线路号会自动填充线路色；展开色板后可切换城市。',
     }));
 
     root.appendChild(h('button', {
@@ -700,7 +750,7 @@
 
     root.appendChild(h('div', { class: 'divider' }));
     root.appendChild(h('div', { class: 'section-title', text: '导出' }));
-    // 导出前可能要加载内嵌字体（fonts-data.js 约 7 MB），加载期间按钮保持忙碌态，
+    // 导出前按需加载实际使用的内嵌字体，加载期间按钮保持忙碌态，
     // 避免慢网络下「点了没反应」；失败由导出函数 toast 错误。
     function exportButton(text, run) {
       var btn = h('button', { class: 'btn btn-primary', text: text });
@@ -745,7 +795,101 @@
   // ─── 元素属性面板 ──────────────────────────────────────────
 
   function patchProps(elementId, patch) {
-    App.update(function (st) { return State.updateElementProps(st, elementId, patch); });
+    var keys = Object.keys(patch);
+    var key = keys.length === 1 && ['textZh', 'textEn', 'text', 'code'].indexOf(keys[0]) !== -1
+      ? elementId + ':' + keys[0] : null;
+    App.update(function (st) { return State.updateElementProps(st, elementId, patch); }, key);
+  }
+
+  /** 行选择用 id 跟踪；所有回调重新查当前状态，避免不可变更新后的过期快照。 */
+  function buildRowBackgroundSettings() {
+    if (!App.state.rows.some(function (row) { return row.id === rowBackgroundId; })) {
+      rowBackgroundId = App.state.rows[0].id;
+    }
+    function liveRow() {
+      return App.state.rows.filter(function (row) { return row.id === rowBackgroundId; })[0];
+    }
+    function effectiveColor() {
+      return liveRow().backgroundColor || App.state.backgroundColor;
+    }
+    var root = h('div', { class: 'row-background-settings' });
+    var select = h('select', { class: 'row-bg-select' });
+    App.state.rows.forEach(function (row, i) {
+      select.appendChild(h('option', { value: row.id, text: '第 ' + (i + 1) + ' 行' }));
+    });
+    select.value = rowBackgroundId;
+    select.addEventListener('change', function () {
+      rowBackgroundId = select.value;
+      syncNow();
+    });
+    root.appendChild(field('单独设置行背景色', select));
+    root.appendChild(field('当前行背景色', buildColorPicker({
+      value: effectiveColor(), scope: '当前行背景色', getValue: effectiveColor,
+      onChange: function (v) {
+        App.update(function (st) { return State.updateRowSettings(st, rowBackgroundId, { backgroundColor: v }); });
+      },
+    })));
+    var status = h('div', { class: 'hint-text' });
+    var reset = h('button', { class: 'btn row-bg-reset', text: '恢复标识牌背景色' });
+    reset.addEventListener('click', function () {
+      App.update(function (st) { return State.updateRowSettings(st, rowBackgroundId, { backgroundColor: null }); });
+    });
+    root.appendChild(status);
+    root.appendChild(reset);
+    function paint() {
+      var ownColor = !!liveRow().backgroundColor;
+      root.hidden = App.state.rows.length === 1 && !ownColor;
+      select.value = rowBackgroundId;
+      status.textContent = ownColor ? '此行已单独设色；元素背景可覆盖它。' : '此行沿用标识牌背景色。';
+      reset.disabled = !ownColor;
+    }
+    paint();
+    syncFns.push(paint);
+    return root;
+  }
+
+  function buildBatchPanel() {
+    var root = h('div', { class: 'batch-properties' });
+    root.appendChild(h('div', { class: 'element-type-label', text: '已选择 ' + App.selectedIds().length + ' 个元素' }));
+    root.appendChild(h('div', { class: 'hint-text', text: '修改后应用于选中的适用元素；“不同”表示当前值不一致。' }));
+    var layout = panelSection('批量排版', 'layout');
+    [
+      { key: 'elementAlign', label: '元素对齐', values: ['left', 'center', 'right'] },
+      { key: 'align', label: '文字对齐', values: ['left', 'center', 'right'] },
+      { key: 'contentAlign', label: '内容对齐', values: ['left', 'right'] },
+    ].forEach(function (item) {
+      var control = UI.alignmentControl(item.values.map(function (value) {
+        return { value: value, label: value === 'center' ? '居中' : value === 'left' ? '左对齐' : '右对齐' };
+      }), function () { return App.alignmentValue(item.key); }, function (value) { App.setAlignment(item.key, value); }, item.label, item.key);
+      var row = field(item.label, control.node);
+      function sync() {
+        row.hidden = !App.alignmentTargets(item.key).length || (item.key === 'elementAlign' && App.state.widthMode !== 'fixed');
+        control.sync();
+      }
+      sync(); syncFns.push(sync); layout.appendChild(row);
+    });
+    if (App.paddingIds().length) {
+      var grid = h('div', { class: 'batch-padding-grid' });
+      ['left', 'right'].forEach(function (side) {
+        var label = side === 'left' ? '左' : '右';
+        var input = numberInput({ min: '0', max: '8', step: '0.05', placeholder: '不同', 'aria-label': label + '内边距' },
+          function (v) { App.setPadding(side, Core.clamp(v, 0, 8)); });
+        input.value = App.paddingValue(side) === null ? '' : App.paddingValue(side);
+        bindSync(input, function () { var v = App.paddingValue(side); return v === null ? '' : v; });
+        var trigger = h('button', { type: 'button', class: 'padding-trigger', 'aria-label': '拖动调整' + label + '内边距',
+          title: label + '内边距（左右拖动，每档0.05；点击输入）' }, [UI.paddingIcon(side)]);
+        UI.bindPaddingScrub(trigger, side, function () { return App.selection.elementId; });
+        trigger.addEventListener('click', function () { input.focus(); input.select(); });
+        grid.appendChild(h('div', { 'data-padding': side }, [h('div', { class: 'hint-text', text: label }),
+          h('div', { class: 'panel-padding-value' }, [trigger, input])]));
+      });
+      layout.appendChild(field('左右内边距（行高比例）', grid));
+    }
+    root.appendChild(layout);
+    var del = h('button', { class: 'btn btn-danger', text: '删除选中元素' });
+    del.addEventListener('click', App.deleteSelection);
+    root.appendChild(del);
+    return root;
   }
 
   function buildElementPanel() {
@@ -760,40 +904,53 @@
       return cur ? cur.element : el;
     };
 
-    var root = h('div');
-    root.appendChild(h('div', { class: 'section-title', text: TYPE_NAMES[el.type] }));
+    var root = h('div', { class: 'element-properties' });
+    root.appendChild(h('div', { class: 'element-type-label', text: TYPE_NAMES[el.type] }));
+    var content = panelSection('内容', 'content');
+    var layout = panelSection('排版', 'layout');
+    var colors = panelSection('元素颜色', 'colors');
+    var fields = h('div');
 
     switch (el.type) {
-      case 'arrow': buildArrowFields(root, el, live); break;
-      case 'bilingual-text': buildBilingualFields(root, el, live); break;
-      case 'big-number': buildBigNumberFields(root, el, live); break;
-      case 'number-line': buildNumberLineFields(root, el, live); break;
-      case 'text-line': buildTextLineFields(root, el, live); break;
+      case 'arrow': buildArrowFields(fields, el, live); break;
+      case 'bilingual-text': buildBilingualFields(fields, el, live); break;
+      case 'small-bilingual-text': buildBilingualFields(fields, el, live); break;
+      case 'big-number': buildBigNumberFields(fields, el, live); break;
+      case 'number-line': buildNumberLineFields(fields, el, live); break;
+      case 'text-line': buildTextLineFields(fields, el, live); break;
       case 'entrance':
-      case 'exit': buildCodeFields(root, el, live); break;
-      case 'space': buildSpaceFields(root, el, live); break;
-      case 'icon': buildIconFields(root, el, live); break;
+      case 'exit': buildCodeFields(fields, el, live); break;
+      case 'space': buildSpaceFields(fields, el, live); break;
+      case 'icon': buildIconFields(fields, el, live); break;
     }
+    Array.prototype.slice.call(fields.children).forEach(function (node) {
+      if (node.classList.contains('color-field') || node.classList.contains('fixed-color-hint')) colors.appendChild(node);
+      else if (node.querySelector('.seg-group, .format-btn, .alignment-control, input[type="range"]')) layout.appendChild(node);
+      else content.appendChild(node);
+    });
 
     // 元素对齐：仅固定宽度模式支持（动态宽度整体左起排列）。
     // 编辑过程中宽度模式不会变化（它在设置面板里，与本面板互斥），构建时判断即可。
     if (App.state.widthMode === 'fixed') {
-      root.appendChild(field('元素对齐', segGroup([
+      layout.appendChild(field('元素对齐', alignmentDropdown([
         { value: 'left', label: '贴左' },
         { value: 'center', label: '居中' },
         { value: 'right', label: '贴右' },
       ], function () { return live().props.elementAlign; }, function (v) {
         patchProps(el.id, { elementAlign: v });
-      })));
+      }, '元素对齐', 'elementAlign')));
     }
 
     if (el.type !== 'exit') {
-      root.appendChild(h('div', { class: 'divider' }));
-      root.appendChild(buildBackgroundPicker(el));
+      colors.appendChild(buildBackgroundPicker(el, live));
     }
     if (el.type !== 'space') {
-      root.appendChild(buildPaddingEditor(el, live));
+      layout.appendChild(buildPaddingEditor(el, live));
     }
+    [content, layout, colors].forEach(function (section) {
+      if (section.children.length > 1) root.appendChild(section);
+    });
+    colors.appendChild(h('div', { class: 'hint-text', text: '整块标识牌的背景色在返回后的「标识牌设置」中调整。' }));
 
     root.appendChild(h('div', { class: 'divider' }));
     var del = h('button', { class: 'btn btn-danger', text: '🗑 删除元素' });
@@ -830,8 +987,10 @@
     pct.textContent = Math.round(el.props.thicknessRatio * 100) + '%';
     root.appendChild(field('粗细比例', h('div', {}, [range, pct])));
 
-    root.appendChild(field('颜色', buildColorPicker({
+    root.appendChild(field('箭头颜色', buildColorPicker({
       value: el.props.color,
+      scope: '箭头颜色',
+      getValue: function () { return live().props.color; },
       onChange: function (v) { patchProps(el.id, { color: v }); },
     })));
   }
@@ -849,20 +1008,23 @@
     bindSync(en, function () { return live().props.textEn; });
     root.appendChild(field('英文文本', en));
 
-    root.appendChild(field('对齐', segGroup([
+    var alignTools = alignmentDropdown([
       { value: 'left', label: '左对齐' },
       { value: 'center', label: '居中' },
       { value: 'right', label: '右对齐' },
     ], function () { return live().props.align; }, function (v) {
       patchProps(el.id, { align: v });
-    })));
+    }, '文字对齐', 'align');
 
-    root.appendChild(checkbox('加粗', function () { return live().props.bold; }, function (v) {
+    var bold = boldButton(function () { return live().props.bold; }, function (v) {
       patchProps(el.id, { bold: v });
-    }));
+    });
+    root.appendChild(field('文字样式与对齐', h('div', { class: 'text-formatting' }, [bold, alignTools])));
 
-    root.appendChild(field('颜色', buildColorPicker({
+    root.appendChild(field('文字颜色', buildColorPicker({
       value: el.props.color,
+      scope: '文字颜色',
+      getValue: function () { return live().props.color; },
       onChange: function (v) { patchProps(el.id, { color: v }); },
     })));
   }
@@ -873,20 +1035,22 @@
     });
     bindSync(t, function () { return live().props.text; });
     root.appendChild(field('内容', t));
-    root.appendChild(field('颜色', buildColorPicker({
+    root.appendChild(field('文字颜色', buildColorPicker({
       value: el.props.color,
+      scope: '文字颜色',
+      getValue: function () { return live().props.color; },
       onChange: function (v) { patchProps(el.id, { color: v }); },
     })));
   }
 
-  /** 内容对齐分段按钮（数字线路/文字线路/出口）：元素内部左/右镜像排版，与元素对齐无关 */
+  /** 内容对齐下拉框（数字线路/文字线路/出口）：元素内部左/右镜像排版，与元素对齐无关 */
   function contentAlignGroup(el, live) {
-    return field('内容对齐', segGroup([
+    return field('内容对齐', alignmentDropdown([
       { value: 'left', label: '左对齐' },
       { value: 'right', label: '右对齐' },
     ], function () { return live().props.align; }, function (v) {
       patchProps(el.id, { align: v });
-    }));
+    }, '内容对齐', 'align'));
   }
 
   function buildNumberLineFields(root, el, live) {
@@ -913,6 +1077,8 @@
           if (hit) patch.color = hit.bg;
           updateLine(idx, patch);
         });
+        var numberId = 'panel-line-' + (++fieldId);
+        numInput.id = numberId;
         // 失焦时回显规范化后的数字（过滤非法字符后）
         numInput.addEventListener('blur', function () {
           var cur = lines()[idx];
@@ -925,14 +1091,15 @@
           });
         });
         editor.appendChild(h('div', { class: 'line-entry' }, [
-          numInput,
-          buildColorPicker({
+          h('label', { class: 'le-label', for: numberId, text: '第 ' + (idx + 1) + ' 条线路 · 线路号' }),
+          numInput, removeBtn,
+          field('线路色条颜色', buildColorPicker({
             value: line.color,
+            scope: '第' + (idx + 1) + '条线路色条颜色',
             mini: true,
             getValue: function () { var cur = lines()[idx]; return cur ? cur.color : null; },
             onChange: function (v) { updateLine(idx, { color: v }); },
-          }),
-          removeBtn,
+          })),
         ]));
       });
       var add = h('button', { class: 'le-add', text: '＋ 添加线路' });
@@ -949,16 +1116,19 @@
     root.appendChild(contentAlignGroup(el, live));
     // 右对齐仅渲染第 1 条线路：禁用「添加线路」，多余线路保留（切回左对齐恢复显示）
     var rightOnlyHint = h('div', { class: 'hint-text', text: '右对齐仅渲染第 1 条线路；多余线路会保留，切回左对齐后恢复显示。' });
-    syncFns.push(function () {
+    function paintRightOnly() {
       var right = live().props.align === 'right';
       var add = editor.querySelector('.le-add');
       if (add) add.disabled = right;
       rightOnlyHint.style.display = right ? '' : 'none';
-    });
-    rightOnlyHint.style.display = live().props.align === 'right' ? '' : 'none'; // 构建时立即回显
+    }
+    syncFns.push(paintRightOnly);
+    paintRightOnly();
     root.appendChild(rightOnlyHint);
     root.appendChild(field('文字颜色', buildColorPicker({
       value: el.props.textColor,
+      scope: '文字颜色',
+      getValue: function () { return live().props.textColor; },
       onChange: function (v) { patchProps(el.id, { textColor: v }); },
     })));
   }
@@ -982,12 +1152,16 @@
 
     root.appendChild(contentAlignGroup(el, live));
 
-    root.appendChild(field('色块颜色', buildColorPicker({
+    root.appendChild(field('线路色条颜色', buildColorPicker({
       value: el.props.blockColor,
+      scope: '线路色条颜色',
+      getValue: function () { return live().props.blockColor; },
       onChange: function (v) { patchProps(el.id, { blockColor: v }); },
     })));
     root.appendChild(field('文字颜色', buildColorPicker({
       value: el.props.textColor,
+      scope: '文字颜色',
+      getValue: function () { return live().props.textColor; },
       onChange: function (v) { patchProps(el.id, { textColor: v }); },
     })));
   }
@@ -1001,12 +1175,14 @@
     if (el.type === 'exit') {
       root.appendChild(contentAlignGroup(el, live)); // 仅出口支持内容对齐（编号移至「出口」右侧）
     }
-    root.appendChild(field('颜色', buildColorPicker({
+    root.appendChild(field('文字颜色', buildColorPicker({
       value: el.props.color,
+      scope: '文字颜色',
+      getValue: function () { return live().props.color; },
       onChange: function (v) { patchProps(el.id, { color: v }); },
     })));
     if (el.type === 'exit') {
-      root.appendChild(h('div', { class: 'hint-text', text: '出口背景色固定为出口黄 #F7D917' }));
+      root.appendChild(h('div', { class: 'hint-text fixed-color-hint', text: '元素背景色固定为出口黄 #F7D917' }));
     }
   }
 
@@ -1044,33 +1220,48 @@
     });
     function paint() {
       var cur = live().props.icon;
-      btns.forEach(function (x) { x.b.classList.toggle('active', x.id === cur); });
+      btns.forEach(function (x) {
+        x.b.classList.toggle('active', x.id === cur);
+        x.b.setAttribute('aria-pressed', String(x.id === cur));
+      });
     }
     syncFns.push(paint);
     paint();
     root.appendChild(grid);
-    root.appendChild(field('颜色', buildColorPicker({
+    if (curCat === 'service') {
+      root.appendChild(field('旋转', segGroup([
+        { value: 0, label: '0°', title: '不旋转' },
+        { value: -90, label: '↺ 90°', title: '逆时针 90°' },
+        { value: 90, label: '↻ 90°', title: '顺时针 90°' },
+        { value: 180, label: '180°', title: '旋转 180°' },
+      ], function () { return live().props.rotation; }, function (v) {
+        patchProps(el.id, { rotation: Number(v) });
+      })));
+    }
+    root.appendChild(field('图标颜色', buildColorPicker({
       value: el.props.color,
+      scope: '图标颜色',
+      getValue: function () { return live().props.color; },
       onChange: function (v) { patchProps(el.id, { color: v }); },
     })));
     // 元素背景色由通用分发器统一追加（buildFields 末尾，space/exit 除外）
   }
 
-  function buildBackgroundPicker(el) {
-    var wrap = h('div');
+  function buildBackgroundPicker(el, live) {
     var picker = buildColorPicker({
       value: el.props.backgroundColor,
+      scope: '元素背景色',
+      getValue: function () { return live().props.backgroundColor; },
       nullable: true,
       onChange: function (v) { patchProps(el.id, { backgroundColor: v }); },
     });
-    wrap.appendChild(picker);
-    return field('元素背景色', wrap);
+    return field('元素背景色', picker, '仅覆盖当前元素的区域；透明时显示标识牌背景色');
   }
 
   function buildPaddingEditor(el, live) {
     // 上下左右挤一行时输入框过窄（"0.25" 显示成 "0.2"）：
     // 左右一行、上下一行，两行各两框
-    var wrap = h('div');
+    var wrap = h('details', { class: 'padding-editor' }, [h('summary', { text: '内边距' })]);
     wrap.appendChild(checkbox('左右内边距随相邻自动缩放', function () {
       return live().props.paddingAuto;
     }, function (v) {
@@ -1098,9 +1289,19 @@
       });
       input.value = el.props.padding[item.k];
       bindSync(input, function () { return live().props.padding[item.k]; });
-      grid.appendChild(h('div', {}, [
-        h('div', { class: 'hint-text', text: item.label, style: 'text-align:center;margin-bottom:2px' }),
-        input,
+      var title = h('div', { class: 'hint-text', text: item.label, style: 'text-align:center;margin-bottom:2px' });
+      var valueControl = input;
+      if (item.k === 'left' || item.k === 'right') {
+        var trigger = h('button', {
+          type: 'button', class: 'padding-trigger', 'aria-label': '拖动调整' + item.label + '内边距',
+          title: item.label + '内边距（左右拖动，每档0.05；点击输入）',
+        }, [UI.paddingIcon(item.k)]);
+        UI.bindPaddingScrub(trigger, item.k, function () { return el.id; });
+        trigger.addEventListener('click', function () { input.focus(); input.select(); });
+        valueControl = h('div', { class: 'panel-padding-value' }, [trigger, input]);
+      }
+      grid.appendChild(h('div', { 'data-padding': item.k }, [
+        title, valueControl,
       ]));
     });
     wrap.appendChild(field('内边距（相对行高比例）', grid, '左右内边距可大于 1（元素更宽）'));
@@ -1128,7 +1329,20 @@
       }));
     });
     root.appendChild(list);
-    root.appendChild(h('div', { class: 'hint-text', text: '将此预设卡片拖入编辑区的空行即可使用；预设只能放入空行。' }));
+    root.appendChild(h('div', { class: 'hint-text', text: '可将此预设拖入空行，或直接添加为新行。' }));
+    var apply = h('button', { class: 'btn btn-primary preset-apply-new-row', text: '＋ 添加为新行' });
+    apply.addEventListener('click', function () {
+      var elements = Presets.materialize(p.id);
+      if (!elements || !elements.length) { SignUI.toast('预设内容为空', 'error'); return; }
+      App.update(function (st) {
+        var next = State.addRow(st);
+        var rowId = next.rows[next.rows.length - 1].id;
+        return elements.reduce(function (sign, el) { return State.addElement(sign, rowId, el); }, next);
+      });
+      App.previewPreset(null);
+      SignUI.toast('已将预设添加为新行', 'success');
+    });
+    root.appendChild(apply);
     root.appendChild(h('div', { class: 'divider' }));
     var del = h('button', { class: 'btn btn-danger', text: '🗑 删除此预设' });
     del.addEventListener('click', function () {
@@ -1147,6 +1361,7 @@
     switch (el.type) {
       case 'arrow': return p.direction;
       case 'bilingual-text': return (p.textZh || '') + (p.textEn ? ' / ' + p.textEn : '');
+      case 'small-bilingual-text': return (p.textZh || '') + (p.textEn ? ' / ' + p.textEn : '');
       case 'big-number': return p.text;
       case 'number-line': return (p.lines || []).map(function (l) { return l.number; }).join('、') + ' 号线';
       case 'text-line': return (p.text || '') + (p.textEn ? ' / ' + p.textEn : '');

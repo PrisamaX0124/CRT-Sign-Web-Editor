@@ -1,0 +1,12 @@
+CRT-Sign-Web-Editor
+
+This project is a fork of JR-Guidance-Sign-Web-Editor by endcreeper861:
+https://github.com/endcreeper861/JR-Guidance-Sign-Web-Editor
+
+The upstream project's Apache License, Version 2.0 is preserved in LICENSE.
+This fork adds platform hanging signs and route maps, extends the guidance
+sign editor, and prepares both editors for GitHub Pages. Modified source
+files carry a change notice; the change summary is in docs/fork-changes.md.
+
+Existing font and icon source attributions are preserved in README.md.
+Third-party assets remain subject to their respective rights and licenses.

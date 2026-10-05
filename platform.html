@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<!-- Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. -->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>站台标识生成器 · 吊板与线路图</title>
+  <link rel="stylesheet" href="style.css?v=public-c3a402667e4b">
+  <link rel="stylesheet" href="platform.css?v=public-f8585e2b6f8f">
+</head>
+<body class="platform-page">
+  <header class="platform-header">
+    <nav class="mode-tabs" aria-label="标识牌版式">
+      <button data-mode="route" aria-pressed="true">全线吊板</button>
+      <button data-mode="station" aria-pressed="false">本站吊板</button>
+      <button data-mode="vertical" aria-pressed="false">纵向线路图</button>
+    </nav>
+    <a class="back-link" href="index.html">导向标识编辑器 ↗</a>
+  </header>
+  <div class="platform-workspace">
+    <aside class="platform-stations">
+      <div class="platform-panel-title"><strong>线路内容</strong><span id="station-count"></span></div>
+      <div class="library-tabs" aria-label="内容与预设"><button data-library="stations" aria-pressed="true">站点</button><button data-library="presets" aria-pressed="false">预设</button></div>
+      <div id="station-library" class="library-pane">
+      <div class="station-list-help"><span>拖动排序 · 点选编辑</span><button id="reverse-stations" title="倒转站点顺序，行车方向单独设置" aria-label="倒转站点顺序"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 19V5m-4 4 4-4 4 4M16 5v14m-4-4 4 4 4-4"/></svg>倒序</button></div>
+      <div id="station-list" role="group" aria-label="线路站点"></div>
+      <div class="station-list-actions"><button class="btn" id="add-station">＋ 添加站点</button><button class="btn" id="batch-stations">批量编辑</button></div>
+      </div>
+      <div id="preset-library" class="library-pane" hidden><div id="preset-list"></div><button class="btn" id="save-preset">＋ 保存当前标识牌为预设</button></div>
+    </aside>
+    <main class="platform-preview">
+      <div class="preview-toolbar"><div><strong id="preview-title">全线吊板</strong><span id="preview-dimensions"></span></div><div class="history-actions"><button id="undo" class="icon-btn" title="撤销 Ctrl+Z" aria-label="撤销">↶</button><button id="redo" class="icon-btn" title="重做 Ctrl+Shift+Z" aria-label="重做">↷</button><select id="preview-zoom" aria-label="预览缩放"><option value="fit">适合窗口</option><option value="1">100%</option><option value="0.5">50%</option><option value="0.25">25%</option></select></div></div>
+      <div id="platform-preview-scroll"><div id="platform-paper"><svg id="platform-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="站台标识牌实时预览"></svg><div id="element-hover-outline" class="platform-element-outline" hidden></div><div id="element-selection-outline" class="platform-element-outline selected" hidden></div></div></div>
+      <div id="platform-element-toolbar" role="toolbar" aria-label="标识牌元素快捷操作" hidden>
+        <span id="toolbar-element-label"></span>
+        <div class="platform-tool-group" role="group" aria-label="站点管理"><button id="tool-current" title="设为本站">本站</button><button id="tool-up" title="站点前移" aria-label="站点前移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 12H8m5-5-5 5 5 5"/></svg><span>前移</span></button><button id="tool-down" title="站点后移" aria-label="站点后移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16M4 12h12m-5-5 5 5-5 5"/></svg><span>后移</span></button><button id="tool-delete" title="删除站点" aria-label="删除站点"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 10v7m4-7v7"/></svg></button></div>
+        <div class="platform-tool-group nudge-tools" role="group" aria-label="位置微调"><span class="tool-group-label">微调</span><button data-nudge-x="-1" data-nudge-y="0" title="元素左移 1px" aria-label="元素左移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg></button><button data-nudge-x="1" data-nudge-y="0" title="元素右移 1px" aria-label="元素右移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="-1" title="元素上移 1px" aria-label="元素上移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="1" title="元素下移 1px" aria-label="元素下移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button><button id="tool-reset" title="复位元素微调" aria-label="复位元素微调"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button></div>
+      </div>
+      <div class="preview-footer"><span id="save-status" role="status">本地自动保存</span><span>悬停查看选框 · 点击编辑 · 浮动工具栏微调</span></div>
+    </main>
+    <aside class="platform-properties">
+      <div class="platform-panel-title"><strong id="property-heading">标识牌设置</strong></div>
+      <div class="property-tabs" aria-label="编辑范围"><button data-property-view="sign" aria-pressed="true">标识牌</button><button data-property-view="station" aria-pressed="false">站点 / 元素</button></div>
+      <div class="platform-property-scroll">
+        <section class="platform-section" data-panel="sign"><h2>线路与行车方向</h2>
+          <div class="field-pair"><div class="field"><label for="line-number">线路号</label><input id="line-number" type="text" maxlength="8"></div><div class="field"><label for="palette-city">城市配色</label><select id="palette-city"><option value="chongqing">重庆</option><option value="chengdu">成都</option><option value="shanghai">上海</option></select></div></div>
+          <div class="field" hidden><label for="line-name">线路名称</label><input id="line-name" type="text" maxlength="40"></div>
+          <div class="field"><label for="travel-direction" id="travel-direction-label">列车行驶方向</label><select id="travel-direction"><option value="-1">前往列表首站 ← / ↓</option><option value="1">前往列表末站 → / ↑</option></select></div>
+          <div class="field"><label for="line-color-hex">线路色</label><div id="line-color-picker"></div></div>
+        </section>
+        <section class="platform-section" id="station-properties" data-panel="station"><div class="section-heading"><h2>站点编辑</h2><span id="current-station-label"></span></div>
+          <div class="field"><label for="station-code">站点编号</label><input id="station-code" type="text" maxlength="8"></div>
+          <div class="field"><label for="station-zh">中文站名</label><input id="station-zh" type="text" maxlength="80"></div>
+          <div class="field"><label for="station-en">英文站名</label><input id="station-en" type="text" maxlength="160"></div>
+          <button class="btn" id="set-current">设为本站</button>
+          <div class="field"><label for="station-transfers">换乘线路（逗号分隔，最多 6 条）</label><input id="station-transfers" type="text" placeholder="1,5 或 1:#E4002B,5:#00A3E0"><small>线路号按城市配色，也可附加 :#颜色</small></div>
+          <div id="transfer-colors"></div>
+          <div class="station-edit-actions"><button class="btn" id="station-up">↑ 上移</button><button class="btn" id="station-down">↓ 下移</button><button class="btn delete-station" id="station-delete">删除</button></div>
+        </section>
+        <section class="platform-section" data-panel="element" id="element-properties"><h2>元素位置微调</h2><div class="field-pair"><div class="field"><label for="element-offset-x">横向 px</label><input id="element-offset-x" type="number" min="-128" max="128" step="1"></div><div class="field"><label for="element-offset-y">纵向 px</label><input id="element-offset-y" type="number" min="-128" max="128" step="1"></div></div><button id="reset-element" class="btn">复位元素位置</button><p class="field-help">选框按实际墨区与图形边缘计算；微调会随项目、预设和导出保留。</p></section>
+        <section class="platform-section" data-panel="sign" id="dimension-section"><h2>尺寸与排版</h2>
+          <div id="vertical-layout-controls" hidden><div class="field"><label for="vertical-variant">纵向线路图版式</label><select id="vertical-variant"><option value="left">单列左版</option><option value="right">单列右版</option><option value="double">双列 · 岛式站台</option></select></div><button id="swap-vertical-columns" class="btn" hidden>⇄ 交换左右列</button><p id="vertical-layout-help" class="field-help">与吊板共用站点、本站、行车方向、换乘和颜色。</p></div>
+          <div id="hanging-size-controls"><div class="field"><label for="hanging-length">吊板长度（每格 256px）</label><select id="hanging-length"><option value="custom">自定义像素</option><option value="1">1格 · 256px</option><option value="2">2格 · 512px</option><option value="3">3格 · 768px</option><option value="4">4格 · 1024px</option><option value="5">5格 · 1280px</option><option value="6">6格 · 1536px</option><option value="7">7格 · 1792px</option><option value="8">8格 · 2048px</option><option value="9">9格 · 2304px</option><option value="10">10格 · 2560px</option><option value="11">11格 · 2816px</option><option value="12">12格 · 3072px</option><option value="13">13格 · 3328px</option><option value="14">14格 · 3584px</option><option value="15">15格 · 3840px</option></select></div><div class="field"><label for="hanging-height">吊板短边</label><select id="hanging-height"><option value="192">地铁 · 0.75格 / 192px</option><option value="256">单轨 · 1格 / 256px</option><option value="custom">自定义像素</option></select></div></div>
+          <label id="station-direction-option" class="station-direction-option" hidden><input id="show-station-direction" type="checkbox">显示行车方向提示</label>
+          <details id="advanced-layout"><summary>像素尺寸与文字样式</summary>
+          <div class="field-pair"><div class="field"><label for="output-width">宽度 px</label><input id="output-width" type="number" min="128" max="8192" step="1"></div><div class="field"><label for="output-height">高度 px</label><input id="output-height" type="number" min="128" max="8192" step="1"></div></div>
+          <button id="fit-ratio" class="btn" hidden>高度自动适配</button>
+          <div class="field"><label for="font-scale">站名文字比例 <output id="font-scale-label"></output></label><input id="font-scale" type="range" min="0.7" max="1.4" step="0.05"></div>
+          <div class="field"><label for="background-color">标识牌背景</label><div id="background-color-picker"></div></div><div class="field"><label for="muted-color">已驶过</label><div id="muted-color-picker"></div></div>
+          <p class="field-help" id="size-help">地铁线路图默认 3格，单轨线路图默认 5格，本站信息默认 2格。</p>
+          </details>
+        </section>
+      </div>
+      <section class="platform-export-footer"><div class="field"><label for="png-scale">PNG 分辨率</label><select id="png-scale" aria-describedby="png-scale-help"><option value="1">原尺寸 · 1×</option><option value="2">高清 · 2×</option><option value="4">超清 · 4×</option></select><small id="png-scale-help">游戏中放大使用可选 2× / 4×，保持标识牌比例。</small></div><div class="field-pair"><button id="export-png" class="btn btn-primary">导出 PNG</button><button id="export-svg" class="btn">导出 SVG</button></div><div class="project-actions"><button id="save-project">保存项目</button><button id="import-project">导入项目</button><button id="save-preset-shortcut">存为预设</button></div><input id="project-file" type="file" accept=".json,application/json" hidden></section>
+    </aside>
+  </div>
+  <dialog id="batch-dialog"><form method="dialog"><div class="batch-heading"><h2>批量编辑站点</h2><button value="cancel" class="icon-btn" aria-label="关闭批量编辑">×</button></div><p>每行一个站点：编号 | 中文站名 | 英文站名 | 换乘线路</p><label class="batch-label" for="batch-text">站点数据</label><textarea id="batch-text" rows="12" spellcheck="false"></textarea><p class="field-help">英文、换乘可留空。应用后按编号保留本站，支持撤销。</p><p id="batch-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="apply-batch">应用站点</button></div></form></dialog>
+  <div id="platform-notice" role="status" hidden></div>
+  <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button value="cancel" class="icon-btn" aria-label="关闭预设保存">×</button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="save-preset-confirm">保存预设</button></div></form></dialog>
+  <script src="js/core.js?v=public-6f1dc050e68a"></script>
+  <script src="js/color-picker.js?v=public-c7a1c292cabc"></script>
+  <script src="js/exporters.js?v=public-56da7d254b51"></script>
+  <script src="js/platform/state.js?v=public-7cc3ead2a637"></script>
+  <script src="js/platform/reference.js?v=public-4b2f10a1743e"></script>
+  <script src="js/platform/vertical-reference.js?v=public-f83b3b30e2e3"></script>
+  <script src="js/platform/route.js?v=public-05c85c992817"></script>
+  <script src="js/platform/hanging.js?v=public-5cb14a93cec0"></script>
+  <script src="js/platform/vertical.js?v=public-1d62de1b4d7c"></script>
+  <script src="js/platform/render.js?v=public-04b3b7afc738"></script>
+  <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
+  <script src="js/platform/main.js?v=public-b4c2540e0eaf"></script>
+</body>
+</html>

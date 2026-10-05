@@ -1,3 +1,4 @@
+/* Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. */
 /**
  * presets.js — 预设系统（issue 05）
  *
@@ -10,7 +11,7 @@
 
   var Core = global.SignCore;
   var State = global.SignState;
-  var KEY = 'sign-presets';
+  var KEY = 'public-sign-presets';
   var listeners = [];
 
   function list() {
