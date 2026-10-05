@@ -17,6 +17,6 @@
 
 ## 字体、图标与来源
 
-MiSans Regular / Semibold / Bold 由用户提供，Frutiger 用于大文本、线路号与出入口编号；保留原字体文件与生成的导出资源。服务设施与方向图标移植自 signmaker-main 项目的 icon 目录，保留上游生成器和图标数据。
+MiSans Regular / Semibold / Bold 由用户提供，Frutiger 用于大文本、线路号与出入口编号；保留原字体文件与生成的导出资源。服务设施与方向图标移植自 signmaker-main 项目的 icon 目录，沿用上游生成的图标数据。
 
 代码修改说明见 [docs/fork-changes.md](docs/fork-changes.md)，项目来源见 [NOTICE](NOTICE)。第三方字体、图标等素材遵循各自的授权，不因本仓库的代码协议改变。
