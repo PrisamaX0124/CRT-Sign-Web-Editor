@@ -39,8 +39,18 @@
     // visible outer white edge, on the active side of the current-stop circle.
     var offset=state.adjustments['route:'+state.currentId]||{x:0,y:0};
     var boundaryTop=badgeX+offset.x+state.direction*(y-badgeY-offset.y-Math.SQRT2*(badgeRadius+badgeStroke/2));
+    var boundaryBottom=boundaryTop+state.direction*barH,outerRadius=badgeRadius+badgeStroke/2;
+    var touchX=badgeX+offset.x-state.direction*Q*outerRadius,touchY=badgeY+offset.y+Q*outerRadius;
+    var activeBoundary=[[boundaryTop,y],[boundaryBottom,y+barH]];
+    // Hide the tangent's upper extension inside the badge instead of leaving
+    // a colored corner beside its white rim. The visible lower edge stays 45°.
+    if(touchY>y) {
+      activeBoundary=[[touchX,y]];
+      if(touchY<y+barH)activeBoundary.push([touchX,touchY],[boundaryBottom,y+barH]);
+      else activeBoundary.push([touchX,y+barH]);
+    }
     return { W:W,H:H,u:u,current:current,reference:reference,positions:positions,pitch:pitch,unit:unit,y:y,barH:barH,badgeX:badgeX,anchors:anchors,
-      badgeY:badgeY,badgeRadius:badgeRadius,badgeStroke:badgeStroke,boundaryTop:boundaryTop,boundaryBottom:boundaryTop+state.direction*barH };
+      badgeY:badgeY,badgeRadius:badgeRadius,badgeStroke:badgeStroke,boundaryTop:boundaryTop,boundaryBottom:boundaryBottom,activeBoundary:activeBoundary };
   }
   function metrics(state, measure) {
     var output=state.sizes.route, geo=layout(state), W=geo.W,H=geo.H,u=geo.u,current=geo.current,reference=geo.reference;
@@ -204,11 +214,11 @@
     rect(grayX,y,Math.max(0,grayRight-grayX),barH,state.muted,'passed-line');
     if(state.direction===-1){
       polygon([[left,y+barH],[left+barH,y],[left+2*barH,y],[left+barH,y+barH]],state.color,'active-line');
-      if(tangent)polygon([[left+barH,y],[geo.boundaryTop,y],[geo.boundaryBottom,y+barH],[left+barH,y+barH]],state.color,'active-line-core');
+      if(tangent)polygon([[left+barH,y]].concat(geo.activeBoundary,[[left+barH,y+barH]]),state.color,'active-line-core');
       else rect(left+barH,y,Math.max(0,junction-left-barH),barH,state.color,'active-line-core');
     }else{
       polygon([[right-(45.0119*unit),y],[right-90*unit,y],[right-(44.9881*unit),y+barH],[right,y+barH]],state.color,'active-line');
-      if(tangent)polygon([[geo.boundaryTop,y],[right-barH,y],[right-barH,y+barH],[geo.boundaryBottom,y+barH]],state.color,'active-line-core');
+      if(tangent)polygon([geo.activeBoundary[0],[right-barH,y],[right-barH,y+barH]].concat(geo.activeBoundary.slice(1).reverse()),state.color,'active-line-core');
       else rect(junction,y,Math.max(0,right-barH-junction),barH,state.color,'active-line-core');
     }
     state.stations.forEach(function(s,i){

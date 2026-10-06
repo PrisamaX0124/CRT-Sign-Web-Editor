@@ -80,9 +80,18 @@ test('non-transfer current-stop color boundaries are direction-matched outer-cir
   for(const direction of [-1,1]) {
     let state=S.create();state=S.addStation(S.addStation(state));
     const scene=R.metrics(S.settings(state,{direction}),measure),core=scene.nodes.find(n=>n.attrs['data-role']==='active-line-core'),circle=scene.nodes.find(n=>n.attrs['data-role']==='current-badge');
-    assert.equal(core.tag,'polygon');const p=core.attrs.points.split(' ').map(p=>p.split(',').map(Number)),a=direction===-1?p[1]:p[0],b=direction===-1?p[2]:p[3],dx=b[0]-a[0],dy=b[1]-a[1],c=circle.attrs;
+    assert.equal(core.tag,'polygon');const p=core.attrs.points.split(' ').map(p=>p.split(',').map(Number)),boundary=direction===-1?p.slice(1,-1):[p[0],...p.slice(3).reverse()],[a,b]=boundary.slice(-2),dx=b[0]-a[0],dy=b[1]-a[1],c=circle.attrs;
     assert(Math.abs(dx-direction*dy)<1e-7);
     assert(Math.abs(Math.abs(dy*c.cx-dx*c.cy+b[0]*a[1]-b[1]*a[0])/Math.hypot(dx,dy)-c.r-c['stroke-width']/2)<1e-7);
+  }
+});
+test('non-transfer current-stop upper bar ends inside the circle without a colored corner',()=>{
+  for(const direction of [-1,1]) {
+    let state=S.create();state=S.addStation(S.addStation(state));state=S.settings(state,{direction});
+    const scene=R.metrics(state,measure),c=scene.nodes.find(n=>n.attrs['data-role']==='current-badge').attrs;
+    const p=scene.nodes.find(n=>n.attrs['data-role']==='active-line-core').attrs.points.split(' ').map(p=>p.split(',').map(Number));
+    const top=direction===-1?p[1]:p[0],edge=c.cx-direction*Math.sqrt((c.r+c['stroke-width']/2)**2-(top[1]-c.cy)**2);
+    assert(direction*(top[0]-edge)>0);
   }
 });
 test('text transfer badge and bilingual ink share the station captions rotation',()=>{
