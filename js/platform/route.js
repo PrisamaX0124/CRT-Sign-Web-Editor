@@ -15,6 +15,7 @@
       var total=state.stations[0].transfers.length, columns=Math.min(3,total), badgeScale=total>2?.65:1;
       // Reserve the rotated assembly's leftmost corner, including multi-transfer rows.
       first=Math.max(first,(109.584045+((columns-1)*110+75*Q)*badgeScale+8)*u);
+      if(total===1)first=Math.max(first,208*u);
     }
     var last = guide[9] * u + W - 1536 * u;
     if (last <= first + 32 * u) { first = W * .25; last = W * .85; }
@@ -178,9 +179,19 @@
         numeral(t.number,cx,cy,circleScale,Ref.numbers.transfer,'transfer-number',Core.contrastTextColor(t.color),32*circleScale,40*circleScale,32*circleScale);
       });
       // The double-transfer reference deliberately hides both captions (opacity=0).
-      if(s.transfers.length===2||compact||named)return;
+      if(s.transfers.length!==1)return;
+      var captionDx=0,captionDy=0;
+      if(named) {
+        // Keep the reference's caption size and ink gap beside the wider card.
+        var extra=2*r-25*scale;
+        captionDx=-Q*extra;captionDy=Q*extra;
+        var en=Ref.transfer.en.bounds;
+        var bottom=y+161.284*scale+Q*scale*(en.y+en.height-en.x)+captionDy;
+        var lift=Math.max(0,bottom-(H-4*u));
+        captionDx-=lift;captionDy-=lift;
+      }
       [['zh',-179.584045,135.284],['en',-171.583045,161.284]].forEach(function(p){
-        var ox=x+p[1]*scale,oy=y+p[2]*scale;
+        var ox=x+p[1]*scale+captionDx,oy=y+p[2]*scale+captionDy;
         outlined(Ref.transfer[p[0]],'#000000','transfer-caption',[Q*scale,-Q*scale,Q*scale,Q*scale,ox,oy],p[0]==='zh'?'换乘':'Transfer');
       });
     }

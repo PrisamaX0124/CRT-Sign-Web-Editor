@@ -91,3 +91,13 @@ test('text transfer badge and bilingual ink share the station captions rotation'
   assert(Math.abs(card.matrix[0]-Math.SQRT1_2)<1e-7);assert(Math.abs(card.matrix[1]+Math.SQRT1_2)<1e-7);assert.equal(names.length,2);
   names.forEach(n=>assert.equal(JSON.stringify(n.matrix),JSON.stringify(card.matrix)));
 });
+test('single named transfers use the numeric Transfer caption outlines, size and angle',()=>{
+  const original=S.create(),id=original.currentId;
+  const scenes=['4','机场线~Airport Line:#0057B8'].map(value=>R.metrics(S.patchStation(original,id,{transfers:S.parseTransfers(value)}),measure));
+  const captions=scenes.map(scene=>scene.nodes.filter(n=>n.attrs['data-role']==='transfer-caption'));
+  assert.equal(captions[1].length,2);
+  captions[1].forEach((n,i)=>{
+    assert.equal(n.label,i?'Transfer':'换乘');assert.equal(n.attrs.d,captions[0][i].attrs.d);
+    assert.equal(JSON.stringify(n.matrix.slice(0,4)),JSON.stringify(captions[0][i].matrix.slice(0,4)));
+  });
+});
