@@ -11,6 +11,11 @@
     // The references have no transfer at their first station. Reserve the same full
     // lower-left transfer assembly when an edited line adds one there.
     if (state.stations[0].transfers.length) first = Math.max(first, (state.stations[0].transfers.length === 1 ? 196 : 220) * u);
+    if (state.stations[0].transfers.some(function(t){return t.type==='text';})) {
+      var total=state.stations[0].transfers.length, columns=Math.min(3,total), badgeScale=total>2?.65:1;
+      // Reserve the rotated assembly's leftmost corner, including multi-transfer rows.
+      first=Math.max(first,(109.584045+((columns-1)*110+75*Q)*badgeScale+8)*u);
+    }
     var last = guide[9] * u + W - 1536 * u;
     if (last <= first + 32 * u) { first = W * .25; last = W * .85; }
     var positions = state.stations.map(function (_, i) {
@@ -28,7 +33,13 @@
     // badge. Only the unedited reference keeps its original leftward offset.
     var badgeX = positions[current] - (reference ? 21.584045*unit : 0);
     var anchors = positions.map(function(x,i){return i===current ? badgeX+21.584045*unit : x;});
-    return { W:W,H:H,u:u,current:current,reference:reference,positions:positions,pitch:pitch,unit:unit,y:y,barH:barH,badgeX:badgeX,anchors:anchors };
+    var badgeY=y-11.100937*unit,badgeRadius=42*unit,badgeStroke=4*unit;
+    // x = cx + direction * (y-cy-sqrt(2)*R): a 45-degree tangent to the
+    // visible outer white edge, on the active side of the current-stop circle.
+    var offset=state.adjustments['route:'+state.currentId]||{x:0,y:0};
+    var boundaryTop=badgeX+offset.x+state.direction*(y-badgeY-offset.y-Math.SQRT2*(badgeRadius+badgeStroke/2));
+    return { W:W,H:H,u:u,current:current,reference:reference,positions:positions,pitch:pitch,unit:unit,y:y,barH:barH,badgeX:badgeX,anchors:anchors,
+      badgeY:badgeY,badgeRadius:badgeRadius,badgeStroke:badgeStroke,boundaryTop:boundaryTop,boundaryBottom:boundaryTop+state.direction*barH };
   }
   function metrics(state, measure) {
     var output=state.sizes.route, geo=layout(state), W=geo.W,H=geo.H,u=geo.u,current=geo.current,reference=geo.reference;
@@ -137,22 +148,29 @@
     function transfers(s,x,connector) {
       if(!s.transfers.length)return;
       var compact=s.transfers.length>2,scale=connector.scale,circleScale=scale*(compact?.7:1);
-      var start=connector.left,primary={x:start-85.628*scale,y:y+98*scale},r=25*circleScale;
+      var start=connector.left,primary={x:start-85.628*scale,y:y+98*scale};
       var named=s.transfers.some(function(t){return t.type==='text';});
+      if(named) {
+        var columns=Math.min(3,s.transfers.length),rows=Math.ceil(s.transfers.length/3),halfExtent=75*Q,pad=4*u;
+        circleScale=Math.min(scale*(compact?.65:1),(primary.x-pad)/((columns-1)*110+halfExtent),(H-primary.y-pad)/((rows-1)*78+halfExtent));
+        circleScale=Math.max(.0001,circleScale);
+      }
+      var r=25*circleScale;
       function skew(left,width,height,fill,role) { polygon([[left,y],[left+width*scale,y],[left+(width-height*Q)*scale,y+height*Q*scale],[left-height*Q*scale,y+height*Q*scale]],fill,role); }
       skew(start,24,64,state.background,'transfer-clearance');
       skew(start+2*scale,20,128,s.transfers[0].color,'transfer-branch');
       s.transfers.forEach(function(t,i){
         var cx=primary.x+(compact?(i%3)*55-Math.floor(i/3)*40:-i*40)*circleScale;
         var cy=primary.y+(compact?Math.floor(i/3)*55:i*40)*circleScale;
-        if(named) {cx=primary.x-(i%3)*110*circleScale;cy=primary.y+Math.floor(i/3)*55*circleScale;}
+        if(named) {cx=primary.x-(i%3)*110*circleScale;cy=primary.y+Math.floor(i/3)*78*circleScale;}
         if(t.type==='text') {
-          node('rect',{x:cx-2*r,y:cy-r,width:4*r,height:2*r,rx:r/3,fill:t.color,'data-role':'transfer-text-badge'});
+          var rotation=[Q,-Q,Q,Q,cx-Q*(cx+cy),cy+Q*(cx-cy)];
+          node('rect',{x:cx-2*r,y:cy-r,width:4*r,height:2*r,rx:r/3,fill:t.color,'data-role':'transfer-text-badge'},undefined,{x:cx-2*r,y:cy-r,width:4*r,height:2*r},rotation);
           var fg=Core.contrastTextColor(t.color);
           [['zh',t.nameZh,t.nameEn?cy-r*.75:cy-r*.45,r*.84,t.nameEn?r*.88:r*.9],['en',t.nameEn,cy+r*.35,r*.5,r*.52]].forEach(function(p){
             if(!p[1])return;
             var m=fitted(p[1],Core.FONT_ZH,400,p[3],r*3.6,p[4]);
-            text(p[1],cx-m.width/2,p[2],m,Core.FONT_ZH,400,fg,'transfer-text-'+p[0]);
+            text(p[1],cx-m.width/2,p[2],m,Core.FONT_ZH,400,fg,'transfer-text-'+p[0],rotation);
           });
           return;
         }
@@ -168,16 +186,19 @@
     }
     rect(0,0,W,H,state.background,'background');
     var junction=badgeX-(state.direction===-1?25:26)*unit,left=(state.direction===-1?32:112)*u,right=W-(state.direction===-1?86:51)*u;
-    // Preserve the reference's overlapping rectangles, rather than flattening
-    // them into one polygon: flattening changes antialiasing along the shared edge.
+    // Keep the reference's gray underlay and terminal slant. A non-transfer
+    // current stop needs a tangent instead of the transfer junction's rectangle.
+    var tangent=!state.stations[current].transfers.length;
     var grayX=(state.direction===-1?122:112)*u,grayRight=W-(state.direction===-1?86:96)*u;
     rect(grayX,y,Math.max(0,grayRight-grayX),barH,state.muted,'passed-line');
     if(state.direction===-1){
       polygon([[left,y+barH],[left+barH,y],[left+2*barH,y],[left+barH,y+barH]],state.color,'active-line');
-      rect(left+barH,y,Math.max(0,junction-left-barH),barH,state.color,'active-line-core');
+      if(tangent)polygon([[left+barH,y],[geo.boundaryTop,y],[geo.boundaryBottom,y+barH],[left+barH,y+barH]],state.color,'active-line-core');
+      else rect(left+barH,y,Math.max(0,junction-left-barH),barH,state.color,'active-line-core');
     }else{
       polygon([[right-(45.0119*unit),y],[right-90*unit,y],[right-(44.9881*unit),y+barH],[right,y+barH]],state.color,'active-line');
-      rect(junction,y,Math.max(0,right-barH-junction),barH,state.color,'active-line-core');
+      if(tangent)polygon([[geo.boundaryTop,y],[right-barH,y],[right-barH,y+barH],[geo.boundaryBottom,y+barH]],state.color,'active-line-core');
+      else rect(junction,y,Math.max(0,right-barH-junction),barH,state.color,'active-line-core');
     }
     state.stations.forEach(function(s,i){
       var x=positions[i],isCurrent=i===current,active=(i-current)*state.direction>=0,connector=junctionFor(anchors[i]);
@@ -188,9 +209,9 @@
       }
       transfers(s,anchors[i],connector);
       if(isCurrent){
-        x=badgeX;var cy=y-11.100937*unit,r=42*unit,fg=Core.contrastTextColor(state.color);
+        x=badgeX;var cy=geo.badgeY,r=geo.badgeRadius,fg=Core.contrastTextColor(state.color);
         circle(x,cy,40*unit,state.color,null,0,'badge-fill');
-        circle(x,cy,r,'none',state.background,4*unit,'current-badge');
+        circle(x,cy,r,'none',state.background,geo.badgeStroke,'current-badge');
         polygon([[x-37*unit,cy+1.100937*unit],[x+37*unit,cy+1.100937*unit],[x+37*unit,cy+3.100937*unit],[x-37*unit,cy+3.100937*unit]],fg,'badge-divider');
         if(!/^\d+$/.test(state.line)) {
           var bm=Core.badgeTextMetrics(state.line,measure,x,cy,40*unit);

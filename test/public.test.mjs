@@ -76,3 +76,18 @@ test('station codes after 11 retain the reference glyphs and railway icon is sel
   vm.runInContext(readFileSync(new URL('../js/icons.js',import.meta.url),'utf8'),context);
   const icon=context.SignIcons.ALL.china_railway;assert.equal(icon.name,'中国铁路');assert.match(icon.body,/stroke-width="1pt"/);assert(!icon.body.includes('<image'));
 });
+test('non-transfer current-stop color boundaries are direction-matched outer-circle tangents',()=>{
+  for(const direction of [-1,1]) {
+    let state=S.create();state=S.addStation(S.addStation(state));
+    const scene=R.metrics(S.settings(state,{direction}),measure),core=scene.nodes.find(n=>n.attrs['data-role']==='active-line-core'),circle=scene.nodes.find(n=>n.attrs['data-role']==='current-badge');
+    assert.equal(core.tag,'polygon');const p=core.attrs.points.split(' ').map(p=>p.split(',').map(Number)),a=direction===-1?p[1]:p[0],b=direction===-1?p[2]:p[3],dx=b[0]-a[0],dy=b[1]-a[1],c=circle.attrs;
+    assert(Math.abs(dx-direction*dy)<1e-7);
+    assert(Math.abs(Math.abs(dy*c.cx-dx*c.cy+b[0]*a[1]-b[1]*a[0])/Math.hypot(dx,dy)-c.r-c['stroke-width']/2)<1e-7);
+  }
+});
+test('text transfer badge and bilingual ink share the station captions rotation',()=>{
+  let state=S.create();state=S.patchStation(state,state.currentId,{transfers:S.parseTransfers('机场线~Airport Line:#0057B8')});
+  const scene=R.metrics(state,measure),card=scene.nodes.find(n=>n.attrs['data-role']==='transfer-text-badge'),names=scene.nodes.filter(n=>/transfer-text-(zh|en)$/.test(n.attrs['data-role']));
+  assert(Math.abs(card.matrix[0]-Math.SQRT1_2)<1e-7);assert(Math.abs(card.matrix[1]+Math.SQRT1_2)<1e-7);assert.equal(names.length,2);
+  names.forEach(n=>assert.equal(JSON.stringify(n.matrix),JSON.stringify(card.matrix)));
+});
