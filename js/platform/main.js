@@ -1,4 +1,4 @@
-/* Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 (function (global) {
   'use strict';
   var S = global.PlatformState, R = global.PlatformRender, Core = global.SignCore, P = global.PlatformPresets;
@@ -209,23 +209,36 @@
   });
   document.addEventListener('keydown',function(event){if(event.key==='Escape'&&stationDrag){event.preventDefault();finishStationDrag(true);}});
   function syncTransfers() {
-    var s = live(), signature = s.id + ':' + s.transfers.length;
+    var s = live(), signature = s.id + ':' + s.transfers.map(function(t){return t.type||'number';}).join(',');
     if (signature !== transferSignature) {
       $('transfer-colors').replaceChildren();transferPickers=[];
       s.transfers.forEach(function (t, index) {
         var label = document.createElement('div'); label.className = 'transfer-color';
         var span = document.createElement('span');span.className='transfer-color-label';
-        var picker=global.SignColorPicker.create({value:t.color,mini:true,scope:'换乘 '+t.number+' 线路颜色',getValue:function(){return live().transfers[index].color;},getCity:function(){return App.state.city;},onCityChange:changeCity,onChange:function(color){
+        var picker=global.SignColorPicker.create({value:t.color,mini:true,scope:'换乘线路颜色',getValue:function(){return live().transfers[index].color;},getCity:function(){return App.state.city;},onCityChange:changeCity,onChange:function(color){
           var station = live();
           var transfers = station.transfers.map(function (item, i) { return i === index ? Object.assign({}, item, { color: color }) : item; });
           patchStation({ transfers: transfers }, station.id + ':transfer:' + index);
         }});
         transferPickers.push(picker);label.append(span,picker); $('transfer-colors').appendChild(label);
+        if(t.type==='text') {
+          var fields=document.createElement('div');fields.className='text-transfer-fields';
+          [['nameZh','中文线路名',40],['nameEn','英文线路名',80]].forEach(function(spec){
+            var field=document.createElement('label');field.textContent=spec[1];
+            var input=document.createElement('input');input.type='text';input.maxLength=spec[2];input.dataset.transferField=spec[0];input.setAttribute('aria-label',spec[1]+' '+(index+1));
+            input.addEventListener('input',function(){var station=live(),patch={};patch[spec[0]]=input.value;var transfers=station.transfers.map(function(item,i){return i===index?Object.assign({},item,patch):item;});if(spec[0]==='nameZh'&&!input.value.trim())return;patchStation({transfers:transfers},station.id+':transfer:'+index+':'+spec[0]);});
+            field.append(input);fields.append(field);
+          });
+          var remove=document.createElement('button');remove.className='btn';remove.textContent='删除文字线路';
+          remove.addEventListener('click',function(){var station=live();patchStation({transfers:station.transfers.filter(function(_,i){return i!==index;})});});
+          fields.append(remove);label.append(fields);
+        }
       });
       transferSignature = signature;
     }
     Array.from($('transfer-colors').children).forEach(function (label, i) {
-      label.querySelector('.transfer-color-label').textContent = s.transfers[i].number;
+      label.querySelector('.transfer-color-label').textContent = s.transfers[i].type==='text'?s.transfers[i].nameZh:s.transfers[i].number;
+      label.querySelectorAll('[data-transfer-field]').forEach(function(input){if(document.activeElement!==input)input.value=s.transfers[i][input.dataset.transferField];});
       transferPickers[i].sync();
     });
   }
@@ -259,7 +272,8 @@
     $('preview-title').textContent = names[state.mode]; $('preview-dimensions').textContent = size.width + ' × ' + size.height + ' px';
     value('line-number', state.line); value('line-name', state.lineName); value('palette-city', state.city); value('travel-direction', state.direction);
     value('station-code', s.code); value('station-zh', s.zh); value('station-en', s.en);
-    value('station-transfers', s.transfers.map(function (t) { return t.number + ':' + t.color; }).join(','));
+    value('station-transfers', S.formatTransfers(s.transfers));
+    $('add-text-transfer').disabled=s.transfers.length>=6;
     value('output-width', size.width); value('output-height', size.height); value('font-scale', state.fontScale);
     $('font-scale-label').textContent = Math.round(state.fontScale * 100) + '%';
     $('current-station-label').textContent = s.id === state.currentId ? '当前本站' : s.code;
@@ -295,10 +309,11 @@
     catch (err) { event.target.setCustomValidity(err.message); event.target.reportValidity(); notice(err.message); }
   });
   $('station-transfers').addEventListener('input', function (event) { event.target.setCustomValidity(''); });
+  $('add-text-transfer').addEventListener('click',function(){var s=live();if(s.transfers.length<6)patchStation({transfers:s.transfers.concat([{type:'text',nameZh:'文字线路',nameEn:'',color:'#0057B8'}])});});
   $('line-number').addEventListener('input', function (event) {
     var state = App.state, n = event.target.value, auto = Core.lineColorFor(n, state.city);
     var patch = { line: n };
-    if (state.lineName === state.line + '号线') patch.lineName = n + '号线';
+    if (state.lineName === state.line + '号线' || state.lineName===state.line) patch.lineName = /^\d+$/.test(n)?n+'号线':n;
     if (auto) patch.color = auto.bg;
     set(patch, 'line-number');
   });
@@ -339,7 +354,7 @@
   $('station-delete').addEventListener('click', function () { App.update(function (state) { return S.removeStation(state, App.selectedId); }); });
   [['station-up', -1], ['station-down', 1]].forEach(function (pair) { $(pair[0]).addEventListener('click', function () { App.update(function (state) { return S.moveStation(state, App.selectedId, pair[1]); }); }); });
   $('batch-stations').addEventListener('click', function () {
-    $('batch-text').value = App.state.stations.map(function (s) { return [s.code, s.zh, s.en, s.transfers.map(function (t) { return t.number + ':' + t.color; }).join(',')].join('|'); }).join('\n');
+    $('batch-text').value = App.state.stations.map(function (s) { return [s.code, s.zh, s.en, S.formatTransfers(s.transfers)].join('|'); }).join('\n');
     $('batch-error').textContent = ''; $('batch-dialog').showModal();
   });
   $('apply-batch').addEventListener('click', function () {

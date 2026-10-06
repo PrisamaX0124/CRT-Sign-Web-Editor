@@ -181,3 +181,7 @@
   #platform-element-toolbar button { min-height: 30px; }
   .platform-export-footer { padding: 12px 16px; }
 }
+.text-transfer-fields { flex-basis:100%; display:grid; gap:8px; }
+.text-transfer-fields label { display:grid; gap:4px; font-size:12px; }
+.transfer-color .text-transfer-fields input { width:100%; min-width:0; height:32px; padding:6px; cursor:text; font:inherit; }
+.transfer-color:has(.text-transfer-fields) { flex-wrap:wrap; }

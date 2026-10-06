@@ -97,7 +97,8 @@
         });
         return;
       }
-      var m=fitted(value,Core.FONT_NUM,400,fontSize,maxWidth,maxHeight);text(value,x-m.width/2,top-m.height/2,m,Core.FONT_NUM,400,fill,role);
+      var family=/^\d+$/.test(value)?Core.FONT_NUM:Core.FONT_ZH;
+      var m=fitted(value,family,400,fontSize,maxWidth,maxHeight);text(value,x-m.width/2,top-m.height/2,m,family,400,fill,role);
     }
     function caption(s,x,isCurrent,paint) {
       var sample=Ref.stations.find(function(item){return item.zh===s.zh;}), model=sample&&(isCurrent?sample.current:sample.normal);
@@ -137,17 +138,29 @@
       if(!s.transfers.length)return;
       var compact=s.transfers.length>2,scale=connector.scale,circleScale=scale*(compact?.7:1);
       var start=connector.left,primary={x:start-85.628*scale,y:y+98*scale},r=25*circleScale;
+      var named=s.transfers.some(function(t){return t.type==='text';});
       function skew(left,width,height,fill,role) { polygon([[left,y],[left+width*scale,y],[left+(width-height*Q)*scale,y+height*Q*scale],[left-height*Q*scale,y+height*Q*scale]],fill,role); }
       skew(start,24,64,state.background,'transfer-clearance');
       skew(start+2*scale,20,128,s.transfers[0].color,'transfer-branch');
       s.transfers.forEach(function(t,i){
         var cx=primary.x+(compact?(i%3)*55-Math.floor(i/3)*40:-i*40)*circleScale;
         var cy=primary.y+(compact?Math.floor(i/3)*55:i*40)*circleScale;
+        if(named) {cx=primary.x-(i%3)*110*circleScale;cy=primary.y+Math.floor(i/3)*55*circleScale;}
+        if(t.type==='text') {
+          node('rect',{x:cx-2*r,y:cy-r,width:4*r,height:2*r,rx:r/3,fill:t.color,'data-role':'transfer-text-badge'});
+          var fg=Core.contrastTextColor(t.color);
+          [['zh',t.nameZh,t.nameEn?cy-r*.75:cy-r*.45,r*.84,t.nameEn?r*.88:r*.9],['en',t.nameEn,cy+r*.35,r*.5,r*.52]].forEach(function(p){
+            if(!p[1])return;
+            var m=fitted(p[1],Core.FONT_ZH,400,p[3],r*3.6,p[4]);
+            text(p[1],cx-m.width/2,p[2],m,Core.FONT_ZH,400,fg,'transfer-text-'+p[0]);
+          });
+          return;
+        }
         circle(cx,cy,r,t.color,null,0,'transfer-circle');
         numeral(t.number,cx,cy,circleScale,Ref.numbers.transfer,'transfer-number',Core.contrastTextColor(t.color),32*circleScale,40*circleScale,32*circleScale);
       });
       // The double-transfer reference deliberately hides both captions (opacity=0).
-      if(s.transfers.length===2||compact)return;
+      if(s.transfers.length===2||compact||named)return;
       [['zh',-179.584045,135.284],['en',-171.583045,161.284]].forEach(function(p){
         var ox=x+p[1]*scale,oy=y+p[2]*scale;
         outlined(Ref.transfer[p[0]],'#000000','transfer-caption',[Q*scale,-Q*scale,Q*scale,Q*scale,ox,oy],p[0]==='zh'?'换乘':'Transfer');

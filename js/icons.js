@@ -1,5 +1,6 @@
 /**
  * icons.js — 图标库数据（由 gen-icons.mjs 从 signmaker-main/icon 生成，勿手工编辑）
+ * Additional China Railway icon from assets/china-railway.svg, 2026-10-06.
  * body 为 <svg> 内部标记；渲染时 fill="black" 替换为元素颜色。
  */
 (function (global) {
@@ -35,7 +36,8 @@
     "arrow_right_up": { name: "右上", cat: "arrows", vb: "0 0 56 56", body: "\n<g>\n<path d=\"M17.0266 0.0608948L9.00005 8.08745L42.6425 7.78382L13.7851 36.6412L19.6986 42.5548L48.556 13.6974L48.2524 47.3398L56.2789 39.3132L56.3398 0L17.0266 0.0608948Z\" fill=\"black\"/>\n</g>\n\n" },
     "arrow_up": { name: "向上", cat: "arrows", vb: "0 0 56 56", body: "\n<g>\n<path d=\"M55.7556 27.8417V39.193L32.1815 15.1895V56H23.8185L23.8185 15.1895L0.244385 39.193L0.244385 27.8417L28 0L55.7556 27.8417Z\" fill=\"black\"/>\n</g>\n\n" },
     "arrow_ahead_left": { name: "前方向左", cat: "arrows", vb: "0 0 56 56", body: "\n<g>\n<path d=\"M15.1895 23.8184H40.002C48.8383 23.8186 56.0019 30.9819 56.002 39.8184V51.8047H47.6367V39.8213C47.6366 35.6019 44.2165 32.1816 39.9971 32.1816H15.1895L39.1934 55.7559H27.8418L0 28L27.8418 0.244141H39.1934L15.1895 23.8184Z\" fill=\"black\"/>\n</g>\n\n" },
-    "arrow_ahead_right": { name: "前方向右", cat: "arrows", vb: "0 0 56 56", body: "\n<g>\n<path d=\"M40.8125 23.8184H16C7.16362 23.8186 2.78491e-05 30.9819 0 39.8184V51.8047H8.36523V39.8213C8.36533 35.6019 11.7855 32.1816 16.0049 32.1816H40.8125L16.8086 55.7559H28.1602L56.002 28L28.1602 0.244141H16.8086L40.8125 23.8184Z\" fill=\"black\"/>\n</g>\n\n" }
+    "arrow_ahead_right": { name: "前方向右", cat: "arrows", vb: "0 0 56 56", body: "\n<g>\n<path d=\"M40.8125 23.8184H16C7.16362 23.8186 2.78491e-05 30.9819 0 39.8184V51.8047H8.36523V39.8213C8.36533 35.6019 11.7855 32.1816 16.0049 32.1816H40.8125L16.8086 55.7559H28.1602L56.002 28L28.1602 0.244141H16.8086L40.8125 23.8184Z\" fill=\"black\"/>\n</g>\n\n" },
+    "china_railway": { name: "中国铁路", cat: "service", vb: "0 0 400 400", body: "\n<!-- Vector outlines reconstructed from the user-supplied China Railway emblem. -->\n<rect x=\"0.6667\" y=\"0.6667\" width=\"398.6666\" height=\"398.6666\" rx=\"40\" fill=\"none\" stroke=\"#000000\" stroke-width=\"1pt\" vector-effect=\"non-scaling-stroke\"/>\n<g transform=\"translate(60 60) scale(1.4)\">\n<path fill=\"black\" d=\"M88 0H112C116 0 118 5 118 11C158 20 187 53 187 98C187 128 170 156 143 172L130 157C152 144 167 122 167 98C167 60 137 29 100 29C63 29 33 60 33 98C33 122 48 144 70 157L57 172C30 156 13 128 13 98C13 53 42 20 82 11C82 5 84 0 88 0Z\"/>\n<path fill=\"black\" d=\"M81 80H119C125 80 130 86 130 94V121L107 124V166C107 177 113 178 126 182L160 189V200H40V189L74 182C87 178 93 177 93 166V124L70 121V94C70 86 75 80 81 80Z\"/>\n</g>\n" }
   };
   global.SignIcons = {
     ALL: ICONS,

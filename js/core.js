@@ -1,4 +1,4 @@
-/* Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 /* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * core.js — 常量、工具函数、字体度量、文本测量

@@ -39,3 +39,19 @@ test('route, station and all vertical variants retain finite preview and export 
     }
   }
 });
+test('text transfers round trip and render MiSans Regular in hanging and vertical maps',()=>{
+  let state=S.create();state=S.patchStation(state,state.currentId,{transfers:S.parseTransfers('机场线~Airport Line:#0057B8')});
+  assert.equal(S.serialize(S.deserialize(S.serialize(state))),S.serialize(state));
+  for(const mode of ['route','vertical'])for(const verticalVariant of ['left','right','double']) {
+    const scene=R.metrics(S.settings(state,{mode,verticalVariant}),measure);
+    assert(scene.nodes.some(n=>n.text==='Airport Line'&&n.attrs['font-family']===context.SignCore.FONT_ZH&&n.attrs['font-weight']===400));
+    assert(scene.nodes.some(n=>n.tag==='rect'&&n.attrs['data-role'].endsWith('transfer-text-badge')));
+  }
+});
+test('station codes after 11 retain the reference glyphs and railway icon is self contained',()=>{
+  let state=S.create();state=S.addStation(state);state=S.patchStation(state,state.stations[1].id,{code:'12'});
+  const scene=R.metrics(S.settings(state,{mode:'vertical'}),measure);
+  const codes=scene.nodes.filter(n=>n.attrs['data-role']==='vertical-station-code');assert.equal(codes.length,2);assert(codes.every(n=>n.tag==='path'));
+  vm.runInContext(readFileSync(new URL('../js/icons.js',import.meta.url),'utf8'),context);
+  const icon=context.SignIcons.ALL.china_railway;assert.equal(icon.name,'中国铁路');assert.match(icon.body,/stroke-width="1pt"/);assert(!icon.body.includes('<image'));
+});

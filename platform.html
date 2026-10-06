@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<!-- Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. -->
+<!-- Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>站台标识生成器 · 吊板与线路图</title>
   <link rel="stylesheet" href="style.css?v=public-c3a402667e4b">
-  <link rel="stylesheet" href="platform.css?v=public-f8585e2b6f8f">
+  <link rel="stylesheet" href="platform.css?v=public-beb3a2d1bc6a">
 </head>
 <body class="platform-page">
   <header class="platform-header">
@@ -43,7 +43,7 @@
       <div class="property-tabs" aria-label="编辑范围"><button data-property-view="sign" aria-pressed="true">标识牌</button><button data-property-view="station" aria-pressed="false">站点 / 元素</button></div>
       <div class="platform-property-scroll">
         <section class="platform-section" data-panel="sign"><h2>线路与行车方向</h2>
-          <div class="field-pair"><div class="field"><label for="line-number">线路号</label><input id="line-number" type="text" maxlength="8"></div><div class="field"><label for="palette-city">城市配色</label><select id="palette-city"><option value="chongqing">重庆</option><option value="chengdu">成都</option><option value="shanghai">上海</option></select></div></div>
+          <div class="field-pair"><div class="field"><label for="line-number">线路号 / 名称</label><input id="line-number" type="text" maxlength="40" placeholder="10 或 碧桐线"></div><div class="field"><label for="palette-city">城市配色</label><select id="palette-city"><option value="chongqing">重庆</option><option value="chengdu">成都</option><option value="shanghai">上海</option></select></div></div>
           <div class="field" hidden><label for="line-name">线路名称</label><input id="line-name" type="text" maxlength="40"></div>
           <div class="field"><label for="travel-direction" id="travel-direction-label">列车行驶方向</label><select id="travel-direction"><option value="-1">前往列表首站 ← / ↓</option><option value="1">前往列表末站 → / ↑</option></select></div>
           <div class="field"><label for="line-color-hex">线路色</label><div id="line-color-picker"></div></div>
@@ -53,7 +53,8 @@
           <div class="field"><label for="station-zh">中文站名</label><input id="station-zh" type="text" maxlength="80"></div>
           <div class="field"><label for="station-en">英文站名</label><input id="station-en" type="text" maxlength="160"></div>
           <button class="btn" id="set-current">设为本站</button>
-          <div class="field"><label for="station-transfers">换乘线路（逗号分隔，最多 6 条）</label><input id="station-transfers" type="text" placeholder="1,5 或 1:#E4002B,5:#00A3E0"><small>线路号按城市配色，也可附加 :#颜色</small></div>
+          <div class="field"><label for="station-transfers">换乘线路（逗号分隔，最多 6 条）</label><input id="station-transfers" type="text" placeholder="1,碧桐线~Bitong Line:#0057B8"><small>数字线路按城市配色；文字线路可写 中文~英文:#颜色，也可用下方按钮添加。</small></div>
+          <button class="btn" id="add-text-transfer">＋ 添加文字换乘线路</button>
           <div id="transfer-colors"></div>
           <div class="station-edit-actions"><button class="btn" id="station-up">↑ 上移</button><button class="btn" id="station-down">↓ 下移</button><button class="btn delete-station" id="station-delete">删除</button></div>
         </section>
@@ -77,17 +78,17 @@
   <dialog id="batch-dialog"><form method="dialog"><div class="batch-heading"><h2>批量编辑站点</h2><button value="cancel" class="icon-btn" aria-label="关闭批量编辑">×</button></div><p>每行一个站点：编号 | 中文站名 | 英文站名 | 换乘线路</p><label class="batch-label" for="batch-text">站点数据</label><textarea id="batch-text" rows="12" spellcheck="false"></textarea><p class="field-help">英文、换乘可留空。应用后按编号保留本站，支持撤销。</p><p id="batch-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="apply-batch">应用站点</button></div></form></dialog>
   <div id="platform-notice" role="status" hidden></div>
   <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button value="cancel" class="icon-btn" aria-label="关闭预设保存">×</button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="save-preset-confirm">保存预设</button></div></form></dialog>
-  <script src="js/core.js?v=public-6f1dc050e68a"></script>
+  <script src="js/core.js?v=public-67a9aa8f6290"></script>
   <script src="js/color-picker.js?v=public-c7a1c292cabc"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
-  <script src="js/platform/state.js?v=public-7cc3ead2a637"></script>
-  <script src="js/platform/reference.js?v=public-4b2f10a1743e"></script>
-  <script src="js/platform/vertical-reference.js?v=public-f83b3b30e2e3"></script>
-  <script src="js/platform/route.js?v=public-05c85c992817"></script>
-  <script src="js/platform/hanging.js?v=public-5cb14a93cec0"></script>
-  <script src="js/platform/vertical.js?v=public-1d62de1b4d7c"></script>
-  <script src="js/platform/render.js?v=public-04b3b7afc738"></script>
+  <script src="js/platform/state.js?v=public-0819a55d5ede"></script>
+  <script src="js/platform/reference.js?v=public-b473e5dbb9ff"></script>
+  <script src="js/platform/vertical-reference.js?v=public-9f9c412f3f5a"></script>
+  <script src="js/platform/route.js?v=public-2677db9237d8"></script>
+  <script src="js/platform/hanging.js?v=public-e3e2223f71f0"></script>
+  <script src="js/platform/vertical.js?v=public-e4c1fd6d3bb1"></script>
+  <script src="js/platform/render.js?v=public-6f4750e53f04"></script>
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
-  <script src="js/platform/main.js?v=public-b4c2540e0eaf"></script>
+  <script src="js/platform/main.js?v=public-4cbe5fd40b74"></script>
 </body>
 </html>

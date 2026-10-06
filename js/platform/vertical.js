@@ -1,4 +1,4 @@
-/* Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 /** Reference-derived vertical maps. Geometry and ink bounds are computed once for preview/export. */
 (function(global) {
   'use strict';
@@ -36,9 +36,9 @@
       }
       return m;
     }
-    function text(value,left,top,size,maxWidth,maxHeight,fill,weight,role,align,family) {
+    function text(value,left,top,size,maxWidth,maxHeight,fill,weight,role,align,family,scaleFont) {
       if(!value)return;family=family||Core.FONT_ZH;weight=weight||400;
-      var m=fitted(value,size*state.fontScale,maxWidth,maxHeight,weight,family);
+      var m=fitted(value,size*(scaleFont===false?1:state.fontScale),maxWidth,maxHeight,weight,family);
       if(align==='center')left+=(maxWidth-m.width)/2;
       node('text',{x:x(left,m.width)+m.abl,y:top+m.ascent,fill:fill,'font-size':m.size,'font-family':family,'font-weight':weight,'data-role':role},value,{x:x(left,m.width),y:top,width:m.width,height:m.height,maxWidth:maxWidth});
     }
@@ -76,6 +76,7 @@
         n.attrs['stroke-width']*=k;
       } else if(n.tag==='rect') {
         n.attrs.x=n.attrs.x*k+dx;n.attrs.y=n.attrs.y*k+dy;n.attrs.width*=k;n.attrs.height*=k;
+        if(n.attrs.rx)n.attrs.rx*=k;
       } else if(n.tag==='line') {
         ['x1','x2'].forEach(function(a){n.attrs[a]=n.attrs[a]*k+dx;});
         ['y1','y2'].forEach(function(a){n.attrs[a]=n.attrs[a]*k+dy;});n.attrs['stroke-width']*=k;
@@ -93,9 +94,22 @@
     function numeral(value,cx,cy,fill,role,collection,height,width) {
       var asset=collection[value];
       if(asset){var b=asset.bounds,k=Math.min(1,height/b.height,width/b.width);outline(asset,cx+(b.x-asset.center[0])*k,cy+(b.y-asset.center[1])*k,k,fill,role,value);}
+      else if(/^\d+$/.test(value)&&(role==='vertical-station-code'||role==='vertical-badge-code')) {
+        var digits=value.split('').map(function(c){return Ref.stationDigits[c];}),gap=2;
+        var total=digits.reduce(function(w,d){return w+d.bounds.width;},0)+gap*(digits.length-1);
+        var normalHeight=Ref.numbers['01'].bounds.height;
+        var target=role==='vertical-station-code'?normalHeight:Math.min(height,role==='vertical-badge-code'||role==='vertical-badge-line'?Ref.badge['07'].bounds.height:height);
+        var scale=Math.min(target/normalHeight,width/total),left=cx-total*scale/2;
+        if(mirror)left=cx+total*scale/2;
+        digits.forEach(function(d,i){
+          var offset=mirror?left-d.bounds.width*scale:left;
+          outline(d,offset,cy+(d.bounds.y-d.baseline+9)*scale,scale,fill,role,value[i]);
+          left+=(mirror?-1:1)*(d.bounds.width+gap)*scale;
+        });
+      }
       else {
-        var m=fitted(value,height/.9,width,height,400,Core.FONT_NUM);
-        node('text',{x:point(cx)-m.width/2+m.abl,y:cy-m.height/2+m.ascent,fill:fill,'font-size':m.size,'font-family':Core.FONT_NUM,'font-weight':400,'data-role':role},value,{x:point(cx)-m.width/2,y:cy-m.height/2,width:m.width,height:m.height,maxWidth:width});
+        var family=/^\d+$/.test(value)?Core.FONT_NUM:Core.FONT_ZH,m=fitted(value,height/.9,width,height,400,family);
+        node('text',{x:point(cx)-m.width/2+m.abl,y:cy-m.height/2+m.ascent,fill:fill,'font-size':m.size,'font-family':family,'font-weight':400,'data-role':role},value,{x:point(cx)-m.width/2,y:cy-m.height/2,width:m.width,height:m.height,maxWidth:width});
       }
     }
     function caption(s,y,isCurrent,paint) {
@@ -113,14 +127,26 @@
       var previousOrigin=origin,previousMirror=mirror,start=nodes.length;origin=0;mirror=false;
       ['zh','en'].forEach(function(lang){var a=Ref.transfer[lang];outline(a,a.bounds.x-4,y+a.bounds.y-4-655,1,'#000000','vertical-transfer-'+lang,lang==='zh'?'换乘':'Transfer');});
       var n=s.transfers.length,r=n<=2?20:n===3?16:11;
+      var named=s.transfers.some(function(t){return t.type==='text';}),cursor=86;
       s.transfers.forEach(function(t,i) {
-        var cx=106+(n<=2?48:36)*(i%3),cy=y+(n>3?(Math.floor(i/3)*28-14):0);
+        if(i%3===0)cursor=86;
+        var w=t.type==='text'?r*4:r*2;
+        var cx=named?cursor+w/2:106+(n<=2?48:36)*(i%3),cy=y+(n>3?(Math.floor(i/3)*28-14):0);
+        cursor+=w+8;
+        if(t.type==='text') {
+          node('rect',{x:cx-w/2,y:cy-r,width:w,height:r*2,rx:r/3,fill:t.color,'data-role':'vertical-transfer-text-badge'});
+          var fg=Core.contrastTextColor(t.color);
+          text(t.nameZh,cx-w/2+r*.2,cy-r+(t.nameEn?r*.25:r*.55),r*.84,w-r*.4,t.nameEn?r*.88:r*.9,fg,400,'vertical-transfer-text-zh','center',Core.FONT_ZH,false);
+          if(t.nameEn)text(t.nameEn,cx-w/2+r*.2,cy+r*.35,r*.5,w-r*.4,r*.52,fg,400,'vertical-transfer-text-en','center',Core.FONT_ZH,false);
+          return;
+        }
         circle(point(cx),cy,r,t.color,null,0,'vertical-transfer-circle');
         numeral(t.number,cx,cy,Core.contrastTextColor(t.color),'vertical-transfer-number',Ref.transferNumbers,r*1.1,r*1.7);
       });
-      if(s.transfers.length===1) ['lineZh','lineEn'].forEach(function(lang){var a=Ref.transfer[lang];outline(a,a.bounds.x-4,y+a.bounds.y-4-655,1,'#000000','vertical-transfer-label',lang==='lineZh'?'号线':'Line');});
+      if(s.transfers.length===1&&!named) ['lineZh','lineEn'].forEach(function(lang){var a=Ref.transfer[lang];outline(a,a.bounds.x-4,y+a.bounds.y-4-655,1,'#000000','vertical-transfer-label',lang==='lineZh'?'号线':'Line');});
       var assembly=nodes.slice(start),boxes=assembly.map(box),k=.75*Math.min(1,state.fontScale);
       var left=Math.min.apply(null,boxes.map(function(b){return b.x;})),right=Math.max.apply(null,boxes.map(function(b){return b.x+b.width;}));
+      if(named)k=Math.min(k,200/(right-left));
       var dx=center-(left+right)/2*k,dy=y*(1-k);
       assembly.forEach(function(n){placeInk(n,k,dx,dy);});
       origin=previousOrigin;mirror=previousMirror;

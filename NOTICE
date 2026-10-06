@@ -9,4 +9,6 @@ sign editor, and prepares both editors for GitHub Pages. Modified source
 files carry a change notice; the change summary is in docs/fork-changes.md.
 
 Existing font and icon source attributions are preserved in README.md.
+The additional China Railway emblem is a vector outline based on the
+user-supplied reference image, with an added rounded rectangular border.
 Third-party assets remain subject to their respective rights and licenses.

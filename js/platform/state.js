@@ -1,4 +1,4 @@
-/* Modified by PrisamaX0124, 2026-10-05: public release data and storage separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 /** Independent platform projects; all edits return new objects. */
 (function (global) {
   'use strict';
@@ -18,8 +18,14 @@
   }
   function transfer(value, city) {
     if (!value || typeof value !== 'object') return null;
+    var name = str(value.nameZh, '', 40).trim();
+    if (value.type === 'text' || name) {
+      if (!name) return null;
+      return { type: 'text', nameZh: name, nameEn: str(value.nameEn, '', 80).trim(), color: Core.normalizeHex(value.color) || '#424A52' };
+    }
     var n = str(value.number, '', 8).trim();
     if (!n) return null;
+    if (!/^\d+$/.test(n)) return transfer({type:'text',nameZh:n,color:value.color},city);
     var auto = Core.lineColorFor(n, city);
     return { number: n, color: Core.normalizeHex(value.color) || (auto ? auto.bg : '#424A52') };
   }
@@ -59,7 +65,7 @@
     return {
       kind: 'platform-sign', version: 3,
       mode: MODES.indexOf(value.mode) >= 0 ? value.mode : 'route', city: city,
-      line: str(value.line, '10', 8), lineName: str(value.lineName, '10号线', 40),
+      line: str(value.line, '10', 40), lineName: str(value.lineName, '10号线', 40),
       color: Core.normalizeHex(value.color) || '#5F249F',
       background: Core.normalizeHex(value.background) || '#FFFFFF',
       muted: Core.normalizeHex(value.muted) || '#A6A6A6',
@@ -174,11 +180,15 @@
     if (!text.trim()) return [];
     var items = text.split(/[,，]/).map(function (part) {
       var bits = part.trim().split(':');
-      if (!bits[0] || bits[0].length > 8 || bits.length > 2 || (bits[1] && !Core.isHexColor(bits[1]))) throw new Error('换乘格式：1,5 或 1:#E4002B,5:#00A3E0');
-      return transfer({ number: bits[0], color: bits[1] }, city);
+      var names=bits[0].split('~');
+      if (!names[0] || names[0].length > 40 || (names[1] && names[1].length > 80) || names.length>2 || bits.length > 2 || (bits[1] && !Core.isHexColor(bits[1])) || (/^\d+$/.test(names[0]) && names[0].length>8)) throw new Error('换乘格式：1,5 或 碧桐线~Bitong Line:#0057B8');
+      return names.length>1 || !/^\d+$/.test(names[0]) ? transfer({type:'text',nameZh:names[0],nameEn:names[1]||'',color:bits[1]},city) : transfer({ number: bits[0], color: bits[1] }, city);
     });
     if (items.length > 6) throw new Error('每站最多填写 6 条换乘线路');
     return items;
+  }
+  function formatTransfers(items) {
+    return items.map(function(t){return (t.type==='text'?t.nameZh+(t.nameEn?'~'+t.nameEn:''):t.number)+':'+t.color;}).join(',');
   }
   function parseStations(text, city) {
     var lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
@@ -195,7 +205,7 @@
     verticalGeometry: verticalGeometry,
     removeStation: removeStation, moveStation: moveStation, replaceStations: replaceStations,
     reorderStation: reorderStation, reverseStations: reverseStations,
-    neighbors: neighbors, parseTransfers: parseTransfers, parseStations: parseStations,
+    neighbors: neighbors, parseTransfers: parseTransfers, formatTransfers: formatTransfers, parseStations: parseStations,
     setHangingLength: setHangingLength, setHangingHeight: setHangingHeight,
     setElementOffset: setElementOffset, nudgeElement: nudgeElement, resetElement: resetElement,
     serialize: function (state) { return JSON.stringify(state, null, 2); },

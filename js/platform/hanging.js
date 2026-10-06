@@ -38,8 +38,9 @@
     }
     function centered(value, x, y, fontSize, maxWidth, maxHeight, fill, role) {
       if (!value) return;
-      var m = fitText(value, fontSize, maxWidth, maxHeight, Core.FONT_NUM, 400);
-      text(value, x - m.width / 2, y - m.height / 2, m, fill, Core.FONT_NUM, 400, maxWidth, null, role);
+      var family=/^\d+$/.test(value)?Core.FONT_NUM:Core.FONT_ZH;
+      var m = fitText(value, fontSize, maxWidth, maxHeight, family, 400);
+      text(value, x - m.width / 2, y - m.height / 2, m, fill, family, 400, maxWidth, null, role);
     }
     function bilingualMetrics(s, unit, spec, maxWidth, maxHeight) {
       // Reference ink heights and bilingual gaps come from 吊板_本站左行.svg.
