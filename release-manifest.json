@@ -35,6 +35,8 @@
     "js/icons.js",
     "js/interact.js",
     "js/main.js",
+    "js/palette-manager.js",
+    "js/palettes.js",
     "js/panel.js",
     "js/platform/hanging.js",
     "js/platform/main.js",

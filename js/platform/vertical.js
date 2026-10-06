@@ -1,4 +1,4 @@
-/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, custom and Beijing palettes, badge ink fitting, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 /** Reference-derived vertical maps. Geometry and ink bounds are computed once for preview/export. */
 (function(global) {
   'use strict';
@@ -171,7 +171,11 @@
           circle(point(250),y,32,state.color,null,0,'vertical-badge');
           circle(point(250),y,31,'none',fg,2,'vertical-badge-ring');
           node('line',{x1:point(222),y1:y,x2:point(278),y2:y,stroke:fg,'stroke-width':2,'stroke-linecap':'square','data-role':'vertical-badge-divider'});
-          numeral(state.line,250,y-14,fg,'vertical-badge-line',Ref.badge,24,50);
+          if(/^\d+$/.test(state.line))numeral(state.line,250,y-14,fg,'vertical-badge-line',Ref.badge,24,50);
+          else {
+            var bm=Core.badgeTextMetrics(state.line,measure,point(250),y,30);
+            node('text',{x:bm.x+bm.abl,y:bm.y+bm.ascent,fill:fg,'font-size':bm.size,'font-family':Core.FONT_ZH,'font-weight':400,'data-role':'vertical-badge-line'},state.line,{x:bm.x,y:bm.y,width:bm.width,height:bm.height,maxWidth:bm.width});
+          }
           numeral(s.code,250,y+14,fg,'vertical-badge-code',Ref.badge,24,50);
           caption(s,y,true,fg);
         } else {

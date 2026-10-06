@@ -192,7 +192,11 @@
         circle(x,cy,40*unit,state.color,null,0,'badge-fill');
         circle(x,cy,r,'none',state.background,4*unit,'current-badge');
         polygon([[x-37*unit,cy+1.100937*unit],[x+37*unit,cy+1.100937*unit],[x+37*unit,cy+3.100937*unit],[x-37*unit,cy+3.100937*unit]],fg,'badge-divider');
-        if(state.line==='2')numeral(state.line,x,cy,unit,Ref.numbers.badge,'badge-line',fg,44*unit,64*unit,32*unit);
+        if(!/^\d+$/.test(state.line)) {
+          var bm=Core.badgeTextMetrics(state.line,measure,x,cy,40*unit);
+          text(state.line,bm.x,bm.y,bm,Core.FONT_ZH,400,fg,'badge-line');
+        }
+        else if(state.line==='2')numeral(state.line,x,cy,unit,Ref.numbers.badge,'badge-line',fg,44*unit,64*unit,32*unit);
         else numeral(state.line,x,cy-17.518*unit,unit,{},'badge-line',fg,44*unit,64*unit,32*unit);
         if(s.code==='06')numeral(s.code,x,cy,unit,Ref.numbers.badge,'badge-code',fg,36*unit,64*unit,26*unit);
         else numeral(s.code,x,cy+20.536*unit,unit,{},'badge-code',fg,36*unit,64*unit,26*unit);

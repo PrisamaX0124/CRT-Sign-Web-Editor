@@ -1,4 +1,4 @@
-/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, custom and Beijing palettes, badge ink fitting, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 /* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * storage.js — 自动保存 / 多标签页检测 / 项目 JSON 导入导出（issue 06）
@@ -28,7 +28,7 @@
       var data = JSON.parse(raw);
       if (data && typeof data === 'object') {
         if (typeof data.autoLineColor === 'boolean') prefs.autoLineColor = data.autoLineColor;
-        if (typeof data.paletteCity === 'string' && global.SignCore.CITY_PALETTES[data.paletteCity]) {
+        if (typeof data.paletteCity === 'string' && global.SignCore.isPalette(data.paletteCity)) {
           prefs.paletteCity = data.paletteCity;
         }
       }

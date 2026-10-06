@@ -95,7 +95,8 @@
       var fg = Core.contrastTextColor(color);
       circle(x, y, r, color, background, H * .009, 'current-badge');
       line(x-r*.8, y, x+r*.8, y, fg, H*.003, 'badge-divider');
-      centered(state.line, x, y-r*.45, r*1.02, r*1.6, r*.78, fg, 'badge-line');
+      if(/^\d+$/.test(state.line))centered(state.line, x, y-r*.45, r*1.02, r*1.6, r*.78, fg, 'badge-line');
+      else {var bm=Core.badgeTextMetrics(state.line,measure,x,y,r);text(state.line,bm.x,bm.y,bm,fg,Core.FONT_ZH,400,bm.width,null,'badge-line');}
       centered(s.code, x, y+r*.45, r*.88, r*1.6, r*.78, fg, 'badge-code');
     }
     function lineBar(y, h, x, direction) {

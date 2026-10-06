@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. -->
+<!-- Modified by PrisamaX0124, 2026-10-06: text lines, custom and Beijing palettes, badge ink fitting, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>站台标识生成器 · 吊板与线路图</title>
-  <link rel="stylesheet" href="style.css?v=public-c3a402667e4b">
+  <link rel="stylesheet" href="style.css?v=public-98ba20244c33">
   <link rel="stylesheet" href="platform.css?v=public-beb3a2d1bc6a">
 </head>
 <body class="platform-page">
@@ -78,17 +78,19 @@
   <dialog id="batch-dialog"><form method="dialog"><div class="batch-heading"><h2>批量编辑站点</h2><button value="cancel" class="icon-btn" aria-label="关闭批量编辑">×</button></div><p>每行一个站点：编号 | 中文站名 | 英文站名 | 换乘线路</p><label class="batch-label" for="batch-text">站点数据</label><textarea id="batch-text" rows="12" spellcheck="false"></textarea><p class="field-help">英文、换乘可留空。应用后按编号保留本站，支持撤销。</p><p id="batch-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="apply-batch">应用站点</button></div></form></dialog>
   <div id="platform-notice" role="status" hidden></div>
   <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button value="cancel" class="icon-btn" aria-label="关闭预设保存">×</button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="save-preset-confirm">保存预设</button></div></form></dialog>
-  <script src="js/core.js?v=public-67a9aa8f6290"></script>
-  <script src="js/color-picker.js?v=public-c7a1c292cabc"></script>
+  <script src="js/core.js?v=public-181a8c8b1a69"></script>
+  <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
+  <script src="js/palette-manager.js?v=public-71d85de854d0"></script>
+  <script src="js/color-picker.js?v=public-55426316f73e"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
-  <script src="js/platform/state.js?v=public-0819a55d5ede"></script>
-  <script src="js/platform/reference.js?v=public-b473e5dbb9ff"></script>
-  <script src="js/platform/vertical-reference.js?v=public-9f9c412f3f5a"></script>
-  <script src="js/platform/route.js?v=public-2677db9237d8"></script>
-  <script src="js/platform/hanging.js?v=public-e3e2223f71f0"></script>
-  <script src="js/platform/vertical.js?v=public-e4c1fd6d3bb1"></script>
+  <script src="js/platform/state.js?v=public-d617243b433c"></script>
+  <script src="js/platform/reference.js?v=public-80b402bac929"></script>
+  <script src="js/platform/vertical-reference.js?v=public-a036244575d0"></script>
+  <script src="js/platform/route.js?v=public-2a9daec147ab"></script>
+  <script src="js/platform/hanging.js?v=public-d4da12797fdd"></script>
+  <script src="js/platform/vertical.js?v=public-c8a8de23896a"></script>
   <script src="js/platform/render.js?v=public-6f4750e53f04"></script>
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
-  <script src="js/platform/main.js?v=public-4cbe5fd40b74"></script>
+  <script src="js/platform/main.js?v=public-2e951db31d8f"></script>
 </body>
 </html>

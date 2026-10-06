@@ -1,4 +1,4 @@
-/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, custom and Beijing palettes, badge ink fitting, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 /** Independent platform projects; all edits return new objects. */
 (function (global) {
   'use strict';
@@ -21,7 +21,8 @@
     var name = str(value.nameZh, '', 40).trim();
     if (value.type === 'text' || name) {
       if (!name) return null;
-      return { type: 'text', nameZh: name, nameEn: str(value.nameEn, '', 80).trim(), color: Core.normalizeHex(value.color) || '#424A52' };
+      var namedColor=Core.lineColorFor(name,city);
+      return { type: 'text', nameZh: name, nameEn: str(value.nameEn, '', 80).trim(), color: Core.normalizeHex(value.color) || (namedColor ? namedColor.bg : '#424A52') };
     }
     var n = str(value.number, '', 8).trim();
     if (!n) return null;
@@ -43,7 +44,7 @@
   function sanitize(value) {
     if (!value || value.kind !== 'platform-sign' || [1,2,3].indexOf(value.version) < 0) throw new Error('请选择站台标识项目 JSON（版本 1–3）');
     if (!Array.isArray(value.stations) || value.stations.length < 1 || value.stations.length > 120) throw new Error('站点数量须为 1–120');
-    var city = Core.PALETTE_CITY_ORDER.indexOf(value.city) >= 0 ? value.city : 'chongqing';
+    var city = Core.isPalette(value.city) ? value.city : 'chongqing';
     var ids = new Set(), stations = value.stations.map(function (s, i) { return station(s, i, city, ids); });
     var sizes = {};
     MODES.forEach(function (mode) {

@@ -16,6 +16,9 @@
   var UI = global.SignUI;
   var App = global.App;
   var h = UI.h;
+  if(global.addEventListener)global.addEventListener('sign-palettes-change',function(){
+    if(!Core.isPalette(App.prefs.paletteCity))setPaletteCity(Core.DEFAULT_CITY);
+  });
 
   var TYPE_NAMES = {
     'arrow': '箭头',

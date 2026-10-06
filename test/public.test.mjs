@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const context = vm.createContext({ serial: 0, crypto: { randomUUID: () => 'station-' + (++context.serial) } });
-for (const file of ['core', 'platform/reference', 'platform/vertical-reference', 'platform/state', 'platform/route', 'platform/hanging', 'platform/vertical', 'platform/render']) {
+for (const file of ['core', 'palettes', 'platform/reference', 'platform/vertical-reference', 'platform/state', 'platform/route', 'platform/hanging', 'platform/vertical', 'platform/render']) {
   vm.runInContext(readFileSync(new URL('../js/' + file + '.js', import.meta.url), 'utf8'), context);
 }
 const S = context.PlatformState, R = context.PlatformRender;
@@ -16,7 +16,7 @@ measure.descent = (text, family, weight, size) => size * .2;
 test('fresh projects start with one editable station and supported city palettes', () => {
   assert.equal(S.create().stations.length, 1);
   assert.equal(S.create().stations[0].zh, '新站点');
-  assert.equal(JSON.stringify(Array.from(context.SignCore.PALETTE_CITY_ORDER)), JSON.stringify(['shanghai', 'chongqing', 'chengdu']));
+  assert.equal(JSON.stringify(Array.from(context.SignCore.PALETTE_CITY_ORDER)), JSON.stringify(['shanghai', 'chongqing', 'chengdu', 'beijing']));
 });
 test('editing and project round trips preserve immutable state', () => {
   const original = S.create(), before = S.serialize(original);
@@ -24,6 +24,27 @@ test('editing and project round trips preserve immutable state', () => {
   assert.equal(S.serialize(original), before);
   assert.equal(edited.stations[0].zh, '站点 A');
   assert.equal(S.serialize(S.deserialize(S.serialize(edited))), S.serialize(edited));
+});
+test('Beijing aliases and custom palettes survive selection, edits and JSON transfer',()=>{
+  const C=context.SignCore,P=context.SignPalettes;
+  assert.equal(C.citySwatches('beijing').length,23);
+  assert.equal(C.lineColorFor('八通线','beijing').bg,'#A4343A');
+  assert.equal(C.lineColorFor('昌平线','beijing').bg,'#D986BA');
+  const p=P.save({name:'My palette',entries:[{name:'1号线',color:'#abc'},{name:'机场线',color:'#008c95'}]});
+  assert.equal(C.lineColorFor('1',p.id).bg,'#AABBCC');
+  assert.equal(S.deserialize(S.serialize(S.settings(S.create(),{city:p.id}))).city,p.id);
+  assert.equal(P.mergeJSON(P.list(),P.serialize(P.list())).length,2);
+  P.remove(p.id);assert.equal(C.isPalette(p.id),false);
+});
+test('named route badges keep actual ink inside the circle with divider clearance',()=>{
+  for(const mode of ['route','station','vertical'])for(const name of ['机场线','较长的线路名称']) {
+    const scene=R.metrics(S.settings(S.create(),{mode,line:name}),measure);
+    const n=scene.nodes.find(n=>n.attrs['data-role']===(mode==='vertical'?'vertical-badge-line':'badge-line'));
+    const circle=scene.nodes.find(n=>n.attrs['data-role']===(mode==='vertical'?'vertical-badge':'current-badge'));
+    const b=n.bounds,a=circle.attrs;
+    for(const x of [b.x,b.x+b.width])for(const y of [b.y,b.y+b.height])assert(Math.hypot(x-a.cx,y-a.cy)<a.r*.9);
+    assert(b.y+b.height<a.cy-a.r*.1);
+  }
 });
 test('route, station and all vertical variants retain finite preview and export geometry', () => {
   for (const count of [1, 2, 20]) {

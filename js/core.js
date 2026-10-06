@@ -1,4 +1,4 @@
-/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, custom and Beijing palettes, badge ink fitting, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 /* Modified by PrisamaX0124, 2026-10-05: guidance sign and platform editor enhancements; see docs/fork-changes.md. */
 /**
  * core.js — 常量、工具函数、字体度量、文本测量
@@ -155,6 +155,31 @@
     { name: '蓉2号线', bg: '#7F9F3A' },
   ];
 
+  // 北京地铁：按用户提供色卡的 HEX 列；共线名称共享一个色块。
+  var BEIJING_LINES = [
+    { line: '1', name: '1号线/八通线', bg: '#A4343A' },
+    { line: '2', bg: '#004B87' },
+    { line: '4', name: '4号线/大兴线', bg: '#008C95' },
+    { line: '5', bg: '#AA0061' },
+    { line: '6', bg: '#B58500' },
+    { line: '7', bg: '#FFC56E' },
+    { line: '8', bg: '#009B77' },
+    { line: '9', bg: '#97D700' },
+    { line: '10', bg: '#0092BC' },
+    { line: '13', bg: '#F4DA40' },
+    { line: '14', bg: '#CA9A8E' },
+    { line: '15', bg: '#653279' },
+    { line: '16', bg: '#6BA539' },
+  ];
+  var BEIJING_EXTRAS = [
+    { name: '昌平线', bg: '#D986BA' },
+    { name: '房山线/燕房线', bg: '#D86018' },
+    { name: '机场线', bg: '#A192B2' },
+    { name: '西郊线', bg: '#D22630' },
+    { name: '亦庄线', bg: '#D0006F' },
+    { name: 'S1线', bg: '#A45A2A' },
+  ];
+
   // 通用色：出口黄与黑白灰，不随城市变化
   var UNIVERSAL_SWATCHES = [
     { name: '出口黄', bg: EXIT_COLOR },
@@ -167,8 +192,9 @@
     shanghai:  { name: '上海', lines: SHANGHAI_LINES,  extras: SHANGHAI_EXTRAS },
     chongqing: { name: '重庆', lines: CHONGQING_LINES, extras: CHONGQING_EXTRAS },
     chengdu:   { name: '成都', lines: CHENGDU_LINES,   extras: CHENGDU_EXTRAS },
+    beijing:   { name: '北京地铁', lines: BEIJING_LINES, extras: BEIJING_EXTRAS },
   };
-  var PALETTE_CITY_ORDER = ['shanghai', 'chongqing', 'chengdu'];
+  var PALETTE_CITY_ORDER = ['shanghai', 'chongqing', 'chengdu', 'beijing'];
   var DEFAULT_CITY = 'shanghai';
 
   // 兼容别名（历史导出，外部测试在用）
@@ -246,12 +272,24 @@
     return luminance(bg) > 0.45 ? '#000000' : '#FFFFFF';
   }
 
-  /** 按线路号查询指定城市（缺省上海）的线路色；未命中返回 null */
+  function paletteDefinition(city) {
+    if (Object.prototype.hasOwnProperty.call(CITY_PALETTES, city)) return CITY_PALETTES[city];
+    var custom = global.SignPalettes && global.SignPalettes.get(city);
+    return custom ? { name: custom.name, lines: [], extras: custom.entries.map(function(c){return {name:c.name,bg:c.color};}), universal: [] } : null;
+  }
+  function isPalette(city) { return !!paletteDefinition(city); }
+  function paletteOptions() {
+    return PALETTE_CITY_ORDER.map(function(id){return {id:id,name:CITY_PALETTES[id].name+'线路配色',custom:false};})
+      .concat(global.SignPalettes ? global.SignPalettes.list().map(function(p){return {id:p.id,name:p.name,custom:true};}) : []);
+  }
+  /** 按数字或命名线路查询指定色板；斜线分隔的共线名均可命中。 */
   function lineColorFor(numberStr, city) {
-    var def = CITY_PALETTES[city] || CITY_PALETTES[DEFAULT_CITY];
-    var s = String(numberStr);
-    for (var i = 0; i < def.lines.length; i++) {
-      if (def.lines[i].line === s) return def.lines[i];
+    var def = paletteDefinition(city) || CITY_PALETTES[DEFAULT_CITY];
+    var s = String(numberStr).trim();
+    var colors = def.lines.concat(def.extras);
+    for (var i = 0; i < colors.length; i++) {
+      var c = colors[i];
+      if (c.line === s || c.line && c.line+'号线' === s || (c.name || '').split('/').some(function(name){return name === s || /^\d+$/.test(s) && name === s+'号线';})) return c;
     }
     return null;
   }
@@ -262,7 +300,7 @@
    * 返回 [{ name, bg }]，name 用作悬浮提示。
    */
   function citySwatches(city) {
-    var def = CITY_PALETTES[city] || CITY_PALETTES[DEFAULT_CITY];
+    var def = paletteDefinition(city) || CITY_PALETTES[DEFAULT_CITY];
     var out = [];
     var seen = {};
     function push(name, bg) {
@@ -277,6 +315,23 @@
   }
 
   // ─── 文本测量 ──────────────────────────────────────────────
+
+  /** 圆标上半区：用墨区四角约束圆内留白，同时与分隔线保持间隙。
+   * 不用字数猜测字号；Canvas 实测字肩、上升高、下伸驱动预览和导出。
+   */
+  function badgeTextMetrics(value, measure, cx, cy, radius) {
+    var size = radius * .74, centerY = cy-radius*.42, safeRadius = radius*.88, m;
+    for (var i=0;i<12;i++) {
+      var ink=measure.ink(value,FONT_ZH,400,size),ascent=measure.ascent(value,FONT_ZH,400,size),descent=measure.descent(value,FONT_ZH,400,size);
+      m={abl:ink.abl,width:Math.max(.001,ink.abl+ink.abr),height:Math.max(.001,ascent+descent),ascent:ascent,size:size};
+      var edge=Math.abs(centerY-cy)+m.height/2;
+      var chord=2*Math.sqrt(Math.max(0,safeRadius*safeRadius-edge*edge));
+      var factor=Math.min(1,radius*.54/m.height,chord/m.width,2*(cy-radius*.12-centerY)/m.height);
+      if(factor>=.9999)break;
+      size*=Math.max(.1,factor)*.995;
+    }
+    m.x=cx-m.width/2;m.y=centerY-m.height/2;return m;
+  }
 
   /**
    * 创建基于 Canvas 2D 的文本宽度测量器。
@@ -356,6 +411,10 @@
     contrastTextColor: contrastTextColor,
     lineColorFor: lineColorFor,
     citySwatches: citySwatches,
+    paletteDefinition: paletteDefinition,
+    paletteOptions: paletteOptions,
+    isPalette: isPalette,
+    badgeTextMetrics: badgeTextMetrics,
     createCanvasMeasurer: createCanvasMeasurer,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

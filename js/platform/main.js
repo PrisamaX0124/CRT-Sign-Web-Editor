@@ -1,11 +1,11 @@
-/* Modified by PrisamaX0124, 2026-10-06: text lines, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
+/* Modified by PrisamaX0124, 2026-10-06: text lines, custom and Beijing palettes, badge ink fitting, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. */
 (function (global) {
   'use strict';
   var S = global.PlatformState, R = global.PlatformRender, Core = global.SignCore, P = global.PlatformPresets;
   var KEY = 'public-platform-sign-project-v1', undo = [], redo = [], groupKey = null, groupTime = 0;
   var PRESET_KEY = 'public-platform-sign-presets-v1', presets = [], presetSignature = '', library = 'stations';
   var saveTimer, noticeTimer, listSignature = '', transferSignature = '', layoutMode = '', busy = false;
-  var basePickers=[],transferPickers=[];
+  var basePickers=[],transferPickers=[],paletteRevision=-1;
   var names = { route: '全线吊板', station: '本站吊板', vertical: '纵向线路图' };
   function $(id) { return document.getElementById(id); }
   function notice(message) {
@@ -58,7 +58,7 @@
   function history(from, to) {
     if (!from.length) return;
     to.push(snapshot());
-    var old = from.pop(); App.state = old.state; App.selectedId = old.selectedId; App.selectedKey = old.selectedKey; App.panelView = old.panelView; groupKey = null;
+    var old = from.pop(); App.state = Core.isPalette(old.state.city) ? old.state : S.settings(old.state,{city:'chongqing'}); App.selectedId = old.selectedId; App.selectedKey = old.selectedKey; App.panelView = old.panelView; groupKey = null;
     render(); scheduleSave();
   }
   function flushSave() {
@@ -245,6 +245,9 @@
   function changeCity(city) { var auto=Core.lineColorFor(App.state.line,city);set(Object.assign({city:city},auto?{color:auto.bg}:{})); }
   function sync() {
     var state = App.state, s = live(), size = state.sizes[state.mode];
+    if(paletteRevision!==global.SignPalettes.revision()) {
+      global.SignColorPicker.syncPaletteSelect($('palette-city'),state.city);paletteRevision=global.SignPalettes.revision();
+    }
     syncList(); syncTransfers();basePickers.forEach(function(picker){picker.sync();});
     var element = findElement(App.selectedKey), hanging = state.mode !== 'vertical';
     if (layoutMode !== state.mode) { $('advanced-layout').open = !hanging; layoutMode = state.mode; }
@@ -296,7 +299,7 @@
   new ResizeObserver(fitPreview).observe($('platform-preview-scroll'));
   $('undo').addEventListener('click', App.undo); $('redo').addEventListener('click', App.redo);
   document.addEventListener('keydown', function (event) {
-    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' || event.isComposing || $('batch-dialog').open || $('preset-dialog').open) return;
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' || event.isComposing || document.querySelector('dialog[open]')) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
     event.preventDefault(); if (event.shiftKey) App.redo(); else App.undo();
   });
@@ -446,6 +449,9 @@
     var picker=global.SignColorPicker.create({value:App.state[spec[1]],scope:spec[2],nativeId:spec[3],hexId:spec[4],swatchesId:spec[1]==='color'?'platform-swatches':undefined,
       getCity:function(){return App.state.city;},onCityChange:changeCity,getValue:function(){return App.state[spec[1]];},onChange:function(color){var patch={};patch[spec[1]]=color;set(patch,spec[3]);}});
     $(spec[0]).appendChild(picker);basePickers.push(picker);
+  });
+  global.addEventListener('sign-palettes-change',function(){
+    if(!Core.isPalette(App.state.city))set({city:'chongqing'});else sync();
   });
   render();
   App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message); });
