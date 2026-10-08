@@ -38,6 +38,7 @@
     "js/palette-manager.js",
     "js/palettes.js",
     "js/panel.js",
+    "js/platform/clipboard.js",
     "js/platform/hanging.js",
     "js/platform/main.js",
     "js/platform/presets.js",

@@ -14,7 +14,9 @@
 .station-item.station-drop-before { border-top: 2px solid var(--accent); }
 .station-item.station-drop-after { border-bottom: 2px solid var(--accent); }
 .station-drag-ghost { position: fixed; z-index: 120; pointer-events: none; margin: 0; opacity: .92; background: var(--panel-bg); border: 1px solid var(--accent); box-shadow: 0 4px 18px #0002; }
-.platform-header { height: 72px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 22px; background: var(--panel-bg); border-bottom: 1px solid var(--border); }
+.platform-header { height: 72px; flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; padding: 0 22px; background: var(--panel-bg); border-bottom: 1px solid var(--border); }
+.platform-header .mode-tabs { grid-column: 2; }
+.platform-header .back-link { grid-column: 3; justify-self: end; }
 .platform-brand { display: flex; align-items: center; gap: 10px; }
 .brand-mark { background: var(--accent); color: white; border-radius: 8px; width: 34px; height: 34px; display: grid; place-items: center; font-size: 24px; }
 .platform-brand strong { display: block; font-size: 16px; }
@@ -115,6 +117,13 @@
 .preview-toolbar { padding: 10px 16px; }
 #platform-preview-scroll { display: flex; padding: 16px; }
 #platform-paper { position: relative; flex: none; margin: auto; }
+#element-multi-outlines { position: absolute; inset: 0; pointer-events: none; }
+#platform-edit-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 16px; border-bottom: 1px solid var(--border); flex: none; }
+#platform-edit-actions button { padding: 5px 8px; border-radius: 4px; font-size: 11px; }
+#platform-edit-actions button:hover { background: var(--surface-soft); }
+#platform-edit-actions [data-edit-action="delete"] { color: var(--danger); }
+#platform-clipboard-history { min-width: 0; width: 148px; font-size: 11px; }
+#platform-selection-status { font-size: 10px; color: var(--text-dim); margin-left: auto; }
 .preview-footer { padding: 9px 16px; }
 .platform-section { padding: 12px 0 6px; }
 .platform-section h2 { margin-bottom: 10px; }
@@ -154,7 +163,9 @@
 #preset-error { color: var(--danger); font-size: 12px; margin-top: 8px; }
 @media (max-width: 1100px) { .platform-workspace { grid-template-columns: 180px minmax(0, 1fr) 248px; } .platform-header { padding: 0 14px; } .mode-tabs button { padding: 8px 10px; } .platform-brand small { display: none; } .back-link { max-width: 110px; } }
 @media (max-width: 768px) {
-  .platform-header { height: auto; padding: 10px 12px; flex-wrap: wrap; gap: 10px; }
+  .platform-header { height: auto; padding: 10px 12px; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 6px; }
+  .platform-header .mode-tabs { grid-column: 1; width: auto; max-width: 100%; }
+  .platform-header .back-link { grid-column: 1; justify-self: center; margin-left: 0; }
   .platform-brand strong { font-size: 14px; } .brand-mark { width: 28px; height: 28px; font-size: 20px; }
   .back-link { margin-left: auto; max-width: none; font-size: 10px; }
   .mode-tabs { order: 0; width: auto; flex: 1; } .mode-tabs button { flex: 1; padding: 7px 4px; font-size: 12px; }
@@ -169,6 +180,10 @@
   .station-list-actions { padding: 6px 10px; border: 0; } .station-list-actions .btn { width: auto; font-size: 11px; padding: 5px 12px; }
   .platform-preview { flex: none; height: 310px; border-block: 1px solid var(--border); }
   .preview-toolbar { padding: 9px 12px; } #preview-dimensions { margin-left: 4px; font-size: 10px; }
+  #platform-edit-actions { padding: 4px 10px; gap: 2px; }
+  #platform-edit-actions button { padding-inline: 7px; }
+  #platform-clipboard-history { flex: 1; width: 120px; }
+  #platform-selection-status { width: 100%; margin: 0; }
   #platform-preview-scroll { padding: 16px; } .preview-footer { padding: 7px 12px; } .preview-footer > span:last-child { display: none; }
   .platform-properties { flex: none; border: 0; } .platform-property-scroll { overflow: visible; padding-inline: 16px; }
   .platform-section { padding-block: 16px; } .platform-page input:not([type="color"]), .platform-page select, #batch-text { font-size: 16px; }

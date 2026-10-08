@@ -3,6 +3,7 @@
   'use strict';
   var S = global.PlatformState, R = global.PlatformRender, Core = global.SignCore, P = global.PlatformPresets;
   var KEY = 'public-platform-sign-project-v1', undo = [], redo = [], groupKey = null, groupTime = 0;
+  var HISTORY_LIMIT = 20;
   var PRESET_KEY = 'public-platform-sign-presets-v1', presets = [], presetSignature = '', library = 'stations';
   var saveTimer, noticeTimer, listSignature = '', transferSignature = '', layoutMode = '', busy = false;
   var basePickers=[],transferPickers=[],paletteRevision=-1;
@@ -18,32 +19,70 @@
   try { presets = P.deserialize(localStorage.getItem(PRESET_KEY) || '[]'); }
   catch (err) { notice('未能恢复预设：' + err.message); }
   var App = global.App = {
-    state: initial, selectedId: initial.currentId, selectedKey: null, hoverKey: null, panelView: 'sign', measure: Core.createCanvasMeasurer(), scene: null,
-    update: function (fn, key) {
+    state: initial, selectedId: initial.currentId, selectedKey: null, selectionKeys: [], anchorKey: null, hoverKey: null, panelView: 'sign', measure: Core.createCanvasMeasurer(), scene: null,
+    update: function (fn, key, options) {
       var next = fn(App.state);
       if (JSON.stringify(next) === JSON.stringify(App.state)) return;
       var now = Date.now();
       if (!(key && key === groupKey && now - groupTime < 800)) {
-        undo.push(snapshot()); if (undo.length > 30) undo.shift();
+        undo.push(snapshot()); if (undo.length > HISTORY_LIMIT) undo.shift();
       }
       groupKey = key || null; groupTime = now; redo = [];
-      App.state = next;
+      var previous = App.state; App.state = next;
       if (!live()) App.selectedId = next.currentId;
+      if (options && options.selectNew) {
+        App.selectionKeys = next.stations.filter(function (s) { return !previous.stations.some(function (old) { return old.id === s.id; }); }).map(function (s) { return stationKey(s.id, next); });
+        App.selectedKey = App.selectionKeys[App.selectionKeys.length - 1] || null; App.anchorKey = App.selectionKeys[0] || null; App.panelView = 'station';
+      }
+      if (options && options.clearSelection) { App.selectionKeys = []; App.selectedKey = App.anchorKey = null; App.panelView = 'sign'; }
       render(); scheduleSave();
     },
-    select: function (id) {
+    select: function (id, modifiers) {
       if (!App.state.stations.some(function (s) { return s.id === id; })) return;
-      App.selectedId = id; App.panelView = 'station';
-      var element = (App.scene.elements || []).find(function (item) { return item.stationId === id; });
-      App.selectedKey = element ? element.key : null; groupKey = null; sync(); paintInteraction();
+      var options = Object.assign({}, modifiers, { order: App.state.stations.map(function (s) { return stationKey(s.id); }) });
+      App.selectElement(stationKey(id), options);
     },
-    selectElement: function (key) {
-      var element = findElement(key); if (!element) return;
-      App.selectedKey = key; App.panelView = 'station';
-      if (element.stationId) App.selectedId = element.stationId;
+    selectElement: function (key, modifiers) {
+      if (!S.validElementKey(key, App.state.stations)) return;
+      var options = modifiers || {}, keys = App.selectedKeys(), anchor = App.anchorKey;
+      if (options.range && anchor) {
+        var order = options.order || App.elementOrder(), a = order.indexOf(anchor), b = order.indexOf(key);
+        if (a >= 0 && b >= 0) { var range = order.slice(Math.min(a, b), Math.max(a, b) + 1); App.selectMany(options.toggle ? keys.concat(range) : range, key, anchor); return; }
+      }
+      if (options.toggle) {
+        var index = keys.indexOf(key); if (index >= 0) keys.splice(index, 1); else keys.push(key);
+        App.selectMany(keys, index >= 0 ? keys[keys.length - 1] : key);
+      } else App.selectMany([key], key);
+    },
+    selectedKeys: function () { return App.selectionKeys.filter(function (key, i, keys) { return keys.indexOf(key) === i && S.validElementKey(key, App.state.stations) && (findElement(key) || (App.state.mode === 'station' && key === 'route:' + stationIdFromKey(key))); }); },
+    selectedStationIds: function () {
+      var keys = App.selectedKeys();
+      return App.state.stations.filter(function (s) { return keys.some(function (key) {
+        if (['route:', 'vertical:left:', 'vertical:right:', 'vertical:transfer:'].some(function (prefix) { return key === prefix + s.id; })) return true;
+        var item = findElement(key); return item && item.stationId === s.id && ['station-name', 'neighbor'].indexOf(item.kind) >= 0;
+      }); }).map(function (s) { return s.id; });
+    },
+    selectMany: function (keys, primary, anchor) {
+      App.selectionKeys = keys.filter(function (key, i) { return keys.indexOf(key) === i && S.validElementKey(key, App.state.stations); });
+      App.selectionKeys = App.selectedKeys();
+      App.selectedKey = App.selectionKeys.indexOf(primary) >= 0 ? primary : App.selectionKeys[App.selectionKeys.length - 1] || null;
+      App.anchorKey = anchor || App.selectedKey;
+      var item = findElement(App.selectedKey), id = item && item.stationId || stationIdFromKey(App.selectedKey);
+      if (id) App.selectedId = id;
+      App.panelView = App.selectedKey ? 'station' : 'sign'; App.hoverKey = null;
       groupKey = null; sync(); paintInteraction();
     },
-    deselect: function () { App.selectedKey = null; App.hoverKey = null; App.panelView = 'sign'; sync(); paintInteraction(); },
+    elementOrder: function () { return App.scene.elements.map(function (item) { return item.key; }); },
+    selectAll: function () { App.selectMany(App.elementOrder(), App.selectedKey); },
+    selectAllStations: function () { App.selectMany(App.state.stations.map(function (s) { return stationKey(s.id); }), App.selectedKey); },
+    deselect: function () { App.selectMany([]); },
+    deleteSelection: function () {
+      var ids = App.selectedStationIds(); if (!ids.length) return;
+      if (App.state.stations.length <= 1) { notice('至少保留一个站点'); return; }
+      var all = ids.length === App.state.stations.length;
+      App.update(function (state) { return S.removeStations(state, ids); }, null, { clearSelection: true });
+      if (all) notice('已删除选中站点，并保留本站');
+    },
     undo: function () { history(undo, redo); }, redo: function () { history(redo, undo); },
     download: function (blob, filename) {
       var url = URL.createObjectURL(blob), link = document.createElement('a');
@@ -53,12 +92,22 @@
     render: render,
   };
   function live() { return App.state.stations.find(function (s) { return s.id === App.selectedId; }); }
-  function snapshot() { return { state: App.state, selectedId: App.selectedId, selectedKey: App.selectedKey, panelView: App.panelView }; }
+  function snapshot() { return { state: App.state, selectedId: App.selectedId, selectedKey: App.selectedKey, selectionKeys: App.selectedKeys(), anchorKey: App.anchorKey, panelView: App.panelView }; }
   function findElement(key) { return App.scene && (App.scene.elements || []).find(function (item) { return item.key === key; }); }
+  function stationIdFromKey(key) { var s = App.state.stations.find(function (s) { return key === 'route:' + s.id || key === 'vertical:left:' + s.id || key === 'vertical:right:' + s.id || key === 'vertical:transfer:' + s.id; }); return s ? s.id : null; }
+  function stationKey(id, state) {
+    state = state || App.state;
+    if (state.mode === 'route') return 'route:' + id;
+    if (state.mode === 'vertical') return 'vertical:' + (state.verticalVariant === 'right' ? 'right:' : 'left:') + id;
+    if (id === state.currentId) return 'station:title';
+    var near = S.neighbors(state), left = state.direction === -1 ? near.next : near.previous, right = state.direction === 1 ? near.next : near.previous;
+    return left && left.id === id ? 'station:left' : right && right.id === id ? 'station:right' : 'route:' + id;
+  }
   function history(from, to) {
     if (!from.length) return;
     to.push(snapshot());
-    var old = from.pop(); App.state = Core.isPalette(old.state.city) ? old.state : S.settings(old.state,{city:'chongqing'}); App.selectedId = old.selectedId; App.selectedKey = old.selectedKey; App.panelView = old.panelView; groupKey = null;
+    if (to.length > HISTORY_LIMIT) to.shift();
+    var old = from.pop(); App.state = Core.isPalette(old.state.city) ? old.state : S.settings(old.state,{city:'chongqing'}); App.selectedId = old.selectedId; App.selectedKey = old.selectedKey; App.selectionKeys = old.selectionKeys; App.anchorKey = old.anchorKey; App.panelView = old.panelView; groupKey = null;
     render(); scheduleSave();
   }
   function flushSave() {
@@ -75,12 +124,12 @@
   function patchStation(patch, key) { App.update(function (state) { return S.patchStation(state, App.selectedId, patch); }, key); }
   function render() {
     App.scene = R.metrics(App.state, App.measure); R.draw($('platform-svg'), App.scene);
-    if (App.selectedKey && !findElement(App.selectedKey)) App.selectedKey = null;
+    App.selectionKeys = App.selectedKeys();
+    if (App.selectionKeys.indexOf(App.selectedKey) < 0) App.selectedKey = App.selectionKeys[App.selectionKeys.length - 1] || null;
+    if (!App.selectedKey) App.panelView = 'sign';
     var selected = findElement(App.selectedKey);
-    if (selected && selected.stationId && selected.stationId !== App.selectedId) {
-      var same = App.scene.elements.find(function (item) { return item.stationId === App.selectedId; });
-      App.selectedKey = same ? same.key : null;
-    }
+    var id = selected && selected.stationId || stationIdFromKey(App.selectedKey); if (id) App.selectedId = id;
+    if (!S.validElementKey(App.anchorKey, App.state.stations)) App.anchorKey = App.selectedKey;
     sync(); fitPreview();
   }
   function fitPreview() {
@@ -94,21 +143,26 @@
   function paintInteraction() {
     if (!App.scene) return;
     var svg = $('platform-svg'), scale = svg.getBoundingClientRect().width / App.scene.output.width, frame = App.scene.frame;
-    function outline(id, key) {
-      var el = $(id), item = findElement(key); el.hidden = !item; if (!item) return;
+    function outline(el, key) {
+      var item = findElement(key); el.hidden = !item; if (!item) return;
       var b = item.box;
       el.style.left = ((b.x * frame.scale + frame.x) * scale - 3) + 'px';
       el.style.top = ((b.y * frame.scale + frame.y) * scale - 3) + 'px';
       el.style.width = (b.width * frame.scale * scale + 6) + 'px'; el.style.height = (b.height * frame.scale * scale + 6) + 'px';
     }
-    outline('element-hover-outline', App.hoverKey === App.selectedKey ? null : App.hoverKey);
-    outline('element-selection-outline', App.selectedKey);
+    var keys = App.selectedKeys();
+    outline($('element-hover-outline'), keys.indexOf(App.hoverKey) >= 0 ? null : App.hoverKey);
+    outline($('element-selection-outline'), App.selectedKey);
+    var extra = keys.filter(function (key) { return key !== App.selectedKey && findElement(key); }), layer = $('element-multi-outlines');
+    while (layer.children.length > extra.length) layer.lastChild.remove();
+    while (layer.children.length < extra.length) { var box = document.createElement('div'); box.className = 'platform-element-outline selected'; layer.appendChild(box); }
+    extra.forEach(function (key, i) { outline(layer.children[i], key); });
     var toolbar = $('platform-element-toolbar'), item = findElement(App.selectedKey); toolbar.hidden = !item; if (!item) return;
-    $('toolbar-element-label').textContent = item.label;
-    var hasStation = !!item.stationId, index = App.state.stations.findIndex(function (s) { return s.id === item.stationId; });
+    $('toolbar-element-label').textContent = keys.length > 1 ? '已选 ' + keys.length + ' 个元素' : item.label;
+    var stationIds = App.selectedStationIds(), hasStation = !!stationIds.length, singleStation = stationIds.length === 1, index = App.state.stations.findIndex(function (s) { return s.id === item.stationId; });
     ['tool-current', 'tool-up', 'tool-down', 'tool-delete'].forEach(function (id) { $(id).hidden = !hasStation; });
-    $('tool-current').disabled = item.stationId === App.state.currentId;
-    $('tool-up').disabled = index <= 0; $('tool-down').disabled = index >= App.state.stations.length - 1; $('tool-delete').disabled = App.state.stations.length <= 1;
+    $('tool-current').disabled = !singleStation || stationIds[0] === App.state.currentId;
+    $('tool-up').disabled = !singleStation || index <= 0; $('tool-down').disabled = !singleStation || index >= App.state.stations.length - 1; $('tool-delete').disabled = App.state.stations.length <= 1;
     var anchor = $('element-selection-outline').getBoundingClientRect(), area = document.querySelector('.platform-preview').getBoundingClientRect(), viewport = $('platform-preview-scroll').getBoundingClientRect();
     if (anchor.bottom < viewport.top || anchor.top > viewport.bottom || anchor.right < viewport.left || anchor.left > viewport.right) { toolbar.hidden = true; return; }
     var left = Math.max(8, Math.min(anchor.left - area.left, area.width - toolbar.offsetWidth - 8));
@@ -128,12 +182,13 @@
         var tag = document.createElement('span'); tag.className = 'station-item-tag';
         var grip=document.createElement('span');grip.className='station-drag-handle';grip.setAttribute('aria-hidden','true');
         grip.innerHTML='<svg viewBox="0 0 24 24"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg>';
-        button.append(grip,code, text, tag); button.addEventListener('click', function () { App.select(button.dataset.id); }); list.appendChild(button);
+        button.append(grip,code, text, tag); button.addEventListener('click', function (event) { App.select(button.dataset.id, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); }); list.appendChild(button);
       });
       listSignature = signature; list.scrollTop = scroll; list.scrollLeft = horizontal;
     }
+    var selected = App.selectedStationIds();
     Array.from(list.children).forEach(function (button, i) {
-      var s = App.state.stations[i]; button.setAttribute('aria-pressed', String(App.panelView === 'station' && s.id === App.selectedId));
+      var s = App.state.stations[i]; button.setAttribute('aria-pressed', String(selected.indexOf(s.id) >= 0));
       button.setAttribute('aria-label', s.code + ' ' + s.zh + (s.id === App.state.currentId ? ' 本站' : ''));
       button.querySelector('.station-item-code').textContent = s.code;
       button.querySelector('strong').textContent = s.zh || '未命名站点'; button.querySelector('small').textContent = s.en;
@@ -178,7 +233,7 @@
   }
   $('station-list').addEventListener('pointerdown',function(event){
     var button=event.target.closest('.station-item');
-    if(!button||event.button!==0||stationDrag||App.state.stations.length<2)return;
+    if(!button||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||stationDrag||App.state.stations.length<2)return;
     if(event.pointerType==='touch'&&!event.target.closest('.station-drag-handle'))return;
     stationDrag={id:button.dataset.id,button:button,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,active:false,gap:null};
   });
@@ -249,13 +304,15 @@
       global.SignColorPicker.syncPaletteSelect($('palette-city'),state.city);paletteRevision=global.SignPalettes.revision();
     }
     syncList(); syncTransfers();basePickers.forEach(function(picker){picker.sync();});
-    var element = findElement(App.selectedKey), hanging = state.mode !== 'vertical';
+    var element = findElement(App.selectedKey), hanging = state.mode !== 'vertical', multi = App.selectedKeys().length > 1;
     if (layoutMode !== state.mode) { $('advanced-layout').open = !hanging; layoutMode = state.mode; }
     document.querySelectorAll('[data-property-view]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.propertyView === App.panelView)); });
     document.querySelectorAll('[data-panel]').forEach(function (section) {
-      section.hidden = section.dataset.panel === 'sign' ? App.panelView !== 'sign' : section.dataset.panel === 'element' ? !element : App.panelView !== 'station' || !!(element && !element.stationId);
+      section.hidden = section.dataset.panel === 'sign' ? App.panelView !== 'sign' : section.dataset.panel === 'element' ? !element : App.panelView !== 'station' || multi || !!(element && !element.stationId);
     });
-    $('property-heading').textContent = App.panelView === 'sign' ? '标识牌设置' : element ? element.label : '站点编辑';
+    $('property-heading').textContent = App.panelView === 'sign' ? '标识牌设置' : multi ? '已选择 ' + App.selectedKeys().length + ' 个元素' : element ? element.label : '站点编辑';
+    $('element-properties').querySelector('h2').textContent = multi ? '整组位置微调' : '元素位置微调';
+    ['element-offset-x', 'element-offset-y'].forEach(function (id) { $(id).disabled = multi; });
     $('hanging-size-controls').hidden = !hanging; $('fit-ratio').hidden = true;
     $('output-width').readOnly = !hanging; $('output-height').readOnly = false;
     $('station-direction-option').hidden = state.mode !== 'station';
@@ -284,13 +341,35 @@
     var index = state.stations.findIndex(function (item) { return item.id === s.id; });
     $('station-up').disabled = index === 0; $('station-down').disabled = index === state.stations.length - 1; $('station-delete').disabled = state.stations.length <= 1;
     $('undo').disabled = !undo.length; $('redo').disabled = !redo.length;
+    if (global.PlatformClipboard) global.PlatformClipboard.sync();
   }
   document.querySelector('.platform-property-scroll').prepend($('dimension-section'));
   document.querySelectorAll('[data-mode]').forEach(function (button) { button.addEventListener('click', function () { set({ mode: button.dataset.mode }); App.deselect(); }); });
   document.querySelectorAll('[data-property-view]').forEach(function (button) { button.addEventListener('click', function () { if (button.dataset.propertyView === 'sign') App.deselect(); else App.select(App.selectedId); }); });
-  $('platform-svg').addEventListener('click', function (event) {
-    var element = event.target.closest('[data-element-key]'), station = event.target.closest('[data-station-id]');
-    if (element) App.selectElement(element.dataset.elementKey); else if (station) App.select(station.dataset.stationId); else App.deselect();
+  // Preserve controls and text drag selections while allowing blank clicks anywhere on the page.
+  var selectionControls = 'button, input, select, textarea, label, a, summary, [contenteditable], [role="button"], .field, .platform-section, #platform-element-toolbar, dialog, #platform-notice';
+  var pagePointer = null, suppressPageClick = false;
+  document.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    pagePointer = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, control: !!event.target.closest(selectionControls) };
+  }, true);
+  function trackPointer(event) { if (pagePointer && pagePointer.id === event.pointerId) pagePointer.moved = pagePointer.moved || Math.hypot(event.clientX - pagePointer.x, event.clientY - pagePointer.y) > 5; }
+  document.addEventListener('pointermove', trackPointer, true);
+  document.addEventListener('pointerup', function (event) {
+    if (!pagePointer || pagePointer.id !== event.pointerId) return;
+    trackPointer(event);
+    if (pagePointer.control || pagePointer.moved) { suppressPageClick = true; setTimeout(function () { suppressPageClick = false; }, 0); }
+    pagePointer = null;
+  }, true);
+  document.addEventListener('pointercancel', function (event) { if (pagePointer && pagePointer.id === event.pointerId) pagePointer = null; }, true);
+  document.addEventListener('click', function (event) {
+    if (suppressPageClick) { suppressPageClick = false; return; }
+    if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
+    var element = event.target.closest('#platform-svg [data-element-key]'), station = event.target.closest('#platform-svg [data-station-id]');
+    var modifiers = { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey };
+    if (element) App.selectElement(element.dataset.elementKey, modifiers);
+    else if (station) App.select(station.dataset.stationId, modifiers);
+    else if (App.selectedKey && !event.target.closest(selectionControls)) App.deselect();
   });
   $('platform-svg').addEventListener('pointermove', function (event) { var target = event.target.closest('[data-element-key]'), key = target ? target.dataset.elementKey : null; if (key !== App.hoverKey) { App.hoverKey = key; paintInteraction(); } });
   $('platform-svg').addEventListener('pointerleave', function () { App.hoverKey = null; paintInteraction(); });
@@ -299,9 +378,12 @@
   new ResizeObserver(fitPreview).observe($('platform-preview-scroll'));
   $('undo').addEventListener('click', App.undo); $('redo').addEventListener('click', App.redo);
   document.addEventListener('keydown', function (event) {
-    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' || event.isComposing || document.querySelector('dialog[open]')) return;
-    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
-    event.preventDefault(); if (event.shiftKey) App.redo(); else App.undo();
+    if (event.defaultPrevented || event.isComposing || document.querySelector('dialog[open]') || global.PlatformClipboard.editing(event.target)) return;
+    var command = (event.ctrlKey || event.metaKey) && !event.altKey, key = event.key.toLowerCase();
+    if (command && key === 'a') { event.preventDefault(); if (event.target.closest && event.target.closest('#station-list')) App.selectAllStations(); else App.selectAll(); }
+    else if (command && key === 'z') { event.preventDefault(); if (event.shiftKey) App.redo(); else App.undo(); }
+    else if (key === 'escape') { event.preventDefault(); App.deselect(); }
+    else if ((key === 'delete' || key === 'backspace') && App.selectedStationIds().length) { event.preventDefault(); App.deleteSelection(); }
   });
   document.addEventListener('focusout', function () { groupKey = null; });
   ['code', 'zh', 'en'].forEach(function (key) {
@@ -330,9 +412,9 @@
   $('font-scale').addEventListener('input', function (event) { set({ fontScale: Number(event.target.value) }, 'font-scale'); });
   $('hanging-length').addEventListener('change', function (event) { if (event.target.value !== 'custom') App.update(function (state) { return S.setHangingLength(state, Number(event.target.value)); }); else { $('advanced-layout').open = true; $('output-width').focus(); } });
   $('hanging-height').addEventListener('change', function (event) { if (event.target.value !== 'custom') App.update(function (state) { return S.setHangingHeight(state, Number(event.target.value)); }); else { $('advanced-layout').open = true; $('output-height').focus(); } });
-  document.querySelectorAll('[data-nudge-x]').forEach(function (button) { button.addEventListener('click', function () { if (App.selectedKey) App.update(function (state) { return S.nudgeElement(state, App.selectedKey, Number(button.dataset.nudgeX), Number(button.dataset.nudgeY)); }); }); });
+  document.querySelectorAll('[data-nudge-x]').forEach(function (button) { button.addEventListener('click', function () { var keys = App.selectedKeys(); if (keys.length) App.update(function (state) { return S.nudgeElements(state, keys, Number(button.dataset.nudgeX), Number(button.dataset.nudgeY)); }); }); });
   ['x', 'y'].forEach(function (axis) { $('element-offset-' + axis).addEventListener('change', function (event) { if (!App.selectedKey) return; var n = Number(event.target.value); if (!Number.isFinite(n) || n < -128 || n > 128) { notice('微调范围为 −128 至 128px'); event.target.value = (App.state.adjustments[App.selectedKey] || {})[axis] || 0; return; } var patch = {}; patch[axis] = n; App.update(function (state) { return S.setElementOffset(state, App.selectedKey, patch); }); }); });
-  function resetElement() { if (App.selectedKey) App.update(function (state) { return S.resetElement(state, App.selectedKey); }); }
+  function resetElement() { var keys = App.selectedKeys(); if (keys.length) App.update(function (state) { return S.resetElements(state, keys); }); }
   $('tool-reset').addEventListener('click', resetElement); $('reset-element').addEventListener('click', resetElement);
   [['tool-current', 'set-current'], ['tool-up', 'station-up'], ['tool-down', 'station-down'], ['tool-delete', 'station-delete']].forEach(function (pair) { $(pair[0]).addEventListener('click', function () { $(pair[1]).click(); }); });
   function setSize(patch) {
@@ -354,7 +436,7 @@
     var added = App.state.stations.find(function (s) { return !previous.stations.some(function (old) { return old.id === s.id; }); });
     if (added) { App.select(added.id); $('station-zh').focus(); $('station-zh').select(); }
   });
-  $('station-delete').addEventListener('click', function () { App.update(function (state) { return S.removeStation(state, App.selectedId); }); });
+  $('station-delete').addEventListener('click', App.deleteSelection);
   [['station-up', -1], ['station-down', 1]].forEach(function (pair) { $(pair[0]).addEventListener('click', function () { App.update(function (state) { return S.moveStation(state, App.selectedId, pair[1]); }); }); });
   $('batch-stations').addEventListener('click', function () {
     $('batch-text').value = App.state.stations.map(function (s) { return [s.code, s.zh, s.en, S.formatTransfers(s.transfers)].join('|'); }).join('\n');
@@ -453,6 +535,7 @@
   global.addEventListener('sign-palettes-change',function(){
     if(!Core.isPalette(App.state.city))set({city:'chongqing'});else sync();
   });
+  global.PlatformClipboard.init(App, notice);
   render();
   App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message); });
 })(window);

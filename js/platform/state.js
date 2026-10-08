@@ -125,6 +125,20 @@
     var adjustments = Object.assign({}, state.adjustments); delete adjustments[key];
     return settings(state, { adjustments: adjustments });
   }
+  function nudgeElements(state, keys, dx, dy) {
+    var adjustments = Object.assign({}, state.adjustments);
+    keys.forEach(function (key) {
+      if (!validElementKey(key, state.stations)) return;
+      var old = adjustments[key] || { x: 0, y: 0 };
+      adjustments[key] = { x: old.x + dx, y: old.y + dy };
+    });
+    return settings(state, { adjustments: adjustments });
+  }
+  function resetElements(state, keys) {
+    var adjustments = Object.assign({}, state.adjustments);
+    keys.forEach(function (key) { delete adjustments[key]; });
+    return settings(state, { adjustments: adjustments });
+  }
   function settings(state, patch) {
     var next = Object.assign({}, state, patch), route = patch.sizes && patch.sizes.route;
     if (patch.stations && patch.stations.map(function(s){return s.id;}).join('|') !== state.stations.map(function(s){return s.id;}).join('|')) next.verticalLayout = 'responsive';
@@ -143,11 +157,55 @@
     return settings(state, { stations: list, routeLayout: 'responsive' });
   }
   function removeStation(state, id) {
+    return removeStations(state, [id]);
+  }
+  function removeStations(state, ids) {
     if (state.stations.length <= 1) return state;
-    var index = state.stations.findIndex(function (s) { return s.id === id; });
-    if (index < 0) return state;
-    var list = state.stations.filter(function (s) { return s.id !== id; });
-    return settings(state, { stations: list, routeLayout: 'responsive', currentId: state.currentId === id ? list[Math.min(index, list.length - 1)].id : state.currentId });
+    var list = state.stations.filter(function (s) { return ids.indexOf(s.id) < 0; });
+    if (list.length === state.stations.length) return state;
+    // A platform project always needs one station, even when the whole line is selected.
+    if (!list.length) list = [neighbors(state).current];
+    var index = state.stations.findIndex(function (s) { return s.id === state.currentId; });
+    var current = list.find(function (s) { return s.id === state.currentId; }) || state.stations.slice(index).find(function (s) { return list.indexOf(s) >= 0; }) || list[list.length - 1];
+    return settings(state, { stations: list, routeLayout: 'responsive', currentId: current.id });
+  }
+  var STATION_OFFSET_PREFIXES = ['route', 'vertical:left', 'vertical:right', 'vertical:transfer'];
+  function serializeStations(state, ids) {
+    return JSON.stringify({ kind: 'platform-sign-stations', version: 1, city: state.city,
+      stations: state.stations.filter(function (s) { return ids.indexOf(s.id) >= 0; }).map(function (s) {
+        var offsets = {};
+        STATION_OFFSET_PREFIXES.forEach(function (prefix) { var offset = state.adjustments[prefix + ':' + s.id]; if (offset) offsets[prefix] = offset; });
+        return { station: s, offsets: offsets };
+      }) });
+  }
+  function deserializeStations(text) {
+    if (typeof text === 'string' && text.length > 2 * 1024 * 1024) throw new Error('站点剪贴板内容过大');
+    var value = typeof text === 'string' ? JSON.parse(text) : text;
+    if (!value || value.kind !== 'platform-sign-stations' || value.version !== 1 || !Array.isArray(value.stations) || !value.stations.length || value.stations.length > 120) throw new Error('剪贴板中没有有效的站台站点');
+    var city = Core.isPalette(value.city) ? value.city : 'chongqing', ids = new Set();
+    var entries = value.stations.map(function (entry, index) {
+      if (!entry || !entry.station || typeof entry.station !== 'object' || typeof entry.station.zh !== 'string') throw new Error('剪贴板站点格式不正确');
+      var offsets = {};
+      STATION_OFFSET_PREFIXES.forEach(function (prefix) {
+        var offset = entry.offsets && entry.offsets[prefix];
+        if (offset) offsets[prefix] = { x: number(offset.x, 0, -128, 128), y: number(offset.y, 0, -128, 128) };
+      });
+      return { station: station(entry.station, index, city, ids), offsets: offsets };
+    });
+    return { kind: 'platform-sign-stations', version: 1, city: city, stations: entries };
+  }
+  function pasteStations(state, data, gap) {
+    data = deserializeStations(data);
+    if (state.stations.length + data.stations.length > 120) throw new Error('粘贴后站点数量不能超过 120');
+    gap = Number.isInteger(gap) ? Core.clamp(gap, 0, state.stations.length) : state.stations.length;
+    var adjustments = Object.assign({}, state.adjustments);
+    var copies = data.stations.map(function (entry) {
+      var copy = Object.assign({}, entry.station, { id: Core.uuid(), transfers: entry.station.transfers.map(function (t) { return Object.assign({}, t); }) });
+      Object.keys(entry.offsets).forEach(function (prefix) { adjustments[prefix + ':' + copy.id] = Object.assign({}, entry.offsets[prefix]); });
+      return copy;
+    });
+    var list = state.stations.slice(); list.splice.apply(list, [gap, 0].concat(copies));
+    return settings(state, { stations: list, adjustments: adjustments, routeLayout: 'responsive' });
   }
   function moveStation(state, id, delta) {
     var index = state.stations.findIndex(function (s) { return s.id === id; });
@@ -204,11 +262,13 @@
     create: create, settings: settings, patchStation: patchStation, addStation: addStation,
     setVerticalVariant: setVerticalVariant, swapVerticalColumns: swapVerticalColumns,
     verticalGeometry: verticalGeometry,
-    removeStation: removeStation, moveStation: moveStation, replaceStations: replaceStations,
+    removeStation: removeStation, removeStations: removeStations, moveStation: moveStation, replaceStations: replaceStations,
+    serializeStations: serializeStations, deserializeStations: deserializeStations, pasteStations: pasteStations,
     reorderStation: reorderStation, reverseStations: reverseStations,
     neighbors: neighbors, parseTransfers: parseTransfers, formatTransfers: formatTransfers, parseStations: parseStations,
     setHangingLength: setHangingLength, setHangingHeight: setHangingHeight,
     setElementOffset: setElementOffset, nudgeElement: nudgeElement, resetElement: resetElement,
+    nudgeElements: nudgeElements, resetElements: resetElements, validElementKey: validElementKey,
     serialize: function (state) { return JSON.stringify(state, null, 2); },
     deserialize: function (text) { return sanitize(JSON.parse(text)); },
   };

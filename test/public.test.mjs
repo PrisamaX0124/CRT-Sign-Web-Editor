@@ -25,6 +25,36 @@ test('editing and project round trips preserve immutable state', () => {
   assert.equal(edited.stations[0].zh, '站点 A');
   assert.equal(S.serialize(S.deserialize(S.serialize(edited))), S.serialize(edited));
 });
+test('station clipboard retains complete content and offsets, pasting independent copies in line order', () => {
+  let state = S.create();
+  state = S.addStation(state, state.currentId);
+  const id = state.stations[1].id;
+  state = S.patchStation(state, id, { zh: 'Station B', en: 'Copied Station', transfers: [{ number: '2', color: '#123456' }] });
+  state = S.nudgeElements(state, ['route:' + id, 'vertical:left:' + id], 7, -3);
+  const before = S.serialize(state), data = S.deserializeStations(S.serializeStations(state, [id]));
+  const pasted = S.pasteStations(state, data, 1), copy = pasted.stations[1];
+  assert.notEqual(copy.id, id);
+  assert.equal(copy.en, 'Copied Station');
+  assert.equal(copy.transfers[0].color, '#123456');
+  assert.equal(pasted.adjustments['route:' + copy.id].x, 7);
+  assert.equal(pasted.adjustments['vertical:left:' + copy.id].y, -3);
+  copy.transfers[0].color = '#FFFFFF';
+  assert.equal(S.serialize(state), before);
+  assert.equal(data.stations[0].station.transfers[0].color, '#123456');
+  assert.throws(() => S.deserializeStations({ kind: 'jr-sign-elements', version: 1 }), /剪贴板/);
+});
+test('batch station deletion and element reset stay immutable and keep one valid current station', () => {
+  let state = S.create();
+  for (let i = 0; i < 3; i++) state = S.addStation(state, state.stations[state.stations.length - 1].id);
+  const keys = state.stations.map(s => 'route:' + s.id), before = S.serialize(state);
+  const moved = S.nudgeElements(state, keys, 5, 2);
+  keys.forEach(key => assert.equal(moved.adjustments[key].x, 5));
+  assert.equal(Object.keys(S.resetElements(moved, keys).adjustments).length, 0);
+  const removed = S.removeStations(moved, state.stations.map(s => s.id));
+  assert.equal(removed.stations.length, 1);
+  assert.equal(removed.currentId, removed.stations[0].id);
+  assert.equal(S.serialize(state), before);
+});
 test('Beijing aliases and custom palettes survive selection, edits and JSON transfer',()=>{
   const C=context.SignCore,P=context.SignPalettes;
   assert.equal(C.citySwatches('beijing').length,23);

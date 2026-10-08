@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>站台标识生成器 · 吊板与线路图</title>
   <link rel="stylesheet" href="style.css?v=public-98ba20244c33">
-  <link rel="stylesheet" href="platform.css?v=public-beb3a2d1bc6a">
+  <link rel="stylesheet" href="platform.css?v=public-56c37302219a">
 </head>
 <body class="platform-page">
   <header class="platform-header">
@@ -30,13 +30,17 @@
     </aside>
     <main class="platform-preview">
       <div class="preview-toolbar"><div><strong id="preview-title">全线吊板</strong><span id="preview-dimensions"></span></div><div class="history-actions"><button id="undo" class="icon-btn" title="撤销 Ctrl+Z" aria-label="撤销">↶</button><button id="redo" class="icon-btn" title="重做 Ctrl+Shift+Z" aria-label="重做">↷</button><select id="preview-zoom" aria-label="预览缩放"><option value="fit">适合窗口</option><option value="1">100%</option><option value="0.5">50%</option><option value="0.25">25%</option></select></div></div>
-      <div id="platform-preview-scroll"><div id="platform-paper"><svg id="platform-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="站台标识牌实时预览"></svg><div id="element-hover-outline" class="platform-element-outline" hidden></div><div id="element-selection-outline" class="platform-element-outline selected" hidden></div></div></div>
+      <div id="platform-edit-actions" role="toolbar" aria-label="站点剪贴板与选择">
+        <button data-edit-action="select-all" title="全选当前版式元素 Ctrl+A">全选</button><button data-edit-action="copy" title="复制选中站点 Ctrl+C">复制</button><button data-edit-action="cut" title="剪切选中站点 Ctrl+X">剪切</button><button data-edit-action="paste" title="粘贴站点 Ctrl+V">粘贴</button><button data-edit-action="delete" title="删除选中站点 Del / Backspace">删除</button>
+        <select id="platform-clipboard-history" aria-label="粘贴最近20次复制或剪切的站点"><option value="">粘贴历史（0/20）</option></select><span id="platform-selection-status" role="status"></span>
+      </div>
+      <div id="platform-preview-scroll"><div id="platform-paper"><svg id="platform-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="站台标识牌实时预览"></svg><div id="element-hover-outline" class="platform-element-outline" hidden></div><div id="element-selection-outline" class="platform-element-outline selected" hidden></div><div id="element-multi-outlines"></div></div></div>
       <div id="platform-element-toolbar" role="toolbar" aria-label="标识牌元素快捷操作" hidden>
         <span id="toolbar-element-label"></span>
         <div class="platform-tool-group" role="group" aria-label="站点管理"><button id="tool-current" title="设为本站">本站</button><button id="tool-up" title="站点前移" aria-label="站点前移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 12H8m5-5-5 5 5 5"/></svg><span>前移</span></button><button id="tool-down" title="站点后移" aria-label="站点后移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16M4 12h12m-5-5 5 5-5 5"/></svg><span>后移</span></button><button id="tool-delete" title="删除站点" aria-label="删除站点"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 10v7m4-7v7"/></svg></button></div>
         <div class="platform-tool-group nudge-tools" role="group" aria-label="位置微调"><span class="tool-group-label">微调</span><button data-nudge-x="-1" data-nudge-y="0" title="元素左移 1px" aria-label="元素左移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg></button><button data-nudge-x="1" data-nudge-y="0" title="元素右移 1px" aria-label="元素右移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="-1" title="元素上移 1px" aria-label="元素上移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="1" title="元素下移 1px" aria-label="元素下移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button><button id="tool-reset" title="复位元素微调" aria-label="复位元素微调"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button></div>
       </div>
-      <div class="preview-footer"><span id="save-status" role="status">本地自动保存</span><span>悬停查看选框 · 点击编辑 · 浮动工具栏微调</span></div>
+      <div class="preview-footer"><span id="save-status" role="status">本地自动保存</span><span>多选整组微调 · Del 删除站点 · Esc / 空白处取消选择</span></div>
     </main>
     <aside class="platform-properties">
       <div class="platform-panel-title"><strong id="property-heading">标识牌设置</strong></div>
@@ -83,7 +87,7 @@
   <script src="js/palette-manager.js?v=public-71d85de854d0"></script>
   <script src="js/color-picker.js?v=public-55426316f73e"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
-  <script src="js/platform/state.js?v=public-d617243b433c"></script>
+  <script src="js/platform/state.js?v=public-2127bb34d55c"></script>
   <script src="js/platform/reference.js?v=public-80b402bac929"></script>
   <script src="js/platform/vertical-reference.js?v=public-a036244575d0"></script>
   <script src="js/platform/route.js?v=public-b8986b777b72"></script>
@@ -91,6 +95,7 @@
   <script src="js/platform/vertical.js?v=public-c8a8de23896a"></script>
   <script src="js/platform/render.js?v=public-6f4750e53f04"></script>
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
-  <script src="js/platform/main.js?v=public-2e951db31d8f"></script>
+  <script src="js/platform/clipboard.js?v=public-6cb6459bfe88"></script>
+  <script src="js/platform/main.js?v=public-2f8710a9955f"></script>
 </body>
 </html>
