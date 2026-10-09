@@ -99,10 +99,11 @@
       else {var bm=Core.badgeTextMetrics(state.line,measure,x,y,r);text(state.line,bm.x,bm.y,bm,fg,Core.FONT_ZH,400,bm.width,null,'badge-line');}
       centered(s.code, x, y+r*.45, r*.88, r*1.6, r*.78, fg, 'badge-code');
     }
-    function lineBar(y, h, x, direction) {
+    function lineBar(y, h, x, direction, hasNext) {
       var left = H*.12, right = W-H*.06;
       rect(direction === -1 ? x : left,y,direction === -1 ? right-x : x-left,h,muted,'passed-line');
-      if (direction === -1) polygon([[left,y+h],[left+h,y],[x,y],[x,y+h]],color,'active-line');
+      if (!hasNext) rect(direction === -1 ? left : x,y,direction === -1 ? x-left : right-x,h,muted,'active-line');
+      else if (direction === -1) polygon([[left,y+h],[left+h,y],[x,y],[x,y+h]],color,'active-line');
       else polygon([[x,y],[right-h,y],[right,y+h],[x,y+h]],color,'active-line');
     }
     rect(0,0,W,H,background,'background');
@@ -115,7 +116,7 @@
       var title = bilingualMetrics(near.current,u,[64,36,59.6407,32.3824,16.3437],W-pad*4,108.3668*u);
       begin('station:title',near.current.id,'本站站名','station-name');
       bilingual(near.current,mid,22.2812*u,title,'#000000','center'); end();
-      lineBar(shared.y,shared.barH,mid,state.direction);
+      lineBar(shared.y,shared.barH,mid,state.direction,!!near.next);
       begin('station:badge',near.current.id,'线路号 / 本站编号','station-badge'); badge(near.current,mid,y,radius); end();
       // Keep the hint in the central column, with the reference's bottom margin.
       // Reserve that column even when hidden so toggling never moves other elements.
@@ -128,10 +129,11 @@
       var left = state.direction === -1 ? near.next : near.previous, right = state.direction === 1 ? near.next : near.previous;
       var neighborTop=shared.y+shared.barH+17.055*u;
       [['left',left,W*166.1623/1024,state.direction === -1],['right',right,W*883.9865/1024,state.direction === 1]].forEach(function (item) {
-        var s = item[1] || { zh:item[3] ? '终点站' : '始发站', en:item[3] ? 'Terminus' : 'First Station' };
+        var s = item[1];
+        if (!s) return;
         var available=item[0]==='left'?Math.min(item[2]-pad,x0-H*.025-item[2]):Math.min(W-pad-item[2],item[2]-x0-total-H*.025);
         var m = bilingualMetrics(s,u,[48,28,44.355,27.646,10.72],Math.max(1,2*available),H-22.897*u-neighborTop);
-        begin('station:'+item[0],item[1] ? item[1].id : null,item[3] ? '下一站' : '上一站','neighbor');
+        begin('station:'+item[0],s.id,item[3] ? '下一站' : '上一站','neighbor');
         bilingual(s,item[2],neighborTop,m,item[3] ? color : muted,'center'); end();
       });
       if (state.showStationDirection !== false) {

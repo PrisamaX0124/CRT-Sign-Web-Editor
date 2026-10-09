@@ -25,6 +25,26 @@ test('editing and project round trips preserve immutable state', () => {
   assert.equal(edited.stations[0].zh, '站点 A');
   assert.equal(S.serialize(S.deserialize(S.serialize(edited))), S.serialize(edited));
 });
+
+test('terminal hanging signs have flat grey bars and no missing-neighbor captions; departures retain the next station', () => {
+  let base = S.create();
+  base = S.addStation(base, base.currentId);
+  for (const height of [192, 256]) for (const direction of [-1, 1]) for (const arriving of [true, false]) {
+    const index = (direction === -1) === arriving ? 0 : 1;
+    const state = S.setHangingHeight(S.settings(base, { mode: 'station', direction, currentId: base.stations[index].id }), height);
+    const scene = R.metrics(state, measure), next = S.neighbors(state).next;
+    const active = scene.nodes.find(n => n.attrs['data-role'] === 'active-line');
+    assert.equal(active.tag, arriving ? 'rect' : 'polygon');
+    assert.equal(active.attrs.fill, arriving ? state.muted : state.color);
+    for (const [key, neighbor] of [['station:left', direction === -1 ? next : S.neighbors(state).previous], ['station:right', direction === 1 ? next : S.neighbors(state).previous]]) {
+      assert.equal(scene.elements.some(e => e.key === key), !!neighbor);
+      assert.equal(scene.nodes.filter(n => n.attrs['data-element-key'] === key).map(n => n.text).join('|'), neighbor ? neighbor.zh + '|' + neighbor.en : '');
+    }
+  }
+  const single = S.settings(S.create(), { mode: 'station' }), scene = R.metrics(single, measure);
+  assert(!scene.elements.some(e => e.kind === 'neighbor'));
+  assert.equal(scene.nodes.find(n => n.attrs['data-role'] === 'active-line').attrs.fill, single.muted);
+});
 test('station clipboard retains complete content and offsets, pasting independent copies in line order', () => {
   let state = S.create();
   state = S.addStation(state, state.currentId);
