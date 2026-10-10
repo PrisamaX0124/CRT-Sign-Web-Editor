@@ -1,30 +1,35 @@
 <!-- Modified by PrisamaX0124, 2026-10-06: text lines, custom and Beijing palettes, badge ink fitting, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. -->
 # CRT-Sign-Web-Editor
 
-**在线使用：** [导向标识牌](https://prisamax0124.github.io/CRT-Sign-Web-Editor/) · [站台吊板与线路图](https://prisamax0124.github.io/CRT-Sign-Web-Editor/platform.html)
+在浏览器里制作轨道交通标识牌，编辑完成后导出 SVG 或 PNG。纯前端，无需安装依赖或构建。
 
-本项目由 [endcreeper861/JR-Guidance-Sign-Web-Editor](https://github.com/endcreeper861/JR-Guidance-Sign-Web-Editor) Fork 而来，保留原作者历史并沿用 [Apache License 2.0](LICENSE)。
+**在线使用：[导向标识牌](https://prisamax0124.github.io/CRT-Sign-Web-Editor/) · [站台吊板与线路图](https://prisamax0124.github.io/CRT-Sign-Web-Editor/platform.html)**
 
-纯前端、零依赖、无需构建。导向标识牌支持多行编辑、配色、尺寸、多选、剪贴板、预设及 SVG / PNG 导出；站台页提供全线吊板、本站吊板及纵向单列 / 双列线路图，共用站点、换乘和行车方向数据。
+## 两个编辑入口
 
-配色支持上海、重庆、成都、北京地铁；北京的19项线路色按用户提供色卡的HEX列录入。展开任意颜色控件并点击「管理自定义色板」，可新建、复制当前配色、编辑名称与HEX、调整顺序、保存并使用；两个页面共用同一浏览器中的色板，并支持导入 / 导出JSON跨设备使用。
+- **[导向标识牌](index.html)**：组合方向箭头、线路号、双语文字、出入口和服务设施图标，支持多行排版。
+- **[站台吊板与线路图](platform.html)**：制作全线吊板、本站吊板，以及纵向单列或双列线路图。切换版式时共用站点、换乘和行车方向数据。
 
-新建站台项目从一个可编辑站点开始；添加站点或批量填写自己的站名与换乘即可使用。项目与用户自行保存的预设仅存于当前浏览器，也可保存项目 JSON 跨设备使用。
+两个页面都支持多选、复制粘贴、撤销重做和预设，也适配手机。文字主要使用 MiSans，数字和线路号使用 Frutiger。
 
-站台页支持 Ctrl/Cmd 单击加选、Shift 范围选择、Ctrl+A 全选、Ctrl+C/X/V 复制/剪切/粘贴完整站点、Del/Backspace 删除，以及多选元素整组微调和复位。剪贴板历史保留本会话最近20次复制/剪切，撤销/重做保留20步并恢复完整选择；刷新后清空。版式选择器居中，Escape 或页面空白处取消选择，文本输入保留原生快捷键。
+## 开始使用
 
-站台线路号可输入文字名称；「添加文字换乘线路」支持中英文名称与颜色，批量格式为 `机场线~Airport Line:#0057B8`。文字线路使用 MiSans Regular，换乘色块与数字圆标同高。主线路圆标按实际墨区、圆边和分隔线留白缩放，支持多个中文字。纵向12起站号继续使用01–11的参考数字轮廓。导向标识的服务设施库新增「中国铁路」，外框为无填充、黑色1磅的圆角矩形。
+1. 打开对应页面，添加元素或站点，选中后在右侧修改内容。站台页也可以批量填写站名和换乘信息。
+2. 调整尺寸、排版和颜色。内置上海、重庆、成都、北京地铁配色，也可以创建自己的色板。
+3. 导出 **PNG** 用作图片或游戏贴图，导出 **SVG** 保留矢量与内嵌字体。需要以后继续编辑时，下载 **项目 JSON**。
 
-全线吊板中，非换乘本站以大圆外缘的45°切线连接活动线路色与已驶过灰色，斜切随左右行方向变化；圆标上半部的接合收进圆内，去除圆侧露出的尖角。文字换乘色块及双语名称按站名角度共同斜放；单条文字换乘附带与数字线路相同的「换乘 / Transfer」说明，字号、角度及墨区间距保持一致。多个换乘保留间距和边界留白；预览与SVG / PNG导出使用相同几何。
+编辑内容会自动保存在当前浏览器。换设备或长期保存时，建议另存项目 JSON；常用排版可以存为预设，方便下次复用。
 
-## 使用与部署
+## 本地使用与部署
 
-打开 index.html 或 platform.html。请保留 fonts/ 和 fonts-export/，以保证字体与导出完整。GitHub Pages 从 main 分支根目录部署，两页通过入口链接相互切换。
+下载完整目录后，双击 `index.html` 或 `platform.html` 即可使用。请保留 `fonts/` 和 `fonts-export/`，用于字体显示和导出。
 
-本地也可运行静态服务器，开发验证使用 node --test。公开版的状态与三种版式几何测试位于 test/public.test.mjs。
+也可以运行 `python -m http.server 8000`，然后打开 <http://localhost:8000>。部署到 GitHub Pages 时，选择 `main` 分支的根目录。
 
-## 字体、图标与来源
+开发检查使用 `node --test`。本分支的功能扩展与修复见[修改记录](docs/fork-changes.md)。
 
-MiSans Regular / Semibold / Bold 由用户提供，Frutiger 用于大文本、数字线路号与出入口编号；保留原字体文件与生成的导出资源。既有服务设施与方向图标移植自 signmaker-main 项目的 icon 目录，沿用上游生成的图标数据；中国铁路路徽按用户提供的图片整理为自包含矢量图标。
+## 来源与许可
 
-代码修改说明见 [docs/fork-changes.md](docs/fork-changes.md)，项目来源见 [NOTICE](NOTICE)。第三方字体、图标等素材遵循各自的授权，不因本仓库的代码协议改变。
+本项目基于 [endcreeper861/JR-Guidance-Sign-Web-Editor](https://github.com/endcreeper861/JR-Guidance-Sign-Web-Editor) 修改，保留原作者历史，代码沿用 [Apache License 2.0](LICENSE)。来源说明见 [NOTICE](NOTICE)。
+
+MiSans、Frutiger 字体由用户提供；服务设施和方向图标来自 signmaker-main，中国铁路图标按提供的路徽整理。字体、图标等第三方素材遵循各自的授权。
