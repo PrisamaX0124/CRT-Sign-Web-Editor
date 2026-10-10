@@ -118,7 +118,7 @@
       ['zh','en'].forEach(function(lang) {
         var asset=assets&&(!sample||s[lang]===sample[lang])&&assets[lang];
         var left=asset?asset.bounds.x-4:291, top=asset?y+asset.bounds.y-4-sourceY:y+(lang==='zh'?(isCurrent?-24:-21):(isCurrent?11:9));
-        lettering(s[lang],asset,left,top,512-left-8,lang==='zh'?(isCurrent?26:23):(isCurrent?16:15),paint,isCurrent?600:400,'vertical-station-'+lang,null,lang==='zh'?(isCurrent?28:24):16);
+        lettering(s[lang],asset,left,top,(isCurrent?464:504)-left,lang==='zh'?(isCurrent?26:23):(isCurrent?16:15),paint,isCurrent?600:400,'vertical-station-'+lang,null,lang==='zh'?(isCurrent?28:24):16);
       });
     }
     function transfer(s,y,center) {
@@ -154,15 +154,21 @@
     function column(which,dir,reverse) {
       origin=double&&which==='right'?W-512:0;mirror=reverse;
       var top=positions[count-1],bottom=positions[0],verticalDir=-dir,cy=positions[current],markerX=point(218),barLeft=markerX+(x(218,64)-markerX)*unit;
+      var terminal=current===(dir===1?count-1:0),initial=current===(dir===1?0:count-1);
       // Both ends extend 40 units beyond the outer station centers. Translate
       // the original cap inward, then meet its shorter edge without a ledge.
-      var barTop=top-(verticalDir===-1?3.059:40)*unit,barBottom=bottom+(verticalDir===1?3.059:40)*unit;
+      // At the terminal there is no onward colored section or slanted cap.
+      var barTop=top-(!terminal&&verticalDir===-1?3.059:40)*unit,barBottom=bottom+(!terminal&&verticalDir===1?3.059:40)*unit;
       columns.push({side:which,direction:dir,verticalDirection:verticalDir,positions:positions.slice(),markerX:markerX,badgeX:markerX+(point(250)-markerX)*unit,unit:unit});
       rect(barLeft,barTop,64*unit,barBottom-barTop,state.muted,'vertical-bar');
-      rect(barLeft,verticalDir===1?cy:barTop,64*unit,verticalDir===1?barBottom-cy:cy-barTop,state.color,'vertical-active-bar');
-      var endpoint=(dir===1?top:bottom)-verticalDir*25.941*unit;
-      var pts=[[218,1.941],[282,-35],[282,29],[218,65.941]].map(function(p,i){var y=endpoint+p[1]*unit*verticalDir;return[markerX+(point(p[0])-markerX)*unit,i<2?Core.clamp(y,barTop,barBottom):y];});
-      node('polygon',{points:pts.map(function(p){return p.join(',');}).join(' '),fill:state.color,'data-role':'vertical-tail','data-column-side':which,'data-direction':dir});
+      if(!terminal) {
+        // At the origin no section has been passed, including the outer extension.
+        var activeTop=initial||verticalDir===-1?barTop:cy,activeBottom=initial||verticalDir===1?barBottom:cy;
+        rect(barLeft,activeTop,64*unit,activeBottom-activeTop,state.color,'vertical-active-bar');
+        var endpoint=(dir===1?top:bottom)-verticalDir*25.941*unit;
+        var pts=[[218,1.941],[282,-35],[282,29],[218,65.941]].map(function(p,i){var y=endpoint+p[1]*unit*verticalDir;return[markerX+(point(p[0])-markerX)*unit,i<2?Core.clamp(y,barTop,barBottom):y];});
+        node('polygon',{points:pts.map(function(p){return p.join(',');}).join(' '),fill:state.color,'data-role':'vertical-tail','data-column-side':which,'data-direction':dir});
+      }
       state.stations.forEach(function(s,i) {
         var y=positions[i],active=(i-current)*dir>=0,ink=active?'#000000':tint(.7),marker=active?state.color:tint(.8),start=nodes.length;
         begin('vertical:'+which+':'+s.id,s.id,s.zh||s.code,'vertical-station');
@@ -178,6 +184,10 @@
           }
           numeral(s.code,250,y+14,fg,'vertical-badge-code',Ref.badge,24,50);
           caption(s,y,true,fg);
+          // Reuse the header arrow outline, rotating its leftward tip upward
+          // or downward. Mirroring the column only changes the arrow centre.
+          var a=Ref.header.arrow,b=a.bounds,ax=b.x+b.width/2,ay=b.y+b.height/2;
+          node('path',{d:a.d,fill:fg,'data-role':'vertical-current-arrow','data-direction':dir,'data-column-side':which},undefined,b,[0,dir,-dir,0,point(488)+dir*ay,y-dir*ax]);
         } else {
           circle(point(218),y,20,state.background,null,0,'vertical-station-circle');
           circle(point(218),y,21,'none',marker,2,'vertical-station-ring');

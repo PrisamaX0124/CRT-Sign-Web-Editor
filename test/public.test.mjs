@@ -160,3 +160,25 @@ test('single named transfers use the numeric Transfer caption outlines, size and
     assert.equal(JSON.stringify(n.matrix.slice(0,4)),JSON.stringify(captions[0][i].matrix.slice(0,4)));
   });
 });
+
+test('vertical origin strips are fully colored and terminal strips stay gray with flat ends',()=>{
+  for(const count of [1,2,11,50])for(const verticalVariant of ['left','right','double'])for(const direction of [-1,1])for(const verticalSwapped of [false,true])for(const current of count===1?[0]:[0,count-1]) {
+    const base=S.replaceStations(S.create(),Array.from({length:count},(_,i)=>({id:'endpoint-'+i,code:String(i+1),zh:'站点',en:'Station',transfers:[]})));
+    const state=S.settings(base,{mode:'vertical',verticalVariant,direction,verticalSwapped,currentId:base.stations[current].id}),scene=R.metrics(state,measure);
+    const bars=scene.nodes.filter(n=>n.attrs['data-role']==='vertical-bar');
+    scene.columns.forEach((column,i)=>{
+      const bar=bars[i].attrs,terminal=current===(column.direction===1?count-1:0);
+      const active=scene.nodes.find(n=>n.attrs['data-role']==='vertical-active-bar'&&n.attrs.x===bar.x);
+      const tail=scene.nodes.find(n=>n.attrs['data-role']==='vertical-tail'&&n.attrs['data-column-side']===column.side);
+      assert.equal(bar.fill,state.muted);
+      if(terminal) {
+        assert.equal(active,undefined);assert.equal(tail,undefined);
+        assert(Math.abs(bar.y-column.positions.at(-1)+40*column.unit)<1e-7);
+        assert(Math.abs(bar.y+bar.height-column.positions[0]-40*column.unit)<1e-7);
+      } else {
+        assert(active&&tail);assert.equal(tail.attrs.fill,state.color);
+        assert.equal(active.attrs.fill,state.color);assert.equal(active.attrs.y,bar.y);assert.equal(active.attrs.height,bar.height);
+      }
+    });
+  }
+});

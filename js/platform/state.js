@@ -161,10 +161,9 @@
   }
   function removeStations(state, ids) {
     if (state.stations.length <= 1) return state;
+    if (!state.stations.some(function (s) { return ids.indexOf(s.id) >= 0; })) return state;
     var list = state.stations.filter(function (s) { return ids.indexOf(s.id) < 0; });
-    if (list.length === state.stations.length) return state;
-    // A platform project always needs one station, even when the whole line is selected.
-    if (!list.length) list = [neighbors(state).current];
+    if (!list.length) list = [state.stations.find(function (s) { return s.id === state.currentId; }) || state.stations[0]];
     var index = state.stations.findIndex(function (s) { return s.id === state.currentId; });
     var current = list.find(function (s) { return s.id === state.currentId; }) || state.stations.slice(index).find(function (s) { return list.indexOf(s) >= 0; }) || list[list.length - 1];
     return settings(state, { stations: list, routeLayout: 'responsive', currentId: current.id });
