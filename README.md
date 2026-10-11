@@ -1,7 +1,11 @@
-<!-- Modified by PrisamaX0124, 2026-10-06: text lines, custom and Beijing palettes, badge ink fitting, railway icon, station glyphs and public release data separation; see docs/fork-changes.md. -->
+<!-- Modified by PrisamaX0124, 2026-10-11: clarify the Chongqing-inspired style, GMC origins and acknowledgements. -->
 # CRT-Sign-Web-Editor
 
-在浏览器里制作轨道交通标识牌，编辑完成后导出 SVG 或 PNG。纯前端，无需安装依赖或构建。
+一个仿[重庆轨道交通](https://zh.wikipedia.org/wiki/重庆轨道交通)风格的导视牌网页编辑器。
+
+原本是我在 [GrandMaster Craft Supported by K2Lin（GMC）](https://chinadlrs.com/mc/3) 服务器里做导视牌时用的自用工具，后来慢慢补了些功能，就整理开源出来了。有类似需求的话，也可以拿去用。
+
+可以直接在浏览器里制作导向标识牌、站台吊板和线路图，完成后导出 SVG 或 PNG。纯前端，无需安装依赖或构建。
 
 **在线使用：[导向标识牌](https://prisamax0124.github.io/CRT-Sign-Web-Editor/) · [站台吊板与线路图](https://prisamax0124.github.io/CRT-Sign-Web-Editor/platform.html)**
 
@@ -33,3 +37,9 @@
 本项目基于 [endcreeper861/JR-Guidance-Sign-Web-Editor](https://github.com/endcreeper861/JR-Guidance-Sign-Web-Editor) 修改，保留原作者历史，代码沿用 [Apache License 2.0](LICENSE)。来源说明见 [NOTICE](NOTICE)。
 
 MiSans、Frutiger 字体由用户提供；服务设施和方向图标来自 signmaker-main，中国铁路图标按提供的路徽整理。字体、图标等第三方素材遵循各自的授权。
+
+## 致谢
+
+感谢重庆轨道交通导视系统的设计者，这些导视牌的设计是这个编辑器主要的参考。
+
+也感谢原作者 [endcreeper861](https://github.com/endcreeper861) 开源 [JR-Guidance-Sign-Web-Editor](https://github.com/endcreeper861/JR-Guidance-Sign-Web-Editor)，让我能在原作的基础上继续修改，做成现在这个编辑器。
