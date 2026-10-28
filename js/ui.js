@@ -119,11 +119,13 @@
       if (!App.layout) return;
       var svg = document.getElementById('sign-svg');
       var wrap = document.getElementById('canvas-wrap');
+      var area = document.getElementById('canvas-area');
       var overlay = document.getElementById('sign-overlay');
       if (!svg || !wrap) return;
-      var avail = wrap.clientWidth;
+      var avail = area ? Math.min(area.clientWidth, 1600) : wrap.clientWidth;
       if (avail > 0) {
         svg.style.width = Math.min(avail, App.layout.width) * (App.canvasZoom || 1) + 'px';
+        wrap.style.width = svg.style.width;
         if (overlay) {
           overlay.style.width = svg.style.width;
           overlay.style.height = svg.getBoundingClientRect().height + 'px';
@@ -201,6 +203,27 @@
     deleteSelection: function () {
       var ids = App.selectedIds();
       if (ids.length) App.update(function (st) { return SignState.deleteElements(st, ids); });
+    },
+
+    backgroundColorTargets: function () {
+      return App.selectedIds().filter(function (elementId) {
+        return SignState.findElement(App.state, elementId).element.type !== 'exit';
+      });
+    },
+
+    backgroundColorValue: function () {
+      var values = App.backgroundColorTargets().map(function (elementId) {
+        return SignState.findElement(App.state, elementId).element.props.backgroundColor;
+      });
+      return values.every(function (value) { return value === values[0]; }) ? values[0] : undefined;
+    },
+
+    setBackgroundColor: function (value) {
+      var elementIds = App.backgroundColorTargets();
+      if (!elementIds.length) return;
+      if (value !== null && !SignCore.isHexColor(value)) return;
+      var color = value === null ? null : SignCore.normalizeHex(value);
+      App.update(function (state) { return SignState.updateElementsProps(state, elementIds, { backgroundColor: color }); });
     },
 
     paddingIds: function () {

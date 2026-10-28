@@ -152,6 +152,8 @@
   function buildToolbarPadding(side) {
     var label = side === 'left' ? '左内边距' : '右内边距';
     var trigger = h('button', { type: 'button', class: 'padding-trigger', 'aria-label': '自定义' + label }, [UI.paddingIcon(side)]);
+    var display = h('span', { class: 'padding-current', 'aria-live': 'polite' });
+    trigger.appendChild(display);
     var input = h('input', {
       type: 'number', min: '0', max: '8', step: 'any', tabindex: '-1',
       'aria-label': '自定义' + label + '（行高比例）', title: label + '（行高比例，0–8）',
@@ -165,6 +167,7 @@
       var value = App.paddingValue(side);
       input.value = value === null ? '' : value;
       input.placeholder = value === null ? '不同' : '';
+      display.textContent = value === null ? '不同' : String(value);
     }
     function commit() {
       var found = current(), raw = input.value.trim(), value = Number(raw);

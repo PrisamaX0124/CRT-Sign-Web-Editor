@@ -525,10 +525,6 @@
       label.htmlFor = id;
     } else if (control.tagName !== 'BUTTON') {
       control.setAttribute('aria-labelledby', id + '-label');
-      if (control.classList.contains('alignment-control')) {
-        control.querySelector('select').id = id;
-        label.htmlFor = id;
-      }
     }
     var children = [label, control];
     if (hint) children.push(h('div', { class: 'hint-text', text: hint }));
@@ -541,10 +537,26 @@
 
   var toolIcon = UI.toolIcon;
 
-  function alignmentDropdown(options, getValue, onPick, label, key) {
-    var control = UI.alignmentControl(options, getValue, onPick, label, key);
-    syncFns.push(control.sync);
-    return control.node;
+  function alignmentButtons(options, getValue, onPick, label, key) {
+    var group = h('div', { class: 'alignment-buttons', 'data-align': key, role: 'group', 'aria-label': label });
+    options.forEach(function (option) {
+      var button = h('button', { type: 'button', 'data-value': option.value, title: option.label,
+        'aria-label': label + '：' + option.label }, [toolIcon('align-' + option.value)]);
+      button.addEventListener('click', function () { onPick(option.value); });
+      group.appendChild(button);
+    });
+    function sync() {
+      var value = getValue();
+      group.setAttribute('data-mixed', String(value === null));
+      Array.prototype.forEach.call(group.children, function (button) {
+        var selected = button.getAttribute('data-value') === value;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+      });
+    }
+    sync();
+    syncFns.push(sync);
+    return group;
   }
 
   function numberInput(attrs, onCommit) {
@@ -638,7 +650,7 @@
     });
     rowHeightInput.value = s.rowHeight;
     bindSync(rowHeightInput, function () { return App.state.rowHeight; });
-    root.appendChild(field('行高（px）', rowHeightInput, '默认 192 px（0.75 格）；元素与内边距按行高适配'));
+    root.appendChild(field('行高（px）', rowHeightInput));
 
     var rowCount = h('input', { type: 'number', value: s.rows.length, disabled: 'disabled' });
     bindSync(rowCount, function () { return App.state.rows.length; });
@@ -665,7 +677,7 @@
     }
     paintUnits();
     syncFns.push(paintUnits);
-    var unitsField = field('标识牌宽度（1–15 格）', unitsSelect, '每格固定 256 px，例如 8 格 = 2048 px；选择格数后行高独立调整');
+    var unitsField = field('标识牌宽度（1–15 格）', unitsSelect, '每格 256 px');
     function paintUnitsField() { unitsField.hidden = App.state.widthMode !== 'fixed'; }
     paintUnitsField();
     syncFns.push(paintUnitsField);
@@ -708,7 +720,7 @@
       },
     });
     root.appendChild(h('div', { class: 'section-title', text: '牌面颜色与灰框' }));
-    root.appendChild(field('标识牌背景色', bgColor, '未单独设色的行沿用此颜色；元素背景可覆盖它'));
+    root.appendChild(field('标识牌背景色', bgColor));
     root.appendChild(buildRowBackgroundSettings());
 
     var frameWidthInput = numberInput({ class: 'frame-width-input', min: '0', max: '512', step: '1' }, function (v) {
@@ -854,20 +866,18 @@
   function buildBatchPanel() {
     var root = h('div', { class: 'batch-properties' });
     root.appendChild(h('div', { class: 'element-type-label', text: '已选择 ' + App.selectedIds().length + ' 个元素' }));
-    root.appendChild(h('div', { class: 'hint-text', text: '修改后应用于选中的适用元素；“不同”表示当前值不一致。' }));
     var layout = panelSection('批量排版', 'layout');
     [
       { key: 'elementAlign', label: '元素对齐', values: ['left', 'center', 'right'] },
       { key: 'align', label: '文字对齐', values: ['left', 'center', 'right'] },
       { key: 'contentAlign', label: '内容对齐', values: ['left', 'right'] },
     ].forEach(function (item) {
-      var control = UI.alignmentControl(item.values.map(function (value) {
+      var control = alignmentButtons(item.values.map(function (value) {
         return { value: value, label: value === 'center' ? '居中' : value === 'left' ? '左对齐' : '右对齐' };
       }), function () { return App.alignmentValue(item.key); }, function (value) { App.setAlignment(item.key, value); }, item.label, item.key);
-      var row = field(item.label, control.node);
+      var row = field(item.label, control);
       function sync() {
         row.hidden = !App.alignmentTargets(item.key).length || (item.key === 'elementAlign' && App.state.widthMode !== 'fixed');
-        control.sync();
       }
       sync(); syncFns.push(sync); layout.appendChild(row);
     });
@@ -889,6 +899,19 @@
       layout.appendChild(field('左右内边距（行高比例）', grid));
     }
     root.appendChild(layout);
+    if (App.backgroundColorTargets().length) {
+      var colors = panelSection('元素颜色', 'colors');
+      colors.appendChild(field('元素背景色', buildColorPicker({
+        value: App.backgroundColorValue(), scope: '元素背景色', nullable: true,
+        getValue: App.backgroundColorValue,
+        isMixed: function () { return App.backgroundColorValue() === undefined; },
+        onChange: App.setBackgroundColor,
+      })));
+      if (App.backgroundColorTargets().length < App.selectedIds().length) {
+        colors.appendChild(h('div', { class: 'hint-text', text: '出口保持固定黄色。' }));
+      }
+      root.appendChild(colors);
+    }
     var del = h('button', { class: 'btn btn-danger', text: '删除选中元素' });
     del.addEventListener('click', App.deleteSelection);
     root.appendChild(del);
@@ -928,14 +951,14 @@
     }
     Array.prototype.slice.call(fields.children).forEach(function (node) {
       if (node.classList.contains('color-field') || node.classList.contains('fixed-color-hint')) colors.appendChild(node);
-      else if (node.querySelector('.seg-group, .format-btn, .alignment-control, input[type="range"]')) layout.appendChild(node);
+      else if (node.querySelector('.seg-group, .format-btn, .alignment-buttons, input[type="range"]')) layout.appendChild(node);
       else content.appendChild(node);
     });
 
     // 元素对齐：仅固定宽度模式支持（动态宽度整体左起排列）。
     // 编辑过程中宽度模式不会变化（它在设置面板里，与本面板互斥），构建时判断即可。
     if (App.state.widthMode === 'fixed') {
-      layout.appendChild(field('元素对齐', alignmentDropdown([
+      layout.appendChild(field('元素对齐', alignmentButtons([
         { value: 'left', label: '贴左' },
         { value: 'center', label: '居中' },
         { value: 'right', label: '贴右' },
@@ -953,7 +976,6 @@
     [content, layout, colors].forEach(function (section) {
       if (section.children.length > 1) root.appendChild(section);
     });
-    colors.appendChild(h('div', { class: 'hint-text', text: '整块标识牌的背景色在返回后的「标识牌设置」中调整。' }));
 
     root.appendChild(h('div', { class: 'divider' }));
     var del = h('button', { class: 'btn btn-danger', text: '🗑 删除元素' });
@@ -1011,7 +1033,7 @@
     bindSync(en, function () { return live().props.textEn; });
     root.appendChild(field('英文文本', en));
 
-    var alignTools = alignmentDropdown([
+    var alignTools = alignmentButtons([
       { value: 'left', label: '左对齐' },
       { value: 'center', label: '居中' },
       { value: 'right', label: '右对齐' },
@@ -1046,9 +1068,8 @@
     })));
   }
 
-  /** 内容对齐下拉框（数字线路/文字线路/出口）：元素内部左/右镜像排版，与元素对齐无关 */
   function contentAlignGroup(el, live) {
-    return field('内容对齐', alignmentDropdown([
+    return field('内容对齐', alignmentButtons([
       { value: 'left', label: '左对齐' },
       { value: 'right', label: '右对齐' },
     ], function () { return live().props.align; }, function (v) {
@@ -1185,7 +1206,7 @@
       onChange: function (v) { patchProps(el.id, { color: v }); },
     })));
     if (el.type === 'exit') {
-      root.appendChild(h('div', { class: 'hint-text fixed-color-hint', text: '元素背景色固定为出口黄 #F7D917' }));
+      root.appendChild(h('div', { class: 'hint-text fixed-color-hint', text: '出口背景固定为黄色' }));
     }
   }
 
@@ -1258,21 +1279,17 @@
       nullable: true,
       onChange: function (v) { patchProps(el.id, { backgroundColor: v }); },
     });
-    return field('元素背景色', picker, '仅覆盖当前元素的区域；透明时显示标识牌背景色');
+    return field('元素背景色', picker);
   }
 
   function buildPaddingEditor(el, live) {
     // 上下左右挤一行时输入框过窄（"0.25" 显示成 "0.2"）：
     // 左右一行、上下一行，两行各两框
-    var wrap = h('details', { class: 'padding-editor' }, [h('summary', { text: '内边距' })]);
-    wrap.appendChild(checkbox('左右内边距随相邻自动缩放', function () {
+    var wrap = h('div', { class: 'padding-editor' });
+    wrap.appendChild(checkbox('自动调整左右内边距', function () {
       return live().props.paddingAuto;
     }, function (v) {
       patchProps(el.id, { paddingAuto: v }); // v=true 时管线立即按相邻关系重算
-    }));
-    wrap.appendChild(h('div', {
-      class: 'hint-text',
-      text: '勾选时左右内边距在相邻元素一侧自动减半（0.2 ↔ 0.1）；手动修改任一侧即固定。',
     }));
     var grid = h('div', { style: 'display:grid;grid-template-columns:repeat(2,1fr);gap:6px' });
     var keys = [
@@ -1307,7 +1324,7 @@
         title, valueControl,
       ]));
     });
-    wrap.appendChild(field('内边距（相对行高比例）', grid, '左右内边距可大于 1（元素更宽）'));
+    wrap.appendChild(field('内边距（行高比例）', grid));
     return wrap;
   }
 

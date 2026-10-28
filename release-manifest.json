@@ -56,6 +56,8 @@
     "platform.css",
     "platform.html",
     "style.css",
+    "test/editor-ui.html",
+    "test/multiselect.test.mjs",
     "test/public.test.mjs"
   ]
 }

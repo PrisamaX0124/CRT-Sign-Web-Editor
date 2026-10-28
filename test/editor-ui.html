@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>编辑区与属性面板测试</title>
+<style>
+body { font: 14px system-ui; background: #f4f6f8; color: #172033; }
+iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
+.pass { color: #087338; } .fail { color: #bd2222; }
+</style>
+<h1>编辑区与属性面板测试</h1>
+<p id="summary">运行中…</p>
+<div id="results"></div>
+<iframe id="editor" src="../index.html"></iframe>
+<script>
+(async function () {
+  var frame = document.getElementById('editor'), results = [];
+  var application, state, editorDocument, editorWindow;
+  function assert(condition, message) { if (!condition) throw new Error(message || '结果不符合预期'); }
+  function query(selector) { return editorDocument.querySelector(selector); }
+  function waitFor(check) {
+    return new Promise(function (resolve, reject) {
+      var deadline = Date.now() + 10000;
+      function next() {
+        if (check()) return resolve();
+        if (Date.now() > deadline) return reject(new Error('等待页面超时'));
+        setTimeout(next, 40);
+      }
+      next();
+    });
+  }
+  async function test(name, run) {
+    try { await run(); results.push({ name: name, pass: true }); }
+    catch (error) { results.push({ name: name, pass: false, message: error.message }); }
+    var result = results[results.length - 1], row = document.createElement('p');
+    row.className = result.pass ? 'pass' : 'fail';
+    row.textContent = (result.pass ? '通过：' : '失败：') + name + (result.message ? '；' + result.message : '');
+    document.getElementById('results').appendChild(row);
+  }
+  function change(input, value) {
+    input.value = value;
+    input.dispatchEvent(new editorWindow.Event('input', { bubbles: true }));
+    input.dispatchEvent(new editorWindow.Event('change', { bubbles: true }));
+  }
+  function pointer(type, target, x, identifier) {
+    target.dispatchEvent(new editorWindow.PointerEvent(type, { bubbles: true, cancelable: true,
+      clientX: x, clientY: 200, pointerId: identifier || 91, pointerType: 'mouse', isPrimary: true, button: 0 }));
+  }
+  function properties(element) { return state.findElement(application.state, element.id).element.props; }
+  try {
+    await waitFor(function () {
+      var current = frame.contentWindow;
+      var modal = current.document.querySelector('.modal-mask [data-act="ok"]');
+      if (modal && (!current.App || !current.App.measure)) modal.click();
+      return current.App && current.App.measure && current.App.state;
+    });
+    editorWindow = frame.contentWindow; editorDocument = frame.contentDocument;
+    application = editorWindow.App; state = editorWindow.SignState;
+    var saved = application.state;
+    var elements = ['icon', 'number-line', 'space', 'exit', 'bilingual-text'].map(function (type) { return state.createElement(type); });
+    application.update(function () {
+      var sign = state.createSign();
+      elements.forEach(function (element) { sign = state.addElement(sign, sign.rows[0].id, element); });
+      return sign;
+    });
+    await test('一至六格、宽牌、动态宽度及缩放的外层宽度与牌面一致', function () {
+      [256, 512, 768, 1024, 1280, 1536, 2048].forEach(function (width) {
+        application.update(function (sign) { return state.updateSignSettings(sign, { widthMode: 'fixed', width: width }); });
+        [0.5, 1, 2].forEach(function (zoom) {
+          application.canvasZoom = zoom; application.fitSignDisplay();
+          var graphic = query('#sign-svg').getBoundingClientRect(), container = query('#canvas-wrap').getBoundingClientRect();
+          assert(Math.abs(graphic.width - container.width) < 1, '外层宽度不一致：' + width + '，缩放：' + zoom);
+          assert(Math.abs(graphic.right - container.right) < 1);
+          assert(Math.abs(query('#sign-overlay').getBoundingClientRect().width - graphic.width) < 1);
+        });
+      });
+      application.canvasZoom = 1;
+      application.update(function (sign) { return state.updateSignSettings(sign, { widthMode: 'dynamic' }); });
+      assert(query('#sign-svg').style.width === query('#canvas-wrap').style.width);
+      application.update(function (sign) { return state.updateSignSettings(sign, { widthMode: 'fixed', width: 1280 }); });
+    });
+    await test('混合选择批量改色、透明和撤销，出口与整牌背景保持原值', function () {
+      application.selectMany(elements.map(function (element) { return element.id; }));
+      var panel = query('.batch-properties'), picker = query('[data-scope="元素背景色"]');
+      assert(picker, '缺少批量背景色');
+      change(picker.querySelector('.hex-input'), '#123456');
+      elements.forEach(function (element) { assert(properties(element).backgroundColor === (element.type === 'exit' ? '#F7D917' : '#123456')); });
+      assert(query('.batch-properties') === panel);
+      application.undo(); assert(properties(elements[0]).backgroundColor === null && application.selectedIds().length === elements.length);
+      application.redo(); assert(picker.querySelector('.hex-input').value === '#123456');
+      picker.querySelector('.cp-null-btn').click(); assert(properties(elements[2]).backgroundColor === null);
+      application.update(function (sign) { return state.updateElementProps(sign, elements[0].id, { backgroundColor: '#445566' }); });
+      assert(picker.querySelector('.hex-input').placeholder === '不同');
+      assert(!picker.querySelector('.cp-null-btn').classList.contains('active'), '混合值不能显示为透明');
+      picker.querySelector('.cp-null-btn').click(); assert(picker.querySelector('.cp-null-btn').classList.contains('active'));
+      assert(application.state.backgroundColor === '#FFFFFF');
+      application.selectMany([elements[3].id, state.createElement('exit').id]);
+      assert(!query('[data-scope="元素背景色"]'), '出口不应提供背景色编辑');
+    });
+    await test('右栏对齐按钮直接切换，混合值不选中，四向内边距直接显示', function () {
+      application.select(elements[4].id);
+      var group = query('#right-panel-body [data-align="align"]');
+      assert(group.querySelectorAll('button svg').length === 3 && !group.querySelector('select'));
+      var button = group.querySelector('[data-value="right"]'); button.focus(); button.click();
+      assert(properties(elements[4]).align === 'right' && button.getAttribute('aria-pressed') === 'true');
+      assert(query('#right-panel-body [data-align="align"]') === group && editorDocument.activeElement === button);
+      assert(query('.padding-editor').tagName === 'DIV' && query('.padding-editor').querySelectorAll('input[type="number"]').length === 4);
+      application.undo(); assert(button.getAttribute('aria-pressed') === 'false');
+      application.select(elements[1].id);
+      assert(query('#right-panel-body [data-align="align"]').querySelectorAll('button').length === 2);
+    });
+    await test('浮动栏拖动中显示当前值，取消后保留显示并支持一步撤销', function () {
+      application.select(elements[4].id);
+      var trigger = query('#element-toolbar [data-padding="left"] .padding-trigger');
+      var display = trigger.querySelector('.padding-current'), before = properties(elements[4]).padding.left;
+      pointer('pointerdown', trigger, 100); pointer('pointermove', editorDocument, 116);
+      assert(Number(display.textContent) === properties(elements[4]).padding.left);
+      assert(Math.abs(Number(display.textContent) - before - 0.1) < 0.00001);
+      assert(editorWindow.getComputedStyle(display).visibility === 'visible');
+      pointer('pointercancel', editorDocument, 116);
+      assert(!editorDocument.body.classList.contains('padding-scrubbing'));
+      assert(Number(display.textContent) === properties(elements[4]).padding.left);
+      application.undo(); assert(Number(display.textContent) === before);
+    });
+    await test('多选拖动显示不同值，清除到相同值后立即回显', function () {
+      application.selectMany([elements[0].id, elements[4].id]);
+      application.setPadding('left', 0.375);
+      application.update(function (sign) { return state.updateElementProps(sign, elements[0].id, { padding: { left: 0.1 } }); });
+      var trigger = query('#element-toolbar [data-padding="left"] .padding-trigger');
+      assert(trigger.querySelector('.padding-current').textContent === '不同');
+      pointer('pointerdown', trigger, 100); pointer('pointermove', editorDocument, -100); pointer('pointerup', editorDocument, -100);
+      assert(trigger.querySelector('.padding-current').textContent === '0');
+    });
+    await test('改色后的矢量与图片导出保留尺寸、元素背景和出口固定色', async function () {
+      application.selectMany(elements.map(function (element) { return element.id; })); application.setBackgroundColor('#2468AC');
+      var fonts = await editorWindow.SignExporters.ensureFontData(application.state);
+      var source = editorWindow.SignExporters.buildExportSVGString(application.state, application.measure, fonts);
+      assert(source.includes('#2468AC') && source.includes('#F7D917'));
+      assert(!source.includes('padding-current') && !source.includes('element-toolbar'));
+      var image = await editorWindow.SignExporters.rasterizePNG(source, application.layout);
+      var bitmap = await editorWindow.createImageBitmap(image);
+      assert(bitmap.width === application.layout.width && bitmap.height === application.layout.height); bitmap.close();
+    });
+    await test('三百二十像素和三百七十五像素宽度下，右栏与工具栏不超出编辑区', async function () {
+      for (var width of [320, 375]) {
+        frame.style.width = width + 'px'; editorWindow.dispatchEvent(new editorWindow.Event('resize'));
+        await waitFor(function () { return application.isMobileView(); });
+        application.select(elements[4].id); application.fitSignDisplay();
+        var toolbar = query('#element-toolbar').getBoundingClientRect();
+        assert(toolbar.left >= 0 && toolbar.right <= width, '浮动栏超出屏幕');
+        var panel = query('#right-panel-body'); assert(panel.scrollWidth <= panel.clientWidth, '属性面板横向溢出');
+        assert(query('#right-panel-body [data-align="align"]').querySelectorAll('button').length === 3);
+      }
+    });
+    application.canvasZoom = 1; application.update(function () { return saved; }); application.select(null);
+  } catch (error) { await test('页面启动', function () { throw error; }); }
+  var failed = results.filter(function (result) { return !result.pass; }).length;
+  document.getElementById('summary').textContent = (results.length - failed) + ' 通过 / ' + failed + ' 失败';
+  document.title = failed ? '✖ 编辑器测试失败' : '✔ 编辑器测试全部通过';
+})();
+</script>
+</html>

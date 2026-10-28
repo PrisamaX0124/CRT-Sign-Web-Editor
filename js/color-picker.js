@@ -15,11 +15,15 @@
     var nullBtn=nullable?h('button',{type:'button',class:'cp-null-btn',text:'透明',title:'清除'+scope+'（透明）','aria-label':scope+'设为透明'}):null;
     function paint() {
       var idle=document.activeElement!==hex;
-      current.classList.toggle('nullable-null',value===null);
+      var mixed=!!(opts.isMixed&&opts.isMixed());
+      root && root.classList.toggle('mixed',mixed);
+      current.classList.toggle('nullable-null',value===null&&!mixed);
+      hex.placeholder=mixed?'不同':'#RRGGBB';
+      current.textContent=mixed?'不同':'';
       if(value===null){current.removeAttribute('style');if(idle)hex.value='';}
       else{current.style.background=value;if(idle)hex.value=value;native.value=value;}
-      if(nullBtn)nullBtn.classList.toggle('active',value===null);
-      swatchBtns.forEach(function(b){var active=b.dataset.color===value;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
+      if(nullBtn)nullBtn.classList.toggle('active',value===null&&!mixed);
+      swatchBtns.forEach(function(b){var active=!mixed&&b.dataset.color===value;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
     }
     function commit(v){value=v;paint();if(opts.onChange)opts.onChange(v);}
     hex.addEventListener('input',function(){
@@ -49,7 +53,7 @@
     var row=h('div',{class:'cp-row'},[current,hex,native,nullBtn]),root=h('div',{class:'color-picker'+(opts.mini?' mini':''),'data-scope':scope},[row,details]);
     root.sync=function(){
       var nextCity=opts.getCity(),nextRevision=global.SignPalettes?global.SignPalettes.revision():0;if(nextCity!==city||revision!==nextRevision){city=nextCity;renderSwatches();}
-      if(opts.getValue){var next=opts.getValue()||null;if(next!==value){value=next;paint();}}
+      if(opts.getValue){value=opts.getValue()||null;paint();}
     };
     renderSwatches();paintToggle();return root;
   }
