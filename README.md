@@ -9,7 +9,7 @@
 
 ### [导向标识牌](https://prisamax0124.github.io/CRT-Sign-Web-Editor/) · [站台吊板与线路图](https://prisamax0124.github.io/CRT-Sign-Web-Editor/platform.html)
 
-这个项目原本是我在自己的 Minecraft 建筑服务器 [GrandMaster Craft Supported by K2Lin](https://chinadlrs.com/mc/3) 里制作轨道交通导视牌的自用工具。
+这个项目原本是我在自己的 Minecraft 建筑服务器 [GrandMaster Craft](https://chinadlrs.com/mc/3) 里制作轨道交通导视牌的自用工具。
 
 后来陆续补充了一些功能，并加入了站台吊板和纵向线路图编辑器，就整理成了现在的开源版本。
 
@@ -20,7 +20,7 @@
 
 <img width="1280" height="675" alt="image" src="https://github.com/user-attachments/assets/662173bf-2bb4-4377-b422-54499e59859e" />
 
-*（↑ 在 GrandMaster Craft Supported by K2Lin 旧世界轨道交通 4/10号线 上云岭站中的实际使用效果）*
+*（↑ 在 GrandMaster Craft 旧世界轨道交通 4/10号线 上云岭站中的实际使用效果）*
 
 
 ## 如何使用？
