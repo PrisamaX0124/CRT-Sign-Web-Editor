@@ -4,28 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>站台标识生成器 · 吊板与线路图</title>
-  <link rel="stylesheet" href="style.css?v=02d2bb340c73">
-  <link rel="stylesheet" href="platform.css?v=8fed901c11e0">
+  <link rel="stylesheet" href="style.css?v=20373272744f">
+  <link rel="stylesheet" href="platform.css?v=43f64788cc5d">
 </head>
 <body class="editor-page platform-page">
-  <header class="editor-header platform-header">
-    <nav class="editor-navigation" aria-label="切换编辑器">
-      <a href="index.html">导向标识</a>
-      <a href="index.html?editor=transfer">换乘标识</a>
-      <a href="platform.html" aria-current="page">站台标识</a>
-    </nav>
-    <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
-      <span>给项目加星</span>
-    </a>
-    <nav class="mode-tabs" aria-label="标识牌版式">
-      <button data-mode="route" aria-pressed="true">全线吊板</button>
-      <button data-mode="station" aria-pressed="false">本站吊板</button>
-      <button data-mode="vertical" aria-pressed="false">纵向线路图</button>
-    </nav>
+  <header class="editor-header">
+    <div class="editor-header-content">
+      <nav class="editor-navigation" aria-label="切换编辑器">
+        <a href="index.html">导向标识</a>
+        <a href="index.html?editor=transfer">换乘标识</a>
+        <a href="platform.html" aria-current="page">站台标识</a>
+      </nav>
+      <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
+        <span>给项目加星</span>
+      </a>
+      <nav class="mode-tabs" aria-label="标识牌版式">
+        <button data-mode="route" aria-pressed="true">全线吊板</button>
+        <button data-mode="station" aria-pressed="false">本站吊板</button>
+        <button data-mode="vertical" aria-pressed="false">纵向线路图</button>
+      </nav>
+    </div>
   </header>
-  <div class="platform-workspace">
-    <aside class="platform-stations">
+  <div class="platform-workspace editor-workspace">
+    <aside class="platform-stations editor-left">
       <div class="platform-panel-title"><strong>线路内容</strong><span id="station-count"></span></div>
       <div class="library-tabs" aria-label="内容与预设"><button data-library="stations" aria-pressed="true">站点</button><button data-library="presets" aria-pressed="false">预设</button></div>
       <div id="station-library" class="library-pane">
@@ -35,7 +37,7 @@
       </div>
       <div id="preset-library" class="library-pane" hidden><div id="preset-list"></div><button class="btn" id="save-preset">＋ 保存当前标识牌为预设</button></div>
     </aside>
-    <main class="platform-preview">
+    <main class="platform-preview editor-center">
       <div class="preview-toolbar"><div><strong id="preview-title">全线吊板</strong><span id="preview-dimensions"></span></div><div class="history-actions"><button id="undo" class="icon-btn" title="撤销 Ctrl+Z" aria-label="撤销">↶</button><button id="redo" class="icon-btn" title="重做 Ctrl+Shift+Z" aria-label="重做">↷</button><select id="preview-zoom" aria-label="预览缩放"><option value="fit">适合窗口</option><option value="1">100%</option><option value="0.5">50%</option><option value="0.25">25%</option></select></div></div>
       <div id="platform-edit-actions" role="toolbar" aria-label="站点剪贴板与选择">
         <button data-edit-action="select-all" title="全选当前版式元素 Ctrl+A">全选</button><button data-edit-action="copy" title="复制选中站点 Ctrl+C">复制</button><button data-edit-action="cut" title="剪切选中站点 Ctrl+X">剪切</button><button data-edit-action="paste" title="粘贴站点 Ctrl+V">粘贴</button><button data-edit-action="delete" title="删除选中站点 Del / Backspace">删除</button>
@@ -49,7 +51,7 @@
       </div>
       <div class="preview-footer"><span id="save-status" role="status">本地自动保存</span><span>多选整组微调 · Del 删除站点 · Esc / 空白处取消选择</span></div>
     </main>
-    <aside class="platform-properties" aria-labelledby="property-heading">
+    <aside class="platform-properties editor-right" aria-labelledby="property-heading">
       <header class="panel-header">
         <div class="panel-heading">
           <button type="button" class="icon-btn" id="return-to-settings" aria-label="返回标识牌设置" title="返回标识牌设置" hidden>

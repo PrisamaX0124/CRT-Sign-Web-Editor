@@ -100,8 +100,8 @@
       for(var j=0;j<20;j++)key('z',{ctrlKey:true});assert(A.state.lineName==='历史4'&&$('undo').disabled,'仅保留最近20步');
       key('z',{ctrlKey:true,shiftKey:true});assert(A.state.lineName==='历史5');restore();
     });
-    await test('版式选择器在页面中间，窄屏按钮和剪贴板没有横向溢出', async function () {
-      function centered(){var nav=d.querySelector('.mode-tabs').getBoundingClientRect();assert(Math.abs((nav.left+nav.right)/2-w.innerWidth/2)<1,'版式选择器没有居中');}
+    await test('版式选择器在页眉中间，窄屏按钮和剪贴板没有横向溢出', async function () {
+      function centered(){var nav=d.querySelector('.mode-tabs').getBoundingClientRect(),header=d.querySelector('.editor-header').getBoundingClientRect();assert(Math.abs(nav.left+nav.right-header.left-header.right)<=1,'版式选择器没有在页眉居中');}
       centered();var oldWidth=frame.style.width;frame.style.width='390px';w.dispatchEvent(new w.Event('resize'));await new Promise(function(resolve){w.requestAnimationFrame(function(){w.requestAnimationFrame(resolve);});});
       centered();assert(d.documentElement.scrollWidth<=w.innerWidth+1,'窄屏横向溢出');var bar=$('platform-edit-actions').getBoundingClientRect();assert(bar.right<=w.innerWidth+1);
       frame.style.width=oldWidth;w.dispatchEvent(new w.Event('resize'));restore();

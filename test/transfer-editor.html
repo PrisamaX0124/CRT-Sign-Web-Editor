@@ -118,6 +118,39 @@
         '线路数字未用导向标识的常规字重');
     });
 
+    await test('从左栏点选线路和箭头，右栏显示对应属性，左栏仍可切换分组', () => {
+      assert(element('#transfer-content').contains(element('#transfer-arrangements')) &&
+        element('#transfer-content').contains(element('#transfer-groups')), '分组和牌面元素应放在左栏');
+      click('#transfer-groups [data-select-transfer="line:first"]');
+      assert(isVisible('#transfer-line-properties') && isVisible('#transfer-arrangements'), '编辑线路时仍应能使用左栏分组');
+      click('#transfer-groups [data-select-transfer="arrow:upper"]');
+      assert(isVisible('#transfer-arrow-properties') && isVisible('#transfer-groups'), '从左栏切换到箭头时应显示对应属性');
+      returnToSettings();
+    });
+
+    await test('窄桌面下，版式 B 的四个分组按钮都能在左栏点选', async () => {
+      const originalWidth = frame.style.width;
+      frame.style.width = '769px';
+      try {
+        mode('separate');
+        await new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
+        const picker = element('#transfer-arrangements');
+        const bounds = picker.getBoundingClientRect();
+        assert(picker.children.length === 4 && [...picker.children].every(button => {
+          const area = button.getBoundingClientRect();
+          return area.left >= bounds.left && area.right <= bounds.right;
+        }), '四个分组按钮都应完整显示在左栏');
+        click('#transfer-groups [data-select-transfer="arrow:lower"]');
+        click('[data-transfer-arrangement="1"]');
+        assert(isVisible('#transfer-settings') && !page.querySelector('[data-transfer-element="arrow:lower"]'),
+          '从左栏改为单线路后，应关闭已移除的下组箭头属性');
+      } finally {
+        arrangement('1+1');
+        mode('guidance');
+        frame.style.width = originalWidth;
+      }
+    });
+
     await test('点选色带、文字和箭头，选框、属性面板与浮动工具栏跟随选择', async () => {
       select('line:first');
       assert(element('[data-transfer-element="line:first"]').getAttribute('aria-pressed') === 'true', '色带没有选框');

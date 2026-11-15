@@ -1,11 +1,3 @@
-#transfer-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 304px;
-  flex: 1;
-  min-height: 0;
-}
-#transfer-editor[hidden] { display: none; }
-
 .transfer-preview-scroll {
   display: grid;
   place-items: center;
@@ -71,9 +63,8 @@
 .transfer-arrow-position:hover { border-color: var(--accent); background: var(--surface-soft); }
 .transfer-section .section-title { margin: 0 0 10px; font-size: 12px; letter-spacing: .02em; }
 .transfer-section .field:last-child { margin-bottom: 0; }
-#transfer-arrangements { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
+#transfer-arrangements { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
 #transfer-arrangements button {
-  flex: 1;
   min-height: 32px;
   border-radius: 5px;
   padding: 4px;
@@ -125,9 +116,12 @@
 .transfer-export .btn { flex: 1; margin: 0; }
 #transfer-status { white-space: normal; overflow-wrap: anywhere; }
 
+@media (width > 768px) {
+  #transfer-properties { width: 304px; }
+}
 @media (max-width: 768px) {
-  #transfer-editor { display: flex; flex-direction: column; overflow-y: auto; }
+  #transfer-editor { overflow-y: auto; }
   #transfer-editor .platform-preview { height: clamp(320px, 56dvh, 520px); }
-  #transfer-property-scroll { overflow: visible; }
+  #transfer-content .panel-body, #transfer-property-scroll { overflow: visible; }
   #transfer-toolbar-title { max-width: 86px; }
 }

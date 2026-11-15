@@ -16,11 +16,16 @@
 (async function () {
   const frame = document.getElementById('editor');
   const results = document.getElementById('results');
-  const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-sign-prefs', 'public-sign-presets', 'public-sign-custom-palettes', 'public-platform-sign-project-v1', 'public-platform-sign-presets-v1'];
+  const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-sign-prefs', 'public-sign-presets', 'public-sign-custom-palettes', 'public-platform-sign-project-v1', 'public-platform-sign-presets-v1', 'public-transfer-sign-project-v1'];
   const savedStorage = storageKeys.map(key => [key, localStorage.getItem(key)]);
   const editors = [
     { name: '导向标识', path: 'index.html', otherPath: 'platform.html', toolbar: '#element-toolbar', panel: '#right-panel-body', back: '#close-element-btn', heading: '#right-panel-title' },
     { name: '站台标识', path: 'platform.html', otherPath: 'index.html', toolbar: '#platform-element-toolbar', panel: '#property-scroll', back: '#return-to-settings', heading: '#property-heading' },
+  ];
+  const layouts = [
+    { name: '导向标识', path: 'index.html', left: '#left-panel', middle: '#center-panel', right: '#right-panel' },
+    { name: '换乘标识', path: 'index.html?editor=transfer', left: '#transfer-content', middle: '#transfer-preview', right: '#transfer-properties', previewFirst: true },
+    { name: '站台标识', path: 'platform.html', left: '.platform-stations', middle: '.platform-preview', right: '.platform-properties' },
   ];
 
   function assert(condition, message) {
@@ -63,6 +68,85 @@
 
   try {
     storageKeys.forEach(key => localStorage.removeItem(key));
+    for (const layout of layouts) {
+      frame.style.width = '1396px';
+      await load('../' + layout.path);
+      const window = frame.contentWindow;
+      const document = window.document;
+      const bounds = selector => {
+        const element = document.querySelector(selector);
+        assert(element, '找不到 ' + selector);
+        return element.getBoundingClientRect();
+      };
+
+      await test(layout.name + '：两侧栏贯穿桌面窗口，页眉与预览共用中间一栏', async function () {
+        for (const width of [1396, 1024, 769]) {
+          frame.style.width = width + 'px';
+          await repaint(window);
+          const left = bounds(layout.left);
+          const header = bounds('.editor-header');
+          const middle = bounds(layout.middle);
+          const right = bounds(layout.right);
+          assert(left.width > 0 && right.width > 0 && left.top === 0 && right.top === 0 &&
+            left.bottom === window.innerHeight && right.bottom === window.innerHeight, width + ' 像素宽时，两侧栏应从窗口顶部延伸到底部');
+          assert(header.top === 0 && left.right === header.left && header.right === right.left &&
+            header.bottom === middle.top && header.left === middle.left && header.right === middle.right,
+            width + ' 像素宽时，页眉应与预览左右齐平并紧贴上方');
+          const navigation = bounds('.editor-navigation');
+          const repository = bounds('.editor-repository');
+          assert(navigation.left >= header.left && navigation.right <= repository.left && repository.right <= header.right,
+            width + ' 像素宽时，编辑器入口和仓库链接应完整放在中间一栏');
+          const modes = document.querySelector('.mode-tabs:not([hidden])');
+          if (modes) {
+            const choices = modes.getBoundingClientRect();
+            assert(Math.abs(choices.left + choices.right - header.left - header.right) <= 1, '版式选择应在页眉居中');
+            assert(choices.top >= navigation.bottom || (choices.left >= navigation.right && choices.right <= repository.left),
+              '版式选择不应遮住其他入口');
+          }
+        }
+      });
+
+      if (layout.path === 'index.html') {
+        await test('导向标识：分别收起和展开两侧栏，页眉与预览随之改变宽度', async function () {
+          frame.style.width = '1396px';
+          await repaint(window);
+          for (const side of ['left', 'right']) {
+            const panel = document.getElementById(side + '-panel');
+            const expander = document.getElementById(side + '-expander');
+            const openWidth = bounds('.editor-header').width;
+            document.getElementById(side + '-collapse').click();
+            await finishAnimations(animations(panel));
+            const header = bounds('.editor-header');
+            const middle = bounds(layout.middle);
+            const button = expander.getBoundingClientRect();
+            assert(header.width > openWidth && header.left === middle.left && header.right === middle.right, '收起后页眉应与预览一起变宽');
+            assert(button.top >= header.bottom && document.elementFromPoint(button.left + button.width / 2, button.top + button.height / 2) === expander,
+              '展开按钮应位于页眉下方且可点击');
+            expander.click();
+            await finishAnimations(animations(panel));
+            assert(expander.hidden && bounds('.editor-header').width === openWidth, '展开后应恢复页眉宽度');
+          }
+        });
+      }
+
+      await test(layout.name + '：窄屏页眉铺满窗口，编辑区和属性按上下顺序排列', async function () {
+        for (const width of [768, 390, 320]) {
+          frame.style.width = width + 'px';
+          await repaint(window);
+          const header = bounds('.editor-header');
+          const content = bounds(layout.left);
+          const preview = bounds(layout.middle);
+          const properties = bounds(layout.right);
+          const [first, second] = layout.previewFirst ? [preview, content] : [content, preview];
+          assert(header.top === 0 && header.left === 0 && header.right === width &&
+            header.bottom <= first.top && first.bottom <= second.top && second.bottom <= properties.top,
+            width + ' 像素宽时，页眉和各区域应按顺序显示');
+          assert(document.documentElement.scrollWidth === width && [first, second, properties].every(region => region.right <= width),
+            width + ' 像素宽时，各区域不应横向溢出');
+        }
+      });
+      await load('about:blank');
+    }
     for (const editor of editors) {
       frame.style.width = '1280px';
       await load('../' + editor.path);

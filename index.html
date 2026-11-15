@@ -5,9 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>导向标识生成器</title>
-  <link rel="stylesheet" href="style.css?v=02d2bb340c73">
-  <link rel="stylesheet" href="platform.css?v=8fed901c11e0">
-  <link rel="stylesheet" href="transfer.css?v=91219796b04b">
+  <link rel="stylesheet" href="style.css?v=20373272744f">
+  <link rel="stylesheet" href="platform.css?v=43f64788cc5d">
+  <link rel="stylesheet" href="transfer.css?v=f7380501469b">
 </head>
 <body class="editor-page">
 
@@ -18,25 +18,27 @@
   </div>
 
   <header class="editor-header">
-    <nav class="editor-navigation" aria-label="切换编辑器">
-      <a href="index.html" aria-current="page">导向标识</a>
-      <a href="index.html?editor=transfer">换乘标识</a>
-      <a href="platform.html">站台标识</a>
-    </nav>
-    <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
-      <span>给项目加星</span>
-    </a>
-    <nav class="mode-tabs" id="transfer-modes" aria-label="换乘标识版式" hidden>
-      <button type="button" data-transfer-mode="guidance" aria-pressed="true">版式 A</button>
-      <button type="button" data-transfer-mode="separate" aria-pressed="false">版式 B</button>
-    </nav>
+    <div class="editor-header-content">
+      <nav class="editor-navigation" aria-label="切换编辑器">
+        <a href="index.html" aria-current="page">导向标识</a>
+        <a href="index.html?editor=transfer">换乘标识</a>
+        <a href="platform.html">站台标识</a>
+      </nav>
+      <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
+        <span>给项目加星</span>
+      </a>
+      <nav class="mode-tabs" id="transfer-modes" aria-label="换乘标识版式" hidden>
+        <button type="button" data-transfer-mode="guidance" aria-pressed="true">版式 A</button>
+        <button type="button" data-transfer-mode="separate" aria-pressed="false">版式 B</button>
+      </nav>
+    </div>
   </header>
 
-  <div id="app">
+  <div id="app" class="editor-workspace">
 
     <!-- ══ 左栏：元素选择区 ══ -->
-    <aside id="left-panel" class="side-panel">
+    <aside id="left-panel" class="side-panel editor-left">
       <div class="panel-header">
         <span class="panel-title">元素选择区</span>
         <button class="icon-btn collapse-btn" id="left-collapse" title="收起元素选择区">⟨</button>
@@ -48,7 +50,7 @@
     <button id="left-expander" class="expander" title="展开元素选择区" hidden>⟩</button>
 
     <!-- ══ 中栏：SVG 编辑区 ══ -->
-    <main id="center-panel">
+    <main id="center-panel" class="editor-center">
       <div class="guide-action-bar">
         <div id="edit-actions" role="toolbar" aria-label="选择与剪贴板">
           <button type="button" data-edit-action="select-all" title="全选元素（Ctrl+A）">全选</button>
@@ -79,7 +81,7 @@
 
     <!-- ══ 右栏：属性 / 导出 ══ -->
     <button id="right-expander" class="expander expander-right" title="展开属性面板" hidden>⟨</button>
-    <aside id="right-panel" class="side-panel">
+    <aside id="right-panel" class="side-panel editor-right">
       <div class="panel-header">
         <div class="panel-heading">
           <button class="icon-btn" id="close-element-btn" title="返回标识牌设置" aria-label="返回标识牌设置" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -94,8 +96,8 @@
 
   </div>
 
-  <div id="transfer-editor" hidden>
-    <main class="platform-preview" id="transfer-preview" aria-label="换乘标识预览">
+  <div id="transfer-editor" class="editor-workspace" hidden>
+    <main class="platform-preview editor-center" id="transfer-preview" aria-label="换乘标识预览">
       <div class="preview-toolbar">
         <div class="transfer-preview-heading">
           <strong id="transfer-preview-title"></strong>
@@ -121,7 +123,20 @@
       </div>
       <div class="preview-footer"><div id="transfer-status" role="status">本地自动保存</div></div>
     </main>
-    <aside class="platform-properties" id="transfer-properties" aria-labelledby="transfer-heading">
+    <aside class="platform-stations editor-left" id="transfer-content" aria-labelledby="transfer-content-heading">
+      <h2 class="platform-panel-title" id="transfer-content-heading">线路与元素</h2>
+      <div class="panel-body">
+        <section class="platform-section transfer-section">
+          <h3 class="section-title" id="transfer-arrangement-heading">线路分组</h3>
+          <div id="transfer-arrangements" role="group" aria-labelledby="transfer-arrangement-heading"></div>
+        </section>
+        <section class="platform-section transfer-section">
+          <h3 class="section-title">牌面元素</h3>
+          <div id="transfer-groups"></div>
+        </section>
+      </div>
+    </aside>
+    <aside class="platform-properties editor-right" id="transfer-properties" aria-labelledby="transfer-heading">
       <header class="panel-header">
         <div class="panel-heading">
           <button type="button" class="icon-btn" id="transfer-return" title="返回标识牌设置" aria-label="返回标识牌设置" hidden>
@@ -132,14 +147,6 @@
       </header>
       <div class="panel-body" id="transfer-property-scroll">
         <div id="transfer-settings">
-          <section class="platform-section transfer-section">
-            <h2 class="section-title" id="transfer-arrangement-heading">线路分组</h2>
-            <div id="transfer-arrangements" role="group" aria-labelledby="transfer-arrangement-heading"></div>
-          </section>
-          <section class="platform-section transfer-section">
-            <h2 class="section-title">牌面元素</h2>
-            <div id="transfer-groups"></div>
-          </section>
           <section class="platform-section transfer-section transfer-output-settings">
             <h2 class="section-title">颜色与尺寸</h2>
             <div class="field">

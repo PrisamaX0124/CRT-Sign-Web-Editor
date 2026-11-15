@@ -13,7 +13,6 @@
 .station-item.station-drop-before { border-top: 2px solid var(--accent); }
 .station-item.station-drop-after { border-bottom: 2px solid var(--accent); }
 .station-drag-ghost { position: fixed; z-index: 120; pointer-events: none; margin: 0; opacity: .92; background: var(--panel-bg); border: 1px solid var(--accent); box-shadow: 0 4px 18px #0002; }
-.platform-workspace { display: grid; grid-template-columns: 254px minmax(0, 1fr) 290px; flex: 1; min-height: 0; }
 .platform-stations, .platform-properties { background: var(--panel-bg); display: flex; flex-direction: column; min-height: 0; }
 .platform-stations { border-right: 1px solid var(--border); }
 .platform-properties { border-left: 1px solid var(--border); }
@@ -97,7 +96,6 @@
 #batch-error { color: var(--danger); margin-top: 8px; }
 #platform-notice { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--panel-bg); padding: 12px 20px; border-radius: 8px; max-width: calc(100vw - 24px); z-index: 100; font-size: 12px; box-shadow: 0 5px 20px rgba(0,0,0,.2); }
 .platform-page :focus-visible { outline: 2px solid var(--selection); outline-offset: 2px; }
-.platform-workspace { grid-template-columns: 212px minmax(0, 1fr) 272px; }
 .platform-panel-title { padding: 12px 14px; font-size: 12px; }
 .library-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex: none; }
 .library-tabs button { flex: 1; padding: 7px 6px; border-radius: 5px; font-size: 11px; color: var(--text-dim); }
@@ -148,9 +146,16 @@
 #preset-dialog::backdrop { background: rgba(0,0,0,.4); }
 #preset-name { width: 100%; }
 #preset-error { color: var(--danger); font-size: 12px; margin-top: 8px; }
-@media (max-width: 1100px) { .platform-workspace { grid-template-columns: 180px minmax(0, 1fr) 248px; } }
+@media (width > 768px) {
+  .platform-stations { width: 212px; }
+  .platform-workspace .platform-properties { width: 272px; }
+}
+@media (768px < width <= 1100px) {
+  .platform-stations { width: 180px; }
+  .platform-workspace .platform-properties { width: 248px; }
+}
 @media (max-width: 768px) {
-  .platform-workspace { display: flex; flex-direction: column; overflow-y: auto; }
+  .platform-workspace { overflow-y: auto; }
   .platform-stations { flex: none; border: 0; }
   .platform-stations .platform-panel-title, .station-list-help { display: none; }
   .platform-stations .station-list-help { display: flex; padding: 4px 10px 0; }
