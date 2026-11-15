@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>站台标识测试</title><style>body{font:14px system-ui;padding:20px;background:#f5f5f6;color:#222}h1{font-size:20px}.pass{color:#15803d}.fail{color:#dc2626}#results>div{padding:6px}iframe{width:1280px;height:860px;border:1px solid #ccc;background:white}pre{white-space:pre-wrap}</style></head>
+<body><h1>站台标识 — 真实字体与交互测试</h1><p id="summary">运行中…</p><div id="results"></div><iframe id="frame" title="站台标识测试应用"></iframe>
+<script>
+(async function () {
+  var key = 'public-platform-sign-project-v1', saved = localStorage.getItem(key), presetKey = 'public-platform-sign-presets-v1', savedPresets = localStorage.getItem(presetKey), frame = document.getElementById('frame'), results = [];
+  function assert(condition, message) { if (!condition) throw new Error(message || '断言失败'); }
+  function waitFor(fn, timeout) { return new Promise(function (resolve, reject) { var end = Date.now() + (timeout || 10000); function tick() { if (fn()) return resolve(); if (Date.now() > end) return reject(new Error('等待超时')); setTimeout(tick, 20); } tick(); }); }
+  async function test(name, fn) { try { await fn(); results.push({ name: name, pass: true }); } catch (err) { console.error(name, err.stack); results.push({ name: name, pass: false, error: err.message }); } var item = results[results.length - 1], div = document.createElement('div'); div.className = item.pass ? 'pass' : 'fail'; div.textContent = (item.pass ? '✔ ' : '✖ ') + name + (item.error ? '：' + item.error : ''); document.getElementById('results').appendChild(div); }
+  localStorage.setItem(presetKey, '[]');
+  frame.src = 'platform.html';
+  try {
+    await waitFor(function () { return frame.contentWindow.App && frame.contentWindow.App.ready; });
+    var w = frame.contentWindow, d = frame.contentDocument, A = w.App, S = w.PlatformState, R = w.PlatformRender;
+    await A.ready;
+    var stations = S.parseStations("01|松林站|Pine Grove|1\n02|河西站|West River|5,6\n03|花园站|Garden Avenue|2\n04|沿江站|Riverside|4\n05|中央站|Central Station|1\n06|湖边站|Lakeside|9\n07|北广场站|North Square\n08|客运站|Coach Station", 'chongqing');
+    var original = S.settings(S.replaceStations(S.create(), stations), { currentId: stations[4].id, line: '10', lineName: '10号线', color: '#5F249F' });
+    A.update(function () { return original; }); A.select(original.currentId);
+    function verticalProject() {
+      var stations = S.parseStations("01|松林站|Pine Grove|1\n02|河西站|West River|5,6\n03|花园站|Garden Avenue|2\n04|沿江站|Riverside|4\n05|中央站|Central Station|1\n06|湖边站|Lakeside|9\n07|北广场站|North Square\n08|客运站|Coach Station\n09|大桥站|Grand Bridge\n10|东广场站|East Square\n11|港口站|Harbor Station", 'chongqing');
+      stations[6].transfers = [{ number: '1', color: '#D7002A' }];
+      return S.settings(S.replaceStations(original, stations), { mode: 'vertical', direction: 1, currentId: stations[6].id });
+    }
+    function $(id) { return d.getElementById(id); }
+    function input(id, value, type) { var el = $(id); el.focus(); el.value = value; el.dispatchEvent(new w.Event(type || 'input', { bubbles: true })); }
+    function restore() { A.update(function () { return original; }); A.select(original.currentId); }
+    await test('Ctrl/Shift 多选：站点列表与牌面一致，全组选框、微调、删除和撤销恢复选择', function () {
+      restore(); var ids = A.state.stations.map(function(s){return s.id;});
+      function click(id, modifiers) { $('station-list').querySelector('[data-id="'+id+'"]').dispatchEvent(new w.MouseEvent('click', Object.assign({bubbles:true},modifiers))); }
+      click(ids[1]);click(ids[3],{ctrlKey:true});
+      assert(A.selectedStationIds().join('|')===[ids[1],ids[3]].join('|'),'Ctrl 应保留整组选中站点');
+      click(ids[5],{shiftKey:true});assert(A.selectedStationIds().join('|')===ids.slice(3,6).join('|'),'Shift 应从锚点选中连续站点');
+      assert($('platform-paper').querySelectorAll('.platform-element-outline.selected:not([hidden])').length===3,'每个选中元素都应有选框');
+      d.querySelector('[data-nudge-x="1"]').click();ids.slice(3,6).forEach(function(id){assert(A.state.adjustments['route:'+id].x===1);});
+      $('station-list').focus();d.body.focus();
+      d.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Delete',bubbles:true,cancelable:true}));assert(A.state.stations.length===5,'Del 应一次删除整组');
+      A.undo();assert(A.state.stations.length===8&&A.selectedStationIds().join('|')===ids.slice(3,6).join('|'),'撤销应恢复完整选择');
+      A.redo();assert(A.state.stations.length===5);restore();
+    });
+    await test('页面空白取消选择：牌面外、左右栏留白、输入框跨界拖选与控件点击', async function () {
+      restore();$('platform-preview-scroll').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(!A.selectedKey&&!$('property-settings').hidden,'牌面外空白应取消选择');
+      A.select(A.state.currentId);d.querySelector('.platform-stations .platform-panel-title').click();assert(!A.selectedKey,'左栏空白也应取消选择');
+      A.select(A.state.currentId);$('station-properties').click();assert(A.selectedKey,'属性分组应保留选择');
+      $('station-en').dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,pointerId:71,isPrimary:true,button:0,clientX:100,clientY:100}));
+      d.dispatchEvent(new w.PointerEvent('pointerup',{bubbles:true,pointerId:71,clientX:400,clientY:100}));
+      d.body.click();assert(A.selectedKey,'输入框拖选后框外松开不能取消选择');
+      await new Promise(function(resolve){w.setTimeout(resolve,0);});d.body.click();assert(!A.selectedKey,'下一次主动空白点击应正常取消选择');restore();
+    });
+    await test('原生剪贴板：整组复制/剪切/粘贴、独立副本、插入位置与撤销选择', function () {
+      restore(); var ids=A.state.stations.map(function(s){return s.id;}), C=w.PlatformClipboard;
+      function clipboard(type,text,target) { var dt=new w.DataTransfer();if(text)dt.setData('text/plain',text);var event=new w.ClipboardEvent(type,{bubbles:true,cancelable:true,clipboardData:dt});(target||d.body).dispatchEvent(event);return {event:event,text:dt.getData('text/plain')}; }
+      A.select(ids[1]);A.select(ids[3],{toggle:true});var beforeKeys=A.selectedKeys().join('|');
+      var copied=clipboard('copy');assert(copied.event.defaultPrevented&&S.deserializeStations(copied.text).stations.length===2);
+      clipboard('paste',copied.text);var added=A.selectedStationIds();assert(added.length===2&&A.state.stations.length===10);
+      assert(A.state.stations[4].id===added[0]&&A.state.stations[5].id===added[1],'粘贴应插在主要选中站之后');
+      assert(added.every(function(id){return ids.indexOf(id)<0;}));
+      A.undo();assert(A.selectedKeys().join('|')===beforeKeys&&A.state.stations.length===8);A.redo();assert(A.selectedStationIds().join('|')===added.join('|'));
+      var cut=clipboard('cut');assert(cut.event.defaultPrevented&&A.state.stations.length===8&&!A.selectedKey);clipboard('paste',cut.text);
+      assert(A.state.stations[4].zh===original.stations[1].zh&&A.state.stations[5].zh===original.stations[3].zh,'剪切后应回到剪切起点');
+      var count=A.state.stations.length;assert(!clipboard('paste','ordinary text').event.defaultPrevented&&A.state.stations.length===count);
+      assert(!clipboard('copy',null,$('station-en')).event.defaultPrevented,'输入框复制必须保留原生行为');
+      assert(!clipboard('paste',copied.text,$('station-en')).event.defaultPrevented,'输入框粘贴不能增加站点');restore();
+    });
+    await test('纵向双列多选：同站左右元素与换乘只复制/删除一个站点，三版式同步', function () {
+      restore();A.update(function(state){return S.settings(state,{mode:'vertical',verticalVariant:'double'});});
+      var id=A.state.currentId;A.selectElement('vertical:left:'+id);A.selectElement('vertical:right:'+id,{toggle:true});A.selectElement('vertical:transfer:'+id,{toggle:true});
+      assert(A.selectedKeys().length===3&&A.selectedStationIds().length===1,'同站元素不能重复计算站点');
+      var dt=new w.DataTransfer(),copy=new w.ClipboardEvent('copy',{bubbles:true,cancelable:true,clipboardData:dt});d.body.dispatchEvent(copy);
+      var data=S.deserializeStations(dt.getData('text/plain'));assert(data.stations.length===1);
+      w.PlatformClipboard.pasteText(dt.getData('text/plain'));assert(A.state.stations.length===9&&A.selectedStationIds().length===1);
+      ['route','station','vertical'].forEach(function(mode){d.querySelector('[data-mode="'+mode+'"]').click();assert(A.state.stations.length===9,'粘贴站点应跨版式保留');});
+      A.select(id);A.deleteSelection();assert(A.state.stations.length===8&&!A.state.stations.some(function(s){return s.id===id;}));A.undo();assert(A.state.stations.length===9&&A.selectedStationIds()[0]===id);restore();
+    });
+    await test('剪贴板记录保留最近20条、可选旧记录粘贴，权限受限时按钮仍能复制粘贴', async function () {
+      restore();var C=w.PlatformClipboard,clipboard=w.navigator.clipboard,write=clipboard&&clipboard.writeText,read=clipboard&&clipboard.readText;
+      try {
+        if(clipboard){clipboard.writeText=function(){return Promise.reject(new Error('denied'));};clipboard.readText=function(){return Promise.reject(new Error('denied'));};}
+        A.select(A.state.stations[0].id);
+        for(var i=0;i<22;i++){A.update(function(state){return S.patchStation(state,state.stations[0].id,{zh:'剪贴板记录'+i});});await C.copy(false);}
+        var select=$('platform-clipboard-history');assert(select.options.length===21&&!select.disabled,'历史须保留20条');
+        assert(select.options[1].textContent.includes('剪贴板记录21')&&select.options[20].textContent.includes('剪贴板记录2'),'历史应淘汰最旧记录');
+        var before=A.state.stations.length;select.value=select.options[20].value;select.dispatchEvent(new w.Event('change',{bubbles:true}));
+        assert(A.state.stations.length===before+1&&A.state.stations[1].zh==='剪贴板记录2','选历史项应粘贴独立旧副本');
+        await C.paste();assert(A.state.stations.length===before+2&&A.state.stations[2].zh==='剪贴板记录21','按钮须保留最新页面内副本');
+      } finally {if(clipboard){clipboard.writeText=write;clipboard.readText=read;}restore();}
+    });
+    await test('键盘与固定元素：全选、Escape、输入框/输入法/弹窗隔离，整组微调和20步撤销', function () {
+      restore();
+      function key(value,options,target){var event=new w.KeyboardEvent('keydown',Object.assign({key:value,bubbles:true,cancelable:true},options));(target||d.body).dispatchEvent(event);return event;}
+      assert(!key('Delete',{},$('station-en')).defaultPrevented&&A.state.stations.length===8);
+      assert(!key('a',{ctrlKey:true,isComposing:true}).defaultPrevented);
+      $('batch-dialog').showModal();assert(!key('a',{ctrlKey:true}).defaultPrevented);$('batch-dialog').close();
+      key('a',{ctrlKey:true});assert(A.selectedKeys().length===A.scene.elements.length);key('Escape');assert(!A.selectedKey);
+      A.update(function(state){return S.settings(state,{mode:'station'});});A.selectElement('station:badge');A.selectElement('station:direction',{toggle:true});
+      var before=A.state.stations.length;key('Delete');assert(A.state.stations.length===before,'固定元素不能删除站点');
+      d.querySelector('[data-nudge-y="1"]').click();assert(A.state.adjustments['station:badge'].y===1&&A.state.adjustments['station:direction'].y===1);
+      $('tool-reset').click();assert(!A.state.adjustments['station:badge']&&!A.state.adjustments['station:direction']);
+      restore();for(var i=0;i<25;i++)A.update(function(state){return S.settings(state,{lineName:'历史'+i});});
+      for(var j=0;j<20;j++)key('z',{ctrlKey:true});assert(A.state.lineName==='历史4'&&$('undo').disabled,'仅保留最近20步');
+      key('z',{ctrlKey:true,shiftKey:true});assert(A.state.lineName==='历史5');restore();
+    });
+    await test('版式选择器在页面中间，窄屏按钮和剪贴板没有横向溢出', async function () {
+      function centered(){var nav=d.querySelector('.mode-tabs').getBoundingClientRect();assert(Math.abs((nav.left+nav.right)/2-w.innerWidth/2)<1,'版式选择器没有居中');}
+      centered();var oldWidth=frame.style.width;frame.style.width='390px';w.dispatchEvent(new w.Event('resize'));await new Promise(function(resolve){w.requestAnimationFrame(function(){w.requestAnimationFrame(resolve);});});
+      centered();assert(d.documentElement.scrollWidth<=w.innerWidth+1,'窄屏横向溢出');var bar=$('platform-edit-actions').getBoundingClientRect();assert(bar.right<=w.innerWidth+1);
+      frame.style.width=oldWidth;w.dispatchEvent(new w.Event('resize'));restore();
+    });
+    function inkBox(n){
+      var b=n.bounds,m=n.matrix;if(!m)return b;
+      var points=[[b.x,b.y],[b.x+b.width,b.y],[b.x,b.y+b.height],[b.x+b.width,b.y+b.height]],xs=points.map(function(p){return p[0]*m[0]+p[1]*m[2]+m[4];}),ys=points.map(function(p){return p[0]*m[1]+p[1]*m[3]+m[5];});
+      return{x:Math.min.apply(null,xs),y:Math.min.apply(null,ys),width:Math.max.apply(null,xs)-Math.min.apply(null,xs),height:Math.max.apply(null,ys)-Math.min.apply(null,ys)};
+    }
+    await test('纵向线路图：三版式、顶栏本站与两个方向、交换撤销、吊板编辑联动及项目预设往返', async function() {
+      A.update(function(){return verticalProject();}); A.deselect();
+      var ref=A.state, station=ref.stations[6], ids=ref.stations.map(function(s){return s.id;}).join('|');
+      assert($('preview-title').textContent==='纵向线路图');
+      var control=$('vertical-variant');
+      function choose(v){control.value=v;control.dispatchEvent(new w.Event('change',{bubbles:true}));}
+      function ink(node){var b=node.bounds,m=node.matrix;return m?{x:b.x*m[0]+m[4],y:b.y*m[3]+m[5],width:b.width*m[0],height:b.height*m[3]}:b;}
+      function role(r){return A.scene.nodes.filter(function(n){return n.attrs['data-role']===r;});}
+      assert(ink(role('vertical-title-zh')[0]).x>256);
+      assert(ink(role('vertical-direction-zh')[0]).x<256);
+      choose('right');assert(ink(role('vertical-title-zh')[0]).x<256);assert(ink(role('vertical-direction-zh')[0]).x>256);
+      choose('double');assert(A.scene.output.width===640&&A.scene.output.height===768);
+      assert(role('vertical-title-zh').length===1&&role('vertical-direction-zh').length===2);
+      assert(A.scene.columns[0].direction===1&&A.scene.columns[1].direction===-1);
+      var before=role('vertical-direction-zh').map(function(n){return n.label||n.text;}).join('|');
+      $('swap-vertical-columns').click();assert(A.state.verticalSwapped);
+      assert(role('vertical-direction-zh').map(function(n){return n.label||n.text;}).join('|')!==before);
+      assert(A.scene.columns[0].direction===-1&&A.scene.columns[1].direction===1);
+      assert(A.state.direction===1&&A.state.stations.map(function(s){return s.id;}).join('|')===ids);
+      $('undo').click();assert(!A.state.verticalSwapped);$('redo').click();assert(A.state.verticalSwapped);
+      var key='vertical:right:'+station.id;
+      $('platform-svg').querySelector('[data-element-key="'+key+'"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+      assert(A.selectedId===station.id&&A.selectedKey===key&&!$('platform-element-toolbar').hidden);
+      input('station-zh','联动站名');input('station-en','Linked Station');input('station-transfers','2:#123456,9:#6B0F30','change');
+      d.querySelector('[data-nudge-x="1"]').click();assert(A.state.adjustments[key].x===1);
+      ['route','station','vertical'].forEach(function(mode){d.querySelector('[data-mode="'+mode+'"]').click();assert($('platform-svg').textContent.includes('联动站名'),mode+' 未联动');assert(A.state.currentId===station.id&&A.state.stations[6].transfers[0].color==='#123456');});
+      assert($('vertical-variant')===control&&control.value==='double','控件节点与值应就地同步');
+      var round=S.deserialize(S.serialize(A.state));assert(round.verticalSwapped&&round.verticalVariant==='double'&&round.adjustments[key].x===1);
+      var preset=w.PlatformPresets.create(A.state,'纵向测试');assert(w.PlatformPresets.deserialize(w.PlatformPresets.serialize([preset]))[0].state.verticalSwapped);
+      var fonts=await w.SignExporters.ensureUsedFontData(A.scene.usedFonts), svg=w.PlatformExport.buildSVG(A.state,A.measure,fonts);
+      assert(!svg.includes('data-element-key')&&!svg.includes('platform-hitbox'));
+      var bitmap=await w.createImageBitmap(await w.PlatformExport.pngBlob(svg,A.scene.output));assert(bitmap.width===640&&bitmap.height===768);bitmap.close();restore();
+    });
+    await test('MC纵向规格：默认固定3格高、手动高度、右版正向换乘、中央共享换乘及自适应方向标题', function(){
+      var ref=verticalProject(),legacy=JSON.parse(S.serialize(ref));legacy.sizes.vertical={width:768,height:2048};legacy.verticalHeightAuto=true;legacy.verticalWidthAuto=false;
+      A.update(function(){return S.deserialize(JSON.stringify(legacy));});A.deselect();
+      assert(A.state.sizes.vertical.width===384&&A.state.sizes.vertical.height===768,'旧自动高度应迁移为默认3格高');
+      assert($('output-width').readOnly&&!$('output-height').readOnly&&$('size-summary').hidden,'固定宽度，高度可手动修改');
+      $('add-station').click();assert(A.state.stations.length===12&&A.state.sizes.vertical.height===768);$('undo').click();assert(A.state.stations.length===11&&A.state.sizes.vertical.height===768);$('redo').click();assert(A.state.stations.length===12&&A.state.sizes.vertical.height===768);$('undo').click();A.deselect();
+      input('output-height','1024','change');assert(A.state.sizes.vertical.height===1024&&A.scene.output.height===1024,'手动固定高度须用于预览');assert(S.deserialize(S.serialize(A.state)).sizes.vertical.height===1024);$('undo').focus();$('undo').click();assert(A.state.sizes.vertical.height===768&&$('output-height').value==='768','点击撤销应恢复固定高度和控件回显');
+      function choose(v){input('vertical-variant',v,'change');}
+      function ink(n){var b=n.bounds,m=n.matrix;return m?{x:b.x*m[0]+m[4],y:b.y*m[3]+m[5],width:b.width*Math.abs(m[0]),height:b.height*m[3]}:b;}
+      choose('right');var id=ref.stations[0].id,ns=A.scene.nodes.filter(function(n){return n.attrs['data-station-id']===id;}),label=ns.find(function(n){return n.attrs['data-role']==='vertical-transfer-zh';}),c=ns.find(function(n){return n.attrs['data-role']==='vertical-transfer-circle';}),suffix=ns.find(function(n){return n.label==='号线';});
+      assert(ink(label).x+ink(label).width<c.attrs.cx-c.attrs.r&&c.attrs.cx+c.attrs.r<ink(suffix).x,'换乘X号线须从左至右');
+      choose('double');assert(A.state.sizes.vertical.width===640&&A.state.sizes.vertical.height===768);
+      var circles=A.scene.nodes.filter(function(n){return n.attrs['data-role']==='vertical-transfer-circle';}),expected=A.state.stations.reduce(function(total,s){return total+s.transfers.length;},0);
+      assert(circles.length===expected,'双列不应重复换乘');
+      var shared=A.scene.elements.filter(function(e){return e.kind==='vertical-transfer';});
+      shared.forEach(function(e){assert(e.box.x>A.scene.columns[0].markerX+22&&e.box.x+e.box.width<A.scene.columns[1].markerX-22,'中央换乘不得与圆标重叠');});
+      var before=JSON.stringify(circles);$('swap-vertical-columns').click();assert(JSON.stringify(A.scene.nodes.filter(function(n){return n.attrs['data-role']==='vertical-transfer-circle';}))===before,'交换时中央换乘应稳定');
+      var key='vertical:transfer:'+ref.currentId;d.querySelector('[data-element-key="'+key+'"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(A.selectedKey===key);d.querySelector('[data-nudge-x="1"]').click();assert(A.state.adjustments[key].x===1);
+      var directional=A.scene.nodes.filter(function(n){return n.attrs['data-role']==='vertical-direction-zh';}).find(function(n){return(n.label||n.text)==='港口站方向';});
+      assert(Math.abs(ink(directional).height*A.scene.frame.scale-16.5)<.01,'默认方向标题应适中');
+      A.update(function(state){return S.patchStation(state,state.stations[state.stations.length-1].id,{zh:'这是很长很长的终点站名称',en:'A Very Long Terminal Name with descenders gy'});});
+      var texts=A.scene.nodes.filter(function(n){return n.attrs['data-role']==='vertical-direction-zh'&&n.tag==='text';}),longTitle=texts.find(function(n){return n.text==='这是很长很长的终点站名称方向';});assert(longTitle,'长标题应由真实字体绘制');
+      assert(ink(longTitle).height<26,'长方向标题应自行缩小');
+      texts.forEach(function(n){var b=ink(n);assert(b.height<=26+.01&&b.x>=-.01&&b.x+b.width<=A.scene.width+.01&&b.y+b.height<44,'方向墨区越界 '+JSON.stringify(b));});
+      restore();
+    });
+    await test('纵向视觉层级：换乘整组缩小，路径与真实字体的方向双语墨区上下居中',function(){
+      var ref=verticalProject(),long=S.patchStation(ref,ref.stations[10].id,{zh:'这是很长很长的终点站名称',en:'A Very Long Terminal Name with descenders gy'}),custom=S.patchStation(ref,ref.stations[0].id,{transfers:[{number:'12',color:'#1044A0'}]});
+      function ink(n){return inkBox(n);}
+      [ref,long,custom].forEach(function(base){['left','right','double'].forEach(function(variant){[.7,1,1.4].forEach(function(fontScale){[-1,1].forEach(function(direction){
+        A.update(function(){return S.settings(S.setVerticalVariant(base,variant),{fontScale:fontScale,direction:direction});});
+        var same=A.scene.nodes.filter(function(n){return n.attrs['data-station-id']===ref.stations[0].id;}),label=same.find(function(n){return n.attrs['data-role']==='vertical-transfer-zh';}),name=same.find(function(n){return n.attrs['data-role']==='vertical-station-zh';}),circle=same.find(function(n){return n.attrs['data-role']==='vertical-transfer-circle';});
+        assert(ink(label).height<ink(name).height*.8,'换乘标签应明显小于站名');assert(Math.abs(circle.attrs.r-15*Math.min(1,fontScale))<.001,'圆标应同比缩小');
+        same.filter(function(n){return n.tag==='text'&&n.attrs['data-role']==='vertical-transfer-number';}).forEach(function(n){var m=n.matrix,b=ink(n),top=(n.attrs.y-A.measure.ascent(n.text,n.attrs['font-family'],n.attrs['font-weight'],n.attrs['font-size']))*m[3]+m[5];assert(Math.abs(top-b.y)<.001,'自定义换乘编号的缩放墨区应与真实字体一致');});
+        A.scene.columns.forEach(function(column){
+          var ns=A.scene.nodes.filter(function(n){return n.attrs['data-element-key']==='vertical:direction:'+column.side;}),zh=ink(ns.find(function(n){return n.attrs['data-role']==='vertical-direction-zh';})),en=ink(ns.find(function(n){return n.attrs['data-role']==='vertical-direction-en';}));
+          assert(Math.abs(zh.y-(72-en.y-en.height))<.001,'方向双语上下墨区留白应相等');assert(Math.abs(en.y-zh.y-zh.height-8)<.001,'双语墨区净空应为8px');assert(zh.height<=22+.01&&en.height<=14+.01,'方向字号过大');
+          ns.filter(function(n){return n.tag==='text';}).forEach(function(n){assert(Math.abs(n.attrs.y-A.measure.ascent(n.text,n.attrs['font-family'],n.attrs['font-weight'],n.attrs['font-size'])-n.bounds.y)<.001,'居中应按真实字体墨区计算');});
+          var arrow=ink(ns.find(function(n){return n.attrs['data-role']==='vertical-direction-arrow';}));assert(Math.abs(arrow.y+arrow.height/2-36)<.001,'方向箭头应同样居中');
+        });
+      });});});});restore();
+    });
+    await test('固定3格高度：1/8/11/50/120站、三版式与两个方向自动分配间距，站点和尾端均无越界或重叠',function(){
+      [1,8,11,50,120].forEach(function(count){
+        var base=S.replaceStations(original,Array.from({length:count},function(_,i){return{id:'fixed-'+i,code:String(i+1),zh:'轨道交通超长站名测试',en:'Long English Name with descenders gy',transfers:[{number:'12',color:'#0057B7'}]};}));
+        ['left','right','double'].forEach(function(variant){[-1,1].forEach(function(direction){
+          A.update(function(){return S.settings(S.setVerticalVariant(base,variant),{mode:'vertical',direction:direction,fontScale:1.4,currentId:base.stations[Math.floor(count/2)].id});});
+          assert(A.scene.output.width===(variant==='double'?640:384)&&A.scene.output.height===768,'导出尺寸应保持3格高度');
+          A.scene.columns.forEach(function(c){var stops=A.scene.elements.filter(function(e){return e.kind==='vertical-station'&&e.key.indexOf('vertical:'+c.side+':')===0;}).sort(function(a,b){return a.box.y-b.box.y;});stops.forEach(function(e,i){assert(e.box.y>=72&&e.box.y+e.box.height<=A.scene.height+.01,'站点须避开顶栏并保持墨区有界');if(i)assert(stops[i-1].box.y+stops[i-1].box.height<=e.box.y+.01,'固定高度下相邻站点不得重叠');});});
+          A.scene.nodes.filter(function(n){return n.attrs['data-role']==='vertical-tail';}).forEach(function(n){n.attrs.points.split(' ').forEach(function(p){var y=Number(p.split(',')[1]);assert(y>=72&&y<=A.scene.height,'色条端头须避开顶栏并保持固定高度内');});});
+        });});
+      });restore();
+    });
+    await test('纵向竖带上下延伸与对齐：两方向、双列交换及1/11/50/120站的SVG顶底相同',function(){
+      var ref=verticalProject(),bases=[S.replaceStations(original,[{id:'one-extent',code:'01',zh:'单站',en:'Station',transfers:[]}]),ref];
+      [50,120].forEach(function(count){bases.push(S.replaceStations(original,Array.from({length:count},function(_,i){return{id:'extent-'+i,code:String(i+1),zh:'站点',en:'Station',transfers:[]};})));});
+      bases.forEach(function(base){['left','right','double'].forEach(function(variant){
+        var expected;
+        function check(){
+          var bars=Array.from($('platform-svg').querySelectorAll('[data-role="vertical-bar"]'));
+          A.scene.columns.forEach(function(c,i){
+            var bar=bars[i].getBBox(),tailNode=$('platform-svg').querySelector('[data-role="vertical-tail"][data-column-side="'+c.side+'"]'),tail=tailNode?tailNode.getBBox():bar,top=Math.min(bar.y,tail.y),bottom=Math.max(bar.y+bar.height,tail.y+tail.height);
+            assert(Math.abs(c.positions[c.positions.length-1]-top-40*c.unit)<.001&&Math.abs(bottom-c.positions[0]-40*c.unit)<.001,'SVG首末站外竖带应各延伸40个主体单位');
+            assert(Math.abs(top-72-(A.scene.height-bottom))<.001,'SVG上下留白应均衡');
+            if(!expected)expected=[top,bottom];else assert(Math.abs(top-expected[0])<.001&&Math.abs(bottom-expected[1])<.001,'改方向和交换不得改变SVG竖带高度');
+            assert(A.scene.output.height===768&&A.scene.output.width===(variant==='double'?640:384),'MC导出尺寸应保持固定');
+          });
+        }
+        A.update(function(){return S.settings(S.setVerticalVariant(base,variant),{mode:'vertical'});});A.deselect();
+        [-1,1].forEach(function(direction){input('travel-direction',String(direction),'change');check();if(variant==='double'){$('swap-vertical-columns').click();check();}});
+      });});restore();
+    });
+    await test('纵向顶栏左←右→固定朝向；主体方向、双列交换/撤销/重做与SVG导出一致',function(){
+      var ref=verticalProject(),ids=ref.stations.map(function(s){return s.id;}).join('|');
+      function check(){
+        assert(A.state.stations.map(function(s){return s.id;}).join('|')===ids,'改方向不得改站序');
+        var exported=new w.DOMParser().parseFromString(w.PlatformExport.buildSVG(A.state,A.measure,{},A.scene),'image/svg+xml');
+        var arrows=Array.from(exported.querySelectorAll('path')).filter(function(p){return p.getAttribute('d')===w.PlatformVerticalReference.header.arrow.d;});
+        assert(arrows.length===A.scene.columns.length*2,'每列应导出顶栏和本站两个标准箭头');
+        A.scene.columns.forEach(function(c,i){
+          var ns=A.scene.nodes.filter(function(n){return n.attrs['data-element-key']==='vertical:direction:'+c.side;}),arrow=ns.find(function(n){return n.attrs['data-role']==='vertical-direction-arrow';}),m=arrow.matrix;
+          var tip=12*m[0]+40*m[2]+m[4],back=44*m[0]+40*m[2]+m[4],terminal=A.state.stations[c.direction===1?A.state.stations.length-1:0],title=ns.find(function(n){return n.attrs['data-role']==='vertical-direction-zh';});
+          assert((tip-back)*(c.side==='right'?1:-1)>0&&m[1]===0&&m[2]===0,'顶栏左侧应固定←，右侧固定→，双列交换也不改变朝向');assert((title.label||title.text)===terminal.zh+'方向','标题终点应与该列行车方向一致');
+          assert(c.positions[0]>c.positions[c.positions.length-1],'纵向首站应在下、末站应在上');
+          assert((c.positions[6+c.direction]-c.positions[6])*-c.direction>0,'下一站应位于箭头指向一侧');
+          var b=inkBox(arrow);assert(Math.abs(b.y+b.height/2-36)<.001,'方向箭头墨区应居中');
+          assert(arrows.filter(function(p){return p.getAttribute('transform')===arrow.attrs.transform;}).length===1,'导出应使用同一顶栏方向矩阵');
+          var tail=A.scene.nodes.find(function(n){return n.attrs['data-role']==='vertical-tail'&&n.attrs['data-column-side']===c.side;}),ys=tail.attrs.points.split(' ').map(function(p){return Number(p.split(',')[1]);});
+          assert(tail.attrs.fill===A.state.color&&(c.direction===-1?Math.min.apply(null,ys)>c.positions[6]:Math.max.apply(null,ys)<c.positions[6]),'活动色端头应位于行驶方向一端');
+        });
+      }
+      ['left','right','double'].forEach(function(variant){
+        A.update(function(){return S.setVerticalVariant(ref,variant);});A.deselect();
+        [-1,1].forEach(function(direction){
+          input('travel-direction',String(direction),'change');assert(A.state.direction===direction);assert($('travel-direction').selectedOptions[0].textContent.endsWith(direction===-1?'↓':'↑'),'下拉映射也应更新');check();
+          if(variant==='double'){$('swap-vertical-columns').click();check();assert(A.state.direction===direction);$('undo').focus();$('undo').click();check();$('redo').click();check();}
+          assert(S.neighbors(A.state).next.id===ref.stations[6+direction].id,'吊板联动的下一站应符合首末站方向');
+        });
+      });restore();
+    });
+    await test('纵向首末站：始发竖带全彩、终到全灰直角，三版式与双列交换的预览/SVG/PNG一致',async function(){
+      for(var count of [1,11,50])for(var variant of ['left','right','double'])for(var direction of [-1,1])for(var current of count===1?[0]:[0,count-1])for(var swapped of variant==='double'?[false,true]:[false]) {
+        var base=S.replaceStations(original,Array.from({length:count},function(_,i){return{id:'vertical-endpoint-'+i,code:String(i+1),zh:'站点',en:'Station',transfers:[]};}));
+        var state=S.settings(S.setVerticalVariant(base,variant),{mode:'vertical',direction:direction,currentId:base.stations[current].id,verticalSwapped:swapped});
+        A.update(function(){return state;});
+        var scene=A.scene,bars=scene.nodes.filter(function(n){return n.attrs['data-role']==='vertical-bar';});
+        scene.columns.forEach(function(c,i){
+          var terminal=current===(c.direction===1?count-1:0),bar=bars[i].attrs;
+          var tail=$('platform-svg').querySelector('[data-role="vertical-tail"][data-column-side="'+c.side+'"]');
+          assert(!!tail===!terminal,'终到列不应保留彩色斜切端头');
+          if(terminal)assert(Math.abs(bar.y-c.positions[count-1]+40*c.unit)<.001&&Math.abs(bar.y+bar.height-c.positions[0]-40*c.unit)<.001,'终到灰条两端应完整平直');
+        });
+        // Isolate the exported route strips so station circles cannot mask residual gray or colored caps.
+        var strips=Object.assign({},scene,{usedFonts:{},nodes:scene.nodes.filter(function(n){return /^vertical-(bar|active-bar|tail)$/.test(n.attrs['data-role']);})});
+        var svgText=w.PlatformExport.buildSVG(state,A.measure,{},strips),blob=await w.PlatformExport.pngBlob(svgText,scene.output),bitmap=await w.createImageBitmap(blob);
+        var canvas=d.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;var ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);bitmap.close();
+        scene.columns.forEach(function(c,i){
+          var bar=bars[i].attrs,terminal=current===(c.direction===1?count-1:0),color=terminal?state.muted:state.color,expected=color.slice(1).match(/../g).map(function(v){return parseInt(v,16);});
+          [.15,.5,.85].forEach(function(rx){[.1,.5,.9].forEach(function(ry){
+            var px=Math.floor((bar.x+bar.width*rx)*scene.frame.scale+scene.frame.x),py=Math.floor((bar.y+bar.height*ry)*scene.frame.scale+scene.frame.y),actual=ctx.getImageData(px,py,1,1).data;
+            assert(expected.every(function(v,k){return Math.abs(actual[k]-v)<2;}),'导出竖带颜色应完整覆盖：'+variant+' '+c.side+' '+(terminal?'终到':'始发'));
+          });});
+        });
+      }restore();
+    });
+    await test('纵向向上端头 PNG 轮廓：单列左右及双列斜边连续，没有矩形遮盖产生的折线',async function(){
+      for(var variant of ['left','right','double']) {
+        A.update(function(){return S.settings(S.setVerticalVariant(verticalProject(),variant),{direction:1});});
+        var scene=A.scene,url=URL.createObjectURL(new Blob([w.PlatformExport.buildSVG(A.state,A.measure,{},scene)],{type:'image/svg+xml'})),image=new w.Image();
+        try {
+          image.src=url;await image.decode();var canvas=d.createElement('canvas');canvas.width=scene.output.width;canvas.height=scene.output.height;var ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);var pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+          scene.columns.filter(function(c){return c.verticalDirection===-1;}).forEach(function(c){
+            var tail=scene.nodes.find(function(n){return n.attrs['data-role']==='vertical-tail'&&n.attrs['data-column-side']===c.side;}),pts=tail.attrs.points.split(' ').map(function(p){return p.split(',').map(Number);}),a=pts[2],b=pts[3],scale=scene.frame.scale;
+            var left=Math.ceil(Math.min(a[0],b[0])*scale)+1,right=Math.floor(Math.max(a[0],b[0])*scale)-1;
+            for(var x=left;x<=right;x++) {
+              var expected=(a[1]+((x+.5)/scale-a[0])*(b[1]-a[1])/(b[0]-a[0]))*scale,actual=-1;
+              for(var y=Math.floor(72*scale);y<Math.ceil(Math.max(a[1],b[1])*scale)+3;y++){var k=(y*canvas.width+x)*4;if(Math.min(pixels[k],pixels[k+1],pixels[k+2])<220){actual=y;break;}}
+              assert(actual>=0&&Math.abs(actual-expected)<1.5,'斜边像素应位于同一直线，不能出现水平折线：'+variant+' x='+x+' '+actual+'/'+expected);
+            }
+          });
+        } finally {URL.revokeObjectURL(url);}
+      }restore();
+    });
+    await test('本站提示开关：其他 SVG 元素不变、撤销重做、项目预设和 PNG 导出一致', async function () {
+      restore();A.deselect();assert($('station-direction-option').hidden);
+      d.querySelector('[data-mode="station"]').click();
+      var toggle=$('show-station-direction');
+      function enabled() { return toggle.getAttribute('aria-checked') === 'true'; }
+      assert(!$('station-direction-option').hidden&&enabled()&&toggle.getAttribute('role')==='switch');
+      assert(toggle.classList.contains('platform-switch')&&$('line-pattern-enabled').classList.contains('platform-switch'));
+      function others() { return Array.from($('platform-svg').querySelectorAll('.platform-art > *')).filter(function(n){return n.dataset.elementKey!=='station:direction';}).map(function(n){return n.outerHTML;}).join(''); }
+      var before=others();toggle.click();
+      assert(!A.state.showStationDirection&&!A.scene.elements.some(function(e){return e.key==='station:direction';}));
+      assert(!$('platform-svg').querySelector('[data-element-key="station:direction"]'),'隐藏提示仍有图形或命中区');
+      assert(others()===before,'隐藏提示改变了其他元素');
+      assert(S.deserialize(S.serialize(A.state)).showStationDirection===false);
+      var P=w.PlatformPresets,preset=P.create(A.state,'隐藏行车提示');assert(P.deserialize(P.serialize([preset]))[0].state.showStationDirection===false);
+      $('undo').click();assert(enabled()&&$('platform-svg').querySelector('[data-role="travel-chevron"]'));
+      $('redo').click();assert(!enabled()&&others()===before&&$('show-station-direction')===toggle);
+      var fonts=await w.SignExporters.ensureUsedFontData(A.scene.usedFonts),svg=w.PlatformExport.buildSVG(A.state,A.measure,fonts);
+      assert(!svg.includes('列车行驶方向')&&!svg.includes('Next Stations'),'导出仍有方向提示');
+      var blob=await w.PlatformExport.pngBlob(svg,A.state.sizes.station),bitmap=await w.createImageBitmap(blob);
+      assert(bitmap.width===512&&bitmap.height===192);
+      var canvas=d.createElement('canvas');canvas.width=512;canvas.height=192;var ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);
+      var bottom=ctx.getImageData(0,178,512,14).data;assert(bottom.every(function(v){return v===255;}),'关闭提示后 PNG 底部应留白');bitmap.close();
+      $('station-direction-caption').click();assert(enabled());A.selectElement('station:direction');
+      A.update(function(state){return S.settings(state,{showStationDirection:false});});assert(!A.selectedKey&&$('platform-element-toolbar').hidden,'隐藏后仍可选中方向提示');
+      A.deselect();d.querySelector('[data-mode="route"]').click();assert($('station-direction-option').hidden);
+      d.querySelector('[data-mode="vertical"]').click();assert($('station-direction-option').hidden);
+      d.querySelector('[data-mode="station"]').click();assert(!enabled(),'切换版式丢失关闭设置');restore();
+    });
+    await test('左栏按住拖动排序：插入反馈、松开提交、取消、撤销和一键倒序保留本站', function () {
+      restore();var list=$('station-list'),ids=A.state.stations.map(function(s){return s.id;}),current=A.state.currentId;
+      function drag(from,to,cancel) {
+        var start=list.children[from].getBoundingClientRect(),end=list.children[to].getBoundingClientRect(),id=list.children[from].dataset.id;
+        var x=start.left+start.width/2,y=start.top+start.height/2;
+        list.children[from].dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,pointerId:31,button:0,clientX:x,clientY:y,pointerType:'mouse'}));
+        d.dispatchEvent(new w.PointerEvent('pointermove',{bubbles:true,pointerId:31,clientX:end.left+end.width/2,clientY:end.bottom-3,pointerType:'mouse'}));
+        assert(d.querySelector('.station-drag-ghost')&&list.querySelector('.station-drop-after,.station-drop-before'),'拖动缺少插入反馈');
+        assert(A.state.stations[from].id===id,'松开前不能改变状态');
+        d.dispatchEvent(new w.PointerEvent(cancel?'pointercancel':'pointerup',{bubbles:true,pointerId:31,pointerType:'mouse'}));
+        assert(!d.querySelector('.station-drag-ghost')&&!list.querySelector('.station-drop-after,.station-drop-before'));
+      }
+      drag(0,3,false);assert(A.state.stations[3].id===ids[0]);assert(A.selectedId===ids[0]&&A.state.currentId===current);
+      $('undo').click();assert(A.state.stations[0].id===ids[0]);$('redo').click();assert(A.state.stations[3].id===ids[0]);
+      var snapshot=S.serialize(A.state);drag(0,3,true);assert(S.serialize(A.state)===snapshot,'取消拖动仍改变顺序');
+      restore();list.children[2].dispatchEvent(new w.KeyboardEvent('keydown',{bubbles:true,key:'ArrowUp',altKey:true}));
+      assert(A.state.stations[1].id===ids[2]&&d.activeElement.dataset.id===ids[2],'键盘调序后焦点未跟随站点');$('undo').click();
+      restore();var before=S.serialize(A.state),direction=A.state.direction,previous=S.neighbors(A.state).previous.id;
+      $('reverse-stations').click();assert(A.state.stations[0].id===ids[7]&&A.state.currentId===current&&S.neighbors(A.state).next.id===previous);
+      assert(A.state.direction===direction&&$('travel-direction').value===String(direction),'倒序不应改变列车行驶方向');
+      $('reverse-stations').click();assert(S.serialize(A.state)===before);$('undo').click();assert(A.state.stations[0].id===ids[7]);
+      restore();
+    });
+    await test('吊板字重与组合横线：中英本站强调、普通本站标题、11起数字真实墨区一致', function () {
+      restore();A.select(original.stations[0].id);input('station-code','11');
+      var nums=$('platform-svg').querySelectorAll('[data-role="station-code"][data-station-id="'+A.selectedId+'"]');
+      assert(nums.length===2&&Array.from(nums).every(function(n){return n.tagName==='path';}),'11起编号不能换成后备字体');
+      Array.from(nums).forEach(function(n){var b=n.getBBox();assert(Math.abs(b.height-w.PlatformReference.numbers.stationDigits['1'].bounds.height)<.01,'数字轮廓墨区与参考不同');});
+      ['name-zh','name-en'].forEach(function(role){var n=$('platform-svg').querySelector('[data-role="'+role+'"][data-station-id="'+A.state.currentId+'"]');assert(n.getAttribute('font-weight')==='600','全线本站中英应同时加粗');});
+      [192,256].forEach(function(height){
+        var state=S.setHangingHeight(original,height),route=R.metrics(state,A.measure),station=R.metrics(S.settings(state,{mode:'station',direction:1}),A.measure),row=d.createElement('div');
+        row.style.cssText='position:fixed;top:0;left:0;display:flex;visibility:hidden';
+        [route,station].forEach(function(scene){var svg=d.createElementNS(w.SignCore.SVG_NS,'svg');R.draw(svg,scene,{clean:true});svg.style.flex='none';row.appendChild(svg);});d.body.appendChild(row);
+        function ends(svg){var bar=svg.querySelector('[data-role="passed-line"]'),x=Number(bar.getAttribute('x')),y=Number(bar.getAttribute('y')),h=Number(bar.getAttribute('height'));return [new w.DOMPoint(x,y).matrixTransform(bar.getScreenCTM()).y,new w.DOMPoint(x,y+h).matrixTransform(bar.getScreenCTM()).y];}
+        var a=ends(row.children[0]),b=ends(row.children[1]);assert(Math.abs(a[0]-b[0])<.001&&Math.abs(a[1]-b[1])<.001,'组合放置横线上下边不齐');row.remove();
+        assert(station.nodes.filter(function(n){return n.attrs['data-element-key']==='station:title';}).every(function(n){return n.attrs['font-weight']===400;}));
+        var labels=station.nodes.filter(function(n){return n.tag==='text'&&n.attrs['data-element-key']==='station:direction';});
+        assert(Math.abs(labels[0].bounds.x+labels[0].bounds.width-labels[1].bounds.x-labels[1].bounds.width)<.001,'右行提示中英墨区未右对齐');
+        station.nodes.filter(function(n){return ['station:left','station:right'].includes(n.attrs['data-element-key'])&&n.attrs['data-role']==='name-zh';}).forEach(function(n){assert(n.bounds.height>=height*40/384&&n.bounds.height<=height*44.355/384+.01,'邻站墨区字号偏离参考');});
+      });restore();
+    });
+    await test('共用导向标识调色板：收起/展开、城市联动、HEX焦点不跳、换乘色不回滚', function () {
+      restore();A.deselect();var picker=$('line-color-picker').querySelector('.color-picker'),details=picker.querySelector('details');
+      assert(picker&&details&&!details.open);picker.querySelector('.cp-current').click();assert(details.open);
+      var city=picker.querySelector('.cp-city-select');city.value='chengdu';city.dispatchEvent(new w.Event('change',{bubbles:true}));assert(A.state.city==='chengdu');
+      assert(Array.from(d.querySelectorAll('.cp-city-select')).every(function(el){return el.value==='chengdu';}),'所有色板城市联动');
+      var hex=$('line-color-hex');input('line-color-hex','123456');assert(A.state.color==='#123456'&&hex.value==='123456'&&d.activeElement===hex,'HEX输入被重建或规整化');
+      picker.querySelector('.cp-swatch').click();assert(hex===$('line-color-hex'));hex.blur();
+      A.select(original.currentId);input('station-transfers','1,5:#123456','change');input('station-zh','调色板测试');
+      var color=$('transfer-colors').children[1].querySelector('.cp-native');color.value='#654321';color.dispatchEvent(new w.Event('input',{bubbles:true}));
+      assert(S.neighbors(A.state).current.transfers[1].color==='#654321'&&S.neighbors(A.state).current.zh==='调色板测试');
+      assert(!d.querySelector('.platform-brand'));assert($('tool-up').textContent.includes('前移')&&$('tool-down').textContent.includes('后移'));
+      assert($('tool-up').querySelector('path').getAttribute('d')!==d.querySelector('[data-nudge-x="-1"] path').getAttribute('d'),'调序与微调图标仍相同');restore();
+    });
+    await test('响应式增站：11/12站实际圆标等距；密集线路缺口与换乘支线在屏幕上连贯', function () {
+      function centers() {
+        return Array.from($('platform-svg').querySelectorAll('[data-role="station-number"],[data-role="current-badge"]')).map(function(el){
+          return new w.DOMPoint(Number(el.getAttribute('cx')),Number(el.getAttribute('cy'))).matrixTransform(el.getScreenCTM()).x;
+        });
+      }
+      function equalSpacing() {
+        var xs=centers(),gap=xs[1]-xs[0];
+        xs.slice(2).forEach(function(x,i){assert(Math.abs(x-xs[i+1]-gap)<.001,'本站与普通站的可见圆心间距不一致');});
+      }
+      function corners(el) {
+        return Array.from(el.points).map(function(p){return new w.DOMPoint(p.x,p.y).matrixTransform(el.getScreenCTM());});
+      }
+      restore();
+      var list=['11','10','03'].map(function(code,i){return {id:'prefix-'+i,code:code,zh:i===2?'松园':'新站点',en:i===2?'Pinefield':'New Station',transfers:[]};}).concat(original.stations);
+      A.update(function(state){return S.settings(S.replaceStations(state,list),{direction:1,currentId:original.stations[0].id});});equalSpacing();
+      A.select(original.stations[4].id);$('add-station').click();assert(A.state.stations.length===12);equalSpacing();
+      $('undo').click();assert(A.state.stations.length===11);equalSpacing();$('redo').click();equalSpacing();
+      [192,256].forEach(function(height){[-1,1].forEach(function(direction){[20,50,120].forEach(function(count){
+        var stations=Array.from({length:count},function(_,i){return {id:'responsive-'+i,code:String(i+1),zh:'车站',en:'Station',transfers:Array.from({length:[1,2,6][i%3]},function(_,j){return {number:String(j+1),color:'#0057B7'};})};});
+        A.update(function(state){return S.setHangingHeight(S.settings(S.replaceStations(state,stations),{direction:direction,currentId:stations[Math.floor(count/2)].id}),height);});equalSpacing();
+        var svg=$('platform-svg');
+        Array.from(svg.querySelectorAll('[data-role="station-notch"]')).forEach(function(notch){
+          var id=notch.getAttribute('data-station-id'),white=svg.querySelector('[data-role="transfer-clearance"][data-station-id="'+id+'"]'),branch=svg.querySelector('[data-role="transfer-branch"][data-station-id="'+id+'"]');
+          var n=corners(notch),a=corners(white),b=corners(branch);
+          [0,1].forEach(function(i){assert(Math.hypot(n[i].x-a[i].x,n[i].y-a[i].y)<.001,'缺口与支线白边断开');});
+          assert(Math.abs((b[0].x-a[0].x)-(a[1].x-b[1].x))<.001,'支线两侧留白不等宽');
+        });
+      });});});
+
+    });
+    await test('单轨全线默认5格、地铁默认3格，旧项目尺寸与底纹开关迁移', function () {
+      restore(); A.deselect(); input('hanging-height','256','change'); assert(A.state.sizes.route.width===1280 && $('hanging-length').value==='5'); assert(A.scene.output.height===256);
+      input('hanging-height','192','change'); assert(A.state.sizes.route.width===768 && $('hanging-length').value==='3');
+      var legacy=S.create(); legacy.version=2; legacy.sizes.route={width:768,height:256}; assert(S.deserialize(JSON.stringify(legacy)).sizes.route.width===1280);
+      assert(!$('vertical-texture')); var scene=R.metrics(S.settings(A.state,{mode:'vertical',texture:true}),A.measure); assert(!scene.nodes.some(function(n){return n.attrs.opacity===.12;}));
+    });
+    await test('截图回归 / 真实字体：旋转后墨区与圆标净空、字号一致、50站墨区有界', function () {
+      function quad(n) { var b=n.bounds;if(n.matrix){var mx=n.matrix;return [[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]].map(function(p){return [mx[0]*p[0]+mx[2]*p[1]+mx[4],mx[1]*p[0]+mx[3]*p[1]+mx[5]];});}var m=n.attrs.transform.match(/rotate\((-?[\d.]+) ([\d.-]+) ([\d.-]+)\)/),a=Number(m[1])*Math.PI/180,cx=Number(m[2]),cy=Number(m[3]); return [[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]].map(function(p){return [cx+(p[0]-cx)*Math.cos(a)-(p[1]-cy)*Math.sin(a),cy+(p[0]-cx)*Math.sin(a)+(p[1]-cy)*Math.cos(a)];}); }
+      function distance(p,points) { var signs=points.map(function(a,i){var b=points[(i+1)%4];return (b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);}); if(signs.every(function(s){return s>=0;})||signs.every(function(s){return s<=0;}))return 0; return Math.min.apply(null,points.map(function(a,i){var b=points[(i+1)%4],dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);})); }
+      [192,256].forEach(function(height){[-1,1].forEach(function(direction){[1,1.4].forEach(function(fontScale){[0,4,7].forEach(function(index){
+        var state=S.setHangingHeight(S.settings(original,{direction:direction,fontScale:fontScale,currentId:original.stations[index].id}),height),scene=R.metrics(state,A.measure);
+        var circles=scene.nodes.filter(function(n){return ['station-number','current-badge'].includes(n.attrs['data-role']);});
+        var captions=scene.nodes.filter(function(n){return n.bounds && ['name-zh','name-en'].includes(n.attrs['data-role']) && n.attrs['data-element-key'].startsWith('route:') && n.text!=='换乘' && n.text!=='Transfer';});
+        captions.forEach(function(n){var points=quad(n);circles.forEach(function(c){assert(distance([c.attrs.cx,c.attrs.cy],points)-c.attrs.r>=height*.017,n.text+' 与圆标过近');}); points.forEach(function(p){assert(p[0]>=-0.01&&p[0]<=scene.width+.01&&p[1]>=-.01&&p[1]<=height+.01,n.text+' 越界');});});
+        var sizes=captions.filter(function(n){return n.attrs['data-role']==='name-zh'&&n.attrs['font-weight']===400;}).map(function(n){return n.attrs['font-size'];}); assert(Math.max.apply(null,sizes)-Math.min.apply(null,sizes)<.001,'普通站中文字号不统一');
+      });});});});
+    });
+    await test('吊板格数与地铁 / 单轨短边按像素直排，竖版尺寸独立', function () {
+      restore(); A.deselect(); assert(A.scene.width === 768 && A.scene.height === 192); assert($('hanging-length').value === '3');
+      input('hanging-length', '4', 'change'); input('hanging-height', '256', 'change'); assert(A.state.sizes.route.width === 1024 && A.state.sizes.route.height === 256); assert(A.scene.frame.scale === 1 && A.scene.frame.y === 0);
+      d.querySelector('[data-mode="station"]').click(); assert(A.state.sizes.station.width === 512 && A.state.sizes.station.height === 256); assert($('hanging-length').value === '2'); assert(A.state.sizes.vertical.height === original.sizes.vertical.height);
+      input('hanging-height', '192', 'change'); assert(A.scene.output.height === 192);
+    });
+    await test('真实字体双语墨区留边与圆标数字居中，双线换乘沿斜线错开', function () {
+      restore(); A.update(function (state) { return S.settings(state, { mode: 'station' }); });
+      var nodes = A.scene.nodes, zh = nodes.find(function (n) { return n.attrs['data-element-key'] === 'station:title' && n.attrs['data-role'] === 'name-zh'; }), en = nodes.find(function (n) { return n.attrs['data-element-key'] === 'station:title' && n.attrs['data-role'] === 'name-en'; });
+      assert(en.bounds.y > zh.bounds.y + zh.bounds.height + 1, '中英文墨区间距');
+      var badge = nodes.find(function (n) { return n.attrs['data-role'] === 'current-badge'; });
+      ['badge-line', 'badge-code'].forEach(function (role) { var n = nodes.find(function (n) { return n.attrs['data-role'] === role; }); assert(Math.abs(n.bounds.x + n.bounds.width / 2 - badge.attrs.cx) < .01, '数字水平居中'); var cy = badge.attrs.cy + (role === 'badge-line' ? -1 : 1) * badge.attrs.r * .45; assert(Math.abs(n.bounds.y + n.bounds.height / 2 - cy) < .01, '数字垂直居中'); });
+      [192, 256].forEach(function (height) { [1, 1.4].forEach(function (fontScale) {
+        var scene = R.metrics(S.setHangingHeight(S.settings(A.state, { fontScale: fontScale }), height), A.measure), hint = scene.elements.find(function (e) { return e.key === 'station:direction'; });
+        ['station:left', 'station:right'].forEach(function (key) { var a = scene.elements.find(function (e) { return e.key === key; }).box,b=hint.box; assert(Math.max(b.x-a.x-a.width,a.x-b.x-b.width,b.y-a.y-a.height,a.y-b.y-b.height) >= height * .025-.001, '真实字体邻站与方向提示净空'); });
+      }); });
+      A.update(function (state) { return S.settings(state, { mode: 'route' }); }); var id = A.state.stations[1].id;
+      var circles = A.scene.nodes.filter(function (n) { return n.attrs['data-station-id'] === id && n.attrs['data-role'] === 'transfer-circle'; }); assert(circles.length === 2); assert(circles[1].attrs.cx < circles[0].attrs.cx && circles[1].attrs.cy > circles[0].attrs.cy);
+      assert(A.scene.nodes.filter(function (n) { return n.attrs['data-station-id'] === id && n.attrs['data-role'] === 'transfer-clearance'; }).length === 1);
+    });
+    await test('悬停选框、点选浮动工具栏、位置微调与撤销保持最新站名', function () {
+      restore(); A.deselect(); var id = A.state.currentId, key = 'route:' + id, target = $('platform-svg').querySelector('[data-element-key="' + key + '"]');
+      var firstId = A.state.stations[0].id, circle = $('platform-svg').querySelector('ellipse[data-role="station-number"][data-station-id="' + firstId + '"]'), point = new w.DOMPoint(Number(circle.getAttribute('cx')), Number(circle.getAttribute('cy'))).matrixTransform(circle.getScreenCTM());
+      d.elementFromPoint(point.x, point.y).dispatchEvent(new w.MouseEvent('click', { bubbles: true })); assert(A.selectedId === firstId, '双线换乘元素的选框不能遮挡相邻站点点选'); A.deselect();
+      target.dispatchEvent(new w.PointerEvent('pointermove', { bubbles: true })); assert(!$('element-hover-outline').hidden);
+      target.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); assert(A.selectedKey === key && !$('platform-element-toolbar').hidden && !$('element-selection-outline').hidden); assert($('property-settings').hidden && !$('station-properties').hidden);
+      var inputBox = $('station-zh'); input('station-zh', '浮动工具测试站'); var oldBox = A.scene.elements.find(function (e) { return e.key === key; }).box;
+      d.querySelector('[data-nudge-x="1"]').click(); assert(A.state.adjustments[key].x === 1); assert(A.scene.elements.find(function (e) { return e.key === key; }).box.x === oldBox.x + 1); assert($('station-zh') === inputBox && S.neighbors(A.state).current.zh === '浮动工具测试站');
+      $('undo').click(); assert(!A.state.adjustments[key]); $('redo').click(); assert(A.state.adjustments[key].x === 1); input('element-offset-y', '3', 'change'); assert(A.state.adjustments[key].y === 3); $('tool-reset').click(); assert(!A.state.adjustments[key]);
+      A.update(function (state) { return S.settings(state, { mode: 'station' }); }); A.selectElement('station:direction'); assert($('station-properties').hidden && !$('element-properties').hidden && $('tool-current').hidden);
+      A.deselect(); assert(!$('property-settings').hidden && $('element-properties').hidden && $('platform-element-toolbar').hidden);
+      $('export-svg').scrollIntoView({ block: 'center' });
+      var exportBounds = $('export-svg').getBoundingClientRect(), panelBounds = $('property-scroll').getBoundingClientRect();
+      assert(exportBounds.top >= panelBounds.top && exportBounds.bottom <= panelBounds.bottom + 1, '导出按钮应能在面板内滚动到达');
+    });
+    await test('预设保存完整快照、缩略图载入、删除与本地持久化', function () {
+      restore(); A.selectElement('route:' + A.state.currentId); d.querySelector('[data-nudge-x="1"]').click(); var snapshot = S.serialize(A.state);
+      $('return-to-settings').click(); $('save-preset-shortcut').click(); input('preset-name', '吊板回归预设'); $('save-preset-confirm').click(); assert(!$('preset-dialog').open && !$('preset-library').hidden);
+      var list = w.PlatformPresets.deserialize(localStorage.getItem(presetKey)); assert(list.length === 1 && S.serialize(list[0].state) === snapshot); assert($('preset-list').querySelector('svg') && !$('preset-list').querySelector('.platform-hitbox'));
+      A.update(function (state) { return S.settings(state, { mode: 'station', direction: 1, line: '99' }); }); $('preset-list').querySelector('.preset-load').click(); assert(S.serialize(A.state) === snapshot && !$('property-settings').hidden);
+      $('preset-list').querySelector('.preset-remove').click(); assert(w.PlatformPresets.deserialize(localStorage.getItem(presetKey)).length === 0);
+      d.querySelector('[data-library="stations"]').click();
+    });
+    await test('三种版式通过真实选项卡切换，同一本站与线路号保留', function () {
+      restore(); ['route', 'station', 'vertical'].forEach(function (mode) { d.querySelector('[data-mode="' + mode + '"]').click(); assert(A.state.mode === mode); assert($('platform-svg').textContent.includes('中央站')); assert(d.querySelector('[data-mode="' + mode + '"]').getAttribute('aria-pressed') === 'true'); });
+    });
+    await test('站名与编号连续编辑不重建输入框，不回滚其他字段', function () {
+      restore(); var zh = $('station-zh'), row = $('station-list').children[4]; input('station-zh', '服务器测试站'); input('station-en', 'Server Test'); input('station-code', '88');
+      var current = S.neighbors(A.state).current; assert(current.zh === '服务器测试站' && current.en === 'Server Test' && current.code === '88'); assert($('station-zh') === zh); assert($('station-list').children[4] === row); assert($('platform-svg').textContent.includes('服务器测试站'));
+    });
+    await test('换乘线路输入与颜色编辑保留最新站名', function () {
+      input('station-transfers', '1,5:#123456,6', 'change'); assert(S.neighbors(A.state).current.transfers.length === 3);
+      var color = $('transfer-colors').children[1].querySelector('.cp-native'); color.value = '#654321'; color.dispatchEvent(new w.Event('input', { bubbles: true })); assert(S.neighbors(A.state).current.transfers[1].color === '#654321'); assert(S.neighbors(A.state).current.zh === '服务器测试站');
+    });
+    await test('预览点选、设本站、调序、删除、撤销与重做', function () {
+      restore(); var id = A.state.stations[1].id; $('platform-svg').querySelector('[data-station-id="' + id + '"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true })); assert(A.selectedId === id);
+      $('set-current').click(); assert(A.state.currentId === id); $('station-down').click(); assert(A.state.stations[2].id === id); $('station-delete').click(); assert(A.state.stations.length === 7 && A.state.currentId !== id);
+      $('undo').click(); assert(A.state.stations.length === 8 && A.state.currentId === id); $('redo').click(); assert(A.state.stations.length === 7);
+    });
+    await test('添加站点、终点吊板与反向行车', function () {
+      restore(); $('add-station').click(); assert(A.state.stations.length === 9); assert($('station-zh').value === '新站点');
+      A.update(function (state) { return S.settings(state, { currentId: state.stations[0].id, direction: -1, mode: 'station' }); }); assert(!$('platform-svg').textContent.includes('终点站'));
+      input('travel-direction', '1', 'change'); assert(S.neighbors(A.state).next !== null);
+    });
+    await test('首末站吊板：到站灰色直角横条、缺站留空，反向出发显示真实下一站，导出同步', async function () {
+      restore();
+      for (var height of [192,256]) for (var direction of [-1,1]) {
+        var current=direction===-1?original.stations[0]:original.stations[original.stations.length-1];
+        A.update(function(){return S.setHangingHeight(S.settings(original,{mode:'station',currentId:current.id,direction:direction}),height);});A.deselect();
+        var nextKey=direction===-1?'station:left':'station:right',previousKey=direction===-1?'station:right':'station:left';
+        var bars=Array.from($('platform-svg').querySelectorAll('[data-role="active-line"],[data-role="passed-line"]'));
+        assert(bars.length===2&&bars.every(function(n){return n.tagName==='rect'&&n.getAttribute('fill')===A.state.muted;}),'前方无站时两侧横条均应为灰色直角矩形');
+        assert(!$('platform-svg').querySelector('[data-element-key="'+nextKey+'"]'),'前方无站时不绘制站名或透明命中区');
+        assert($('platform-svg').querySelector('[data-element-key="'+previousKey+'"]'),'保留后方真实邻站');
+        assert(!/终点站|始发站|Terminus|First Station/.test($('platform-svg').textContent),'不应生成缺站占位文字');
+        var fonts=await w.SignExporters.ensureUsedFontData(A.scene.usedFonts),svg=w.PlatformExport.buildSVG(A.state,A.measure,fonts);
+        var doc=new w.DOMParser().parseFromString(svg,'image/svg+xml');
+        var exportedBars=Array.from(doc.querySelectorAll('rect')).filter(function(n){return n.getAttribute('fill')===A.state.muted&&Number(n.getAttribute('y'))===Number(bars[0].getAttribute('y'))&&Number(n.getAttribute('height'))===Number(bars[0].getAttribute('height'));});
+        assert(exportedBars.length===2,'SVG 导出应保留两侧灰色直角横条');
+        var bitmap=await w.createImageBitmap(await w.PlatformExport.pngBlob(svg,A.scene.output)),canvas=d.createElement('canvas');
+        canvas.width=bitmap.width;canvas.height=bitmap.height;var ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);bitmap.close();
+        var ys=Number(bars[0].getAttribute('y')),barHeight=Number(bars[0].getAttribute('height'));
+        [height*.12+2,A.scene.width-height*.06-2].forEach(function(x){
+          [ys+2,ys+barHeight-2].forEach(function(y){var p=ctx.getImageData(Math.floor(x),Math.floor(y),1,1).data;assert(p[0]===p[1]&&p[1]===p[2]&&p[0]<240&&p[3]===255,'PNG 横条两端上下角应为不透明灰色');});
+        });
+        input('travel-direction',String(-direction),'change');
+        var next=S.neighbors(A.state).next;
+        assert(next&&$('platform-svg').textContent.includes(next.zh)&&$('platform-svg').textContent.includes(next.en),'从端点反向出发显示真实下一站');
+        assert($('platform-svg').querySelector('[data-role="active-line"]').tagName==='polygon','出发方向恢复彩色斜切横条');
+        assert(!$('platform-svg').querySelector('[data-element-key="'+nextKey+'"]'),'缺少上一站时同样留空');
+        $('undo').click();assert(!S.neighbors(A.state).next&&$('platform-svg').querySelector('[data-role="active-line"]').tagName==='rect','撤销恢复到站样式');
+        $('redo').click();assert(S.neighbors(A.state).next&&$('platform-svg').querySelector('[data-role="active-line"]').tagName==='polygon','重做恢复出发样式');
+      }
+      A.update(function(){return S.settings(S.replaceStations(original,[original.stations[0]]),{mode:'station'});});
+      assert(!A.scene.elements.some(function(e){return e.kind==='neighbor';}),'仅一站时两侧都不应生成邻站');restore();
+    });
+    await test('批量编辑拒绝非法数据，按编号保留本站且可撤销', function () {
+      restore(); $('batch-stations').click(); input('batch-text', '01||Empty'); $('apply-batch').click(); assert($('batch-dialog').open && $('batch-error').textContent); assert(A.state.stations.length === 8);
+      input('batch-text', '01|新首站|First|2\n05|新本站|Current|1,5:#123456\n09|新末站|Last|'); $('apply-batch').click(); assert(!$('batch-dialog').open); assert(A.state.stations.length === 3 && S.neighbors(A.state).current.code === '05'); $('undo').click(); assert(A.state.stations.length === 8);
+    });
+    await test('导出尺寸分别记忆，超范围尺寸恢复，字体与配色一致', function () {
+      restore(); input('output-width', '2048', 'change'); d.querySelector('[data-mode="vertical"]').focus(); d.querySelector('[data-mode="vertical"]').click(); input('output-width', '512', 'change'); d.querySelector('[data-mode="route"]').focus(); d.querySelector('[data-mode="route"]').click(); assert($('output-width').value === '2048', '尺寸未回显：' + $('output-width').value);
+      input('output-height', '-4', 'change'); assert(A.state.sizes.route.height === 192, '非法高度'); input('line-number', '3'); assert(A.state.color === w.SignCore.lineColorFor('3', 'chongqing').bg, '线路自动配色');
+      assert(w.getComputedStyle(d.body).fontFamily.indexOf('MiSans') === -1, 'UI 字体'); assert($('platform-svg').querySelector('text[data-role="badge-line"]').getAttribute('font-family').includes('Frutiger'), '自定义编号字体');
+    });
+    await test('长站名、50 站、6 条换乘、放大字体：所有文字墨区均在标识牌内', function () {
+      restore(); var list = Array.from({ length: 50 }, function (_, i) { return { id: 'long-' + i, code: String(i + 1).padStart(2, '0'), zh: '重庆轨道交通超长站名测试', en: 'Very Long Station Name with Descenders gy', transfers: Array.from({ length: 6 }, function (_, j) { return { number: String(j + 1), color: '#0057B7' }; }) }; });
+      A.update(function (state) { return S.settings(S.replaceStations(state, list), { fontScale: 1.4, currentId: list[25].id }); });
+      ['route', 'station', 'vertical'].forEach(function (mode) {
+        A.update(function (state) { return S.settings(state, { mode: mode }); });
+        var scene = A.scene, texts = Array.from($('platform-svg').querySelectorAll('.platform-art > text')), textNodes = scene.nodes.filter(function (n) { return n.tag === 'text'; }), boundary = $('platform-svg').getBoundingClientRect();
+        textNodes.forEach(function (n, i) { var b = n.bounds, matrix = texts[i].getScreenCTM(); [[b.x,b.y],[b.x+b.width,b.y],[b.x,b.y+b.height],[b.x+b.width,b.y+b.height]].forEach(function (point) { var p = new w.DOMPoint(point[0],point[1]).matrixTransform(matrix); assert(p.x >= boundary.left - 1 && p.x <= boundary.right + 1 && p.y >= boundary.top - 1 && p.y <= boundary.bottom + 1, mode + ' ' + n.text + ' 墨区越界'); }); });
+      });
+    });
+    await test('SVG 仅内嵌实际使用的真实字体、去掉编辑属性，PNG 尺寸与不透明背景正确', async function () {
+      restore(); A.update(function (state) { return S.settings(state, { mode: 'station' }); }); var fonts = await w.SignExporters.ensureUsedFontData(A.scene.usedFonts), svg = w.PlatformExport.buildSVG(A.state, A.measure, fonts);
+      assert((svg.match(/@font-face/g) || []).length === 2); assert(!svg.includes('MiSans-Semibold')&&!svg.includes('MiSans-Bold')); assert(!svg.includes('data-station-id') && !svg.includes('data-element-key') && !svg.includes('platform-hitbox')); assert(svg.includes('data:font/ttf;base64,'));
+      var blob = await w.PlatformExport.pngBlob(svg, A.state.sizes.station); var bitmap = await w.createImageBitmap(blob); assert(bitmap.width === 512 && bitmap.height === 192);
+      var canvas = d.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height; var ctx = canvas.getContext('2d'); ctx.drawImage(bitmap, 0, 0); var pixel = ctx.getImageData(0, 0, 1, 1).data; assert(pixel[0] === 255 && pixel[3] === 255); bitmap.close();
+      var monorail=S.setHangingHeight(S.settings(original,{mode:'route'}),256), scene=R.metrics(monorail,A.measure), routeFonts=await w.SignExporters.ensureUsedFontData(scene.usedFonts);
+      var routeSVG=w.PlatformExport.buildSVG(monorail,A.measure,routeFonts,scene), routePNG=await w.PlatformExport.pngBlob(routeSVG,monorail.sizes.route), routeBitmap=await w.createImageBitmap(routePNG);
+      assert(routeBitmap.width===1280&&routeBitmap.height===256,'单轨PNG应为5格'); routeBitmap.close();
+    });
+    await test('PNG 清晰度回归：从矢量按输出尺寸采样，高清倍率保留细线且不改项目尺寸', async function () {
+      var svg='<svg xmlns="http://www.w3.org/2000/svg" width="96" height="24" viewBox="0 0 768 192"><rect width="768" height="192" fill="white"/><rect x="700" y="40" width="40" height="40" fill="black"/><rect x="10" y="10" width="0.25" height="20" fill="black"/></svg>';
+      for(var scale of [1,2,4]) {
+        var bitmap=await w.createImageBitmap(await w.PlatformExport.pngBlob(svg,{width:768,height:192},scale));
+        assert(bitmap.width===768*scale&&bitmap.height===192*scale,'PNG 高清倍率未生效');
+        var canvas=d.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+        var ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);
+        var pixel=ctx.getImageData(720*scale,60*scale,1,1).data;
+        assert(pixel[0]===0&&pixel[3]===255,'导出沿用低分辨率 SVG，右侧图形丢失');
+        if(scale===4) {
+          assert(ctx.getImageData(40,60,1,1).data[0]===0,'高清 PNG 应直接从矢量采样，保留四分之一像素细线');
+          assert(ctx.getImageData(41,60,1,1).data[0]===255,'细线边缘应清晰，不能放大低清 PNG');
+        }
+        bitmap.close();
+      }
+      restore();var before=S.serialize(A.state),downloads=[],old=A.download;
+      A.download=function(blob,name){downloads.push({blob:blob,name:name});};
+      try {
+        input('png-scale','4','change');$('export-png').click();await waitFor(function(){return downloads.length===1;});
+        var image=await w.createImageBitmap(downloads[0].blob);assert(image.width===3072&&image.height===768);image.close();
+        assert(S.serialize(A.state)===before,'高清导出不应修改标识牌尺寸或状态');
+        assert($('platform-notice').textContent.includes('3072 × 768'),'导出提示应显示实际 PNG 尺寸');
+      } finally { A.download=old;$('png-scale').value='1'; }
+    });
+    await test('真实 PNG/SVG/项目按钮均生成可用文件，项目可以往返', async function () {
+      var downloads = [], old = A.download; A.download = function (blob, name) { downloads.push({ blob: blob, name: name }); };
+      try { $('export-svg').click(); await waitFor(function () { return downloads.length === 1; }); $('export-png').click(); await waitFor(function () { return downloads.length === 2; }); $('save-project').click(); assert(downloads.length === 3);
+        assert(downloads[0].name.endsWith('.svg') && downloads[0].blob.size > 1000); assert(downloads[1].name.endsWith('.png') && downloads[1].blob.size > 1000); assert(JSON.stringify(S.deserialize(await downloads[2].blob.text())) === JSON.stringify(A.state));
+      } finally { A.download = old; }
+    });
+    await test('文件选择导入项目恢复版式、尺寸、站点，非法文件不覆盖当前项目', async function () {
+      restore(); var imported = S.settings(original, { mode: 'vertical', line: '5', color: '#00A3E0' });
+      async function choose(text) { var data = new w.DataTransfer(); data.items.add(new w.File([text], 'platform-test.json', { type: 'application/json' })); $('project-file').files = data.files; $('project-file').dispatchEvent(new w.Event('change', { bubbles: true })); }
+      await choose(S.serialize(imported)); await waitFor(function () { return A.state.mode === 'vertical' && A.state.line === '5'; }); assert(A.state.color === '#00A3E0' && A.state.stations.length === 8);
+      var before = S.serialize(A.state); await choose('{"kind":"wrong","stations":[]}'); await waitFor(function () { return $('platform-notice').textContent.includes('导入失败'); }); assert(S.serialize(A.state) === before);
+    });
+    await test('手机宽度：站点横向滚动保留，导出按钮可滚动到达，无横向溢出', async function () {
+      restore(); frame.style.width = '390px'; w.dispatchEvent(new w.Event('resize')); await waitFor(function () { return w.innerWidth === 390; });
+      await waitFor(function () { return $('platform-svg').getBoundingClientRect().width < 390; });
+      var list=$('station-list'),first=A.state.stations[0].id;list.scrollLeft=0;
+      var grip=list.children[0].querySelector('.station-drag-handle'),start=grip.getBoundingClientRect(),end=list.children[1].getBoundingClientRect();
+      grip.dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,pointerId:52,button:0,pointerType:'touch',clientX:start.left+3,clientY:start.top+3}));
+      d.dispatchEvent(new w.PointerEvent('pointermove',{bubbles:true,pointerId:52,pointerType:'touch',clientX:end.right-4,clientY:end.top+end.height/2}));
+      d.dispatchEvent(new w.PointerEvent('pointerup',{bubbles:true,pointerId:52,pointerType:'touch'}));
+      assert(A.state.stations[1].id===first,'手机横向站点拖动未提交');$('undo').click();assert(A.state.stations[0].id===first);
+      A.selectElement('route:' + A.state.currentId); var toolbar = $('platform-element-toolbar').getBoundingClientRect(); assert(!$('platform-element-toolbar').hidden && toolbar.left >= 0 && toolbar.right <= 390, '浮动栏边界：' + toolbar.left + ',' + toolbar.right);
+      list.scrollLeft = 150; var scrollBefore = list.scrollLeft; input('station-zh', '手机测试站'); assert(Math.abs(list.scrollLeft - scrollBefore) < .5, '站点滚动位置：' + list.scrollLeft); $('return-to-settings').click(); $('export-png').scrollIntoView(); var r = $('export-png').getBoundingClientRect(); assert(r.left >= 0 && r.right <= 390, '按钮边界：' + r.left + ',' + r.right); assert(d.documentElement.scrollWidth <= 390, '页面宽度：' + d.documentElement.scrollWidth);
+      frame.style.width = '1280px';
+    });
+    await test('文字换乘支持双语编辑、颜色、撤销与三种纵向版式，12起站号使用参考轮廓', async function () {
+      restore(); A.select(A.state.stations[0].id);
+      input('station-transfers','1,碧桐线~Bitong Line:#0057B8','change');
+      var id=A.selectedId,t=A.state.stations[0].transfers[1];assert(t.type==='text'&&t.nameEn==='Bitong Line');
+      var name=d.querySelector('[data-transfer-field="nameEn"]');name.value='Edited Line';name.dispatchEvent(new w.Event('input',{bubbles:true}));
+      assert(A.state.stations[0].transfers[1].nameEn==='Edited Line');assert(d.querySelector('[data-transfer-field="nameEn"]')===name,'编辑不应重建输入框');
+      assert(name.getBoundingClientRect().width>100,'双语输入框宽度');
+      ['left','right','double'].forEach(function(variant){
+        A.update(function(state){return S.settings(S.patchStation(state,id,{code:'12'}),{mode:'vertical',verticalVariant:variant});});
+        var numbers=A.scene.nodes.filter(function(n){return n.attrs['data-station-id']===id&&n.attrs['data-role']==='vertical-station-code';});
+        assert(numbers.length>=2&&numbers.every(function(n){return n.tag==='path';}),'12站号需轮廓');
+        var labels=A.scene.nodes.filter(function(n){return n.attrs['data-role']==='vertical-transfer-text-en';});
+        assert(labels.length===1&&labels[0].attrs['font-family']===w.SignCore.FONT_ZH&&labels[0].attrs['font-weight']===400);
+        assert(labels[0].text==='Edited Line');
+      });
+      var fonts=await w.SignExporters.ensureUsedFontData(A.scene.usedFonts);
+      var svg=w.PlatformExport.buildSVG(A.state,A.measure,fonts,A.scene);assert(svg.includes('Edited Line')&&svg.includes('MiSans'),'SVG需内嵌文字字体');
+      var png=await w.SignExporters.rasterizePNG(svg,A.scene.output,1);assert(png.size>0,'PNG导出');
+      $('undo').click();assert(A.state.verticalVariant==='right');$('redo').click();assert(A.state.verticalVariant==='double');
+      restore();
+    });
+    await test('纵向本站箭头：复用顶栏标准路径，三版式及交换随行车方向上下旋转，长站名与导出留净空', async function () {
+      for(var variant of ['left','right','double'])for(var direction of [-1,1])for(var swapped of [false,true]) {
+        var state=S.settings(original,{mode:'vertical',verticalVariant:variant,direction:direction,verticalSwapped:swapped});
+        state=S.patchStation(state,state.currentId,{zh:'非常长的本站中文站名排版测试',en:'A Very Long Current Station Name with descenders gy'});
+        var scene=R.metrics(state,A.measure),arrows=scene.nodes.filter(function(n){return n.attrs['data-role']==='vertical-current-arrow';});
+        assert(arrows.length===scene.columns.length,'每列本站均有箭头');
+        arrows.forEach(function(n,i){
+          var b=inkBox(n),m=n.matrix,dir=scene.columns[i].direction,tipY=m[1]*12+m[3]*40+m[5],cy=(b.y+b.y+b.height)/2;
+          assert(n.tag==='path'&&n.attrs.d===w.PlatformVerticalReference.header.arrow.d,'须使用顶栏相同轮廓');
+          assert((tipY-cy)*-dir>0,'箭尖随行车方向向上或向下');
+          assert(Math.abs(b.width-32*scene.columns[i].unit)<.001&&Math.abs(b.height-b.width)<.001,'轮廓与顶栏保持相同比例');
+          scene.nodes.filter(function(text){return text.attrs['data-element-key']===n.attrs['data-element-key']&&/^vertical-station-(zh|en)$/.test(text.attrs['data-role']);}).forEach(function(text){var t=inkBox(text);assert(t.x+t.width<b.x||t.x>b.x+b.width,'真实双语墨区不得碰到箭头');});
+        });
+        if(!swapped&&direction===1) {
+          var fonts=await w.SignExporters.ensureUsedFontData(scene.usedFonts),svg=w.PlatformExport.buildSVG(state,A.measure,fonts,scene),doc=new w.DOMParser().parseFromString(svg,'image/svg+xml');
+          assert(Array.from(doc.querySelectorAll('path')).filter(function(n){return n.getAttribute('d')===w.PlatformVerticalReference.header.arrow.d;}).length===arrows.length*2,'导出保留顶栏和本站箭头');
+          var png=await w.createImageBitmap(await w.PlatformExport.pngBlob(svg,scene.output));assert(png.width===scene.output.width&&png.height===scene.output.height);png.close();
+        }
+      }restore();
+    });
+    await test('线路底纹：独立开关、自动匹配、保留手选、恢复默认和撤销重做', function () {
+      restore(); A.deselect();
+      var toggle = $('line-pattern-enabled'), controls = $('line-pattern-controls');
+      assert(toggle.getAttribute('aria-checked') === 'false' && controls.hidden && !$('platform-svg').querySelector('pattern'));
+      toggle.click();
+      assert(toggle.getAttribute('aria-checked') === 'true' && !controls.hidden);
+      assert($('line-pattern-status').textContent.includes('10号线'));
+      input('line-number', '7');
+      assert($('line-pattern-status').textContent.includes('没有') && !$('platform-svg').querySelector('pattern'));
+      input('line-number', '1');
+      assert($('line-pattern-status').textContent.includes('1号线'));
+      input('line-pattern-source', 'line-1-alternate', 'change');
+      input('line-pattern-size', '170');
+      input('line-pattern-opacity', '44');
+      assert(A.state.linePattern.source === 'line-1-alternate');
+      assert($('line-pattern-size-value').textContent === '170%' && $('line-pattern-opacity-value').textContent === '44%');
+      $('undo').click();
+      assert($('line-pattern-opacity').value === '85' && $('line-pattern-size').value === '170');
+      $('redo').click();
+      assert($('line-pattern-opacity').value === '44');
+      toggle.click();
+      assert(controls.hidden && !$('platform-svg').querySelector('pattern'));
+      assert(A.state.linePattern.source === 'line-1-alternate' && A.state.linePattern.opacity === 44);
+      $('undo').click();
+      assert(!controls.hidden && $('platform-svg').querySelector('pattern'));
+      $('redo').click();
+      assert(controls.hidden);
+      toggle.click();
+      assert($('line-pattern-source').value === 'line-1-alternate' && $('line-pattern-size').value === '170');
+      var resetSize = $('line-pattern-reset-size'), resetOpacity = $('line-pattern-reset-opacity');
+      assert(resetSize.getBoundingClientRect().left >= $('line-pattern-size').getBoundingClientRect().right);
+      assert(resetOpacity.getBoundingClientRect().left >= $('line-pattern-opacity').getBoundingClientRect().right);
+      resetSize.click();
+      assert($('line-pattern-size').value === '100' && $('line-pattern-opacity').value === '44');
+      $('undo').click();
+      assert($('line-pattern-size').value === '170' && $('line-pattern-opacity').value === '44');
+      resetOpacity.click();
+      assert($('line-pattern-size').value === '170' && $('line-pattern-opacity').value === '85');
+      resetSize.click();
+      assert($('line-pattern-size').value === '100' && $('line-pattern-opacity').value === '85');
+      assert(A.state.linePattern.enabled && A.state.linePattern.source === 'line-1-alternate');
+      input('line-pattern-opacity', '0');
+      assert(!$('platform-svg').querySelector('pattern'));
+      restore();
+    });
+    async function patternPixels(state, scale) {
+      var scene = R.metrics(state, A.measure);
+      var vector = w.PlatformExport.buildSVG(state, A.measure, {}, scene);
+      var bitmap = await w.createImageBitmap(await w.PlatformExport.pngBlob(vector, scene.output, scale));
+      var canvas = d.createElement('canvas');
+      canvas.width = bitmap.width; canvas.height = bitmap.height;
+      var context = canvas.getContext('2d');
+      context.drawImage(bitmap, 0, 0); bitmap.close();
+      return { context: context, vector: vector, scene: scene };
+    }
+    function chooseFile(inputId, file) {
+      var files = new w.DataTransfer(); files.items.add(file);
+      var field = $(inputId); field.files = files.files;
+      field.dispatchEvent(new w.Event('change', { bubbles: true }));
+    }
+    await test('纵向顶栏：十款内置底纹在左右单列和双列中均保留纯色顶栏，原尺寸导出像素一致', async function () {
+      restore();
+      var designs = Object.keys(w.PlatformPatternDesigns);
+      for (var variant of ['left', 'right', 'double']) {
+        var plain = S.settings(original, { mode: 'vertical', verticalVariant: variant, color: '#123456' });
+        var baseline = await patternPixels(plain, 1);
+        var width = plain.sizes.vertical.width;
+        var before = baseline.context.getImageData(0, 0, width, 54).data;
+        for (var source of designs) {
+          var state = S.settings(plain, { linePattern: { source: source } });
+          A.update(function () { return state; });
+          var preview = $('platform-svg');
+          var header = preview.querySelector('[data-role="vertical-header"]');
+          assert(header.getAttribute('fill') === '#123456' &&
+            !header.nextElementSibling.getAttribute('fill')?.startsWith('url('));
+          assert(preview.querySelector('[data-role="vertical-active-bar"] + [fill^="url("]'));
+          var result = await patternPixels(state, 1);
+          var after = result.context.getImageData(0, 0, width, 54).data;
+          assert(after.every(function (value, index) { return value === before[index]; }), variant + ' ' + source + ' 顶栏像素应一致');
+        }
+      }
+      restore();
+    });
+    await test('内置底纹：三种版式、自包含矢量图和两倍像素图片，灰色段像素一致', async function () {
+      restore();
+      var modes = ['route', 'station', 'vertical'];
+      for (var mode of modes) {
+        var plain = S.settings(original, { mode: mode, verticalVariant: 'double', color: '#543080' });
+        var patterned = S.settings(plain, { linePattern: { source: 'line-10', opacity: 100 } });
+        var base = await patternPixels(plain, 2), result = await patternPixels(patterned, 2);
+        var copy = new w.DOMParser().parseFromString(result.vector, 'image/svg+xml');
+        assert(!copy.querySelector('parsererror') && copy.querySelector('pattern circle'));
+        assert(copy.querySelector('desc').textContent.includes('Hachi'));
+        assert(!copy.querySelector('[data-role], .platform-hitbox, pattern image'));
+        var patternedArea = [120, 210, 100, 15];
+        if (mode === 'vertical') {
+          var band = result.scene.nodes.find(function (node) { return node.attrs['data-role'] === 'vertical-active-bar'; }).attrs;
+          var frameScale = result.scene.frame.scale * 2;
+          patternedArea = [Math.ceil((band.x + 5) * frameScale), Math.ceil((band.y + 35) * frameScale), 35, 20];
+        }
+        var greyArea = mode === 'vertical' ? [375, 185, 43, 40] : [902, 210, 30, 15];
+        function area(context, box) { return context.getImageData.apply(context, box).data; }
+        var baseline = area(base.context, patternedArea), changed = area(result.context, patternedArea);
+        assert(changed.some(function (value, index) { return Math.abs(value - baseline[index]) > 8; }), mode + ' 导出色带应看得到底纹');
+        baseline = area(base.context, greyArea);
+        assert(area(result.context, greyArea).every(function (value, index) { return value === baseline[index]; }), mode + ' 灰色段像素应一致');
+      }
+      restore();
+    });
+    await test('自定义底纹：导入矢量图和透明图片，坏文件保留已选纹样，项目与预设可载回', async function () {
+      restore(); A.deselect();
+      $('line-pattern-enabled').click();
+      var artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">' +
+        '<rect width="30" height="40" fill="white"/><script>window.linePatternScriptRan=true;</' + 'script></svg>';
+      chooseFile('line-pattern-file', new w.File([artwork], '纹样.svg', { type: 'image/svg+xml' }));
+      await waitFor(function () { return A.state.linePattern.source === 'custom'; });
+      var image = A.state.linePattern.image;
+      assert($('line-pattern-import').textContent === '更换图片');
+      $('line-pattern-enabled').click();
+      assert(!A.state.linePattern.enabled && A.state.linePattern.image === image);
+      $('line-pattern-enabled').click();
+      var custom = await patternPixels(A.state, 1);
+      assert(image.startsWith('data:image/png;base64,') && !w.linePatternScriptRan && !custom.vector.includes('linePatternScriptRan'));
+      var copy = new w.DOMParser().parseFromString(custom.vector, 'image/svg+xml');
+      assert(copy.querySelector('pattern image').getAttribute('href') === image);
+      var width = Number(copy.querySelector('pattern').getAttribute('width'));
+      var height = Number(copy.querySelector('pattern').getAttribute('height'));
+      assert(width / height === 2, '图像应保持宽高比');
+      var pixels = custom.context.getImageData(118, 105, 120, 10).data;
+      assert(new Set(pixels.filter(function (_, index) { return index % 4 === 1; })).size > 3, '透明图片应在原色上显示');
+      chooseFile('line-pattern-file', new w.File(['坏文件'], '损坏图片.png', { type: 'image/png' }));
+      await waitFor(function () { return $('platform-notice').textContent.includes('底纹导入失败'); });
+      assert(A.state.linePattern.image === image);
+      var canvas = d.createElement('canvas');
+      canvas.width = 32; canvas.height = 16;
+      var context = canvas.getContext('2d');
+      context.fillStyle = 'white'; context.fillRect(0, 0, 16, 16);
+      var picture = await new Promise(function (resolve) { canvas.toBlob(resolve); });
+      chooseFile('line-pattern-file', new w.File([picture], '白色纹样.png', { type: 'image/png' }));
+      await waitFor(function () { return A.state.linePattern.image !== image; });
+      image = A.state.linePattern.image;
+      var project = S.serialize(A.state);
+      $('save-preset-shortcut').click();
+      $('preset-name').value = '试用底纹';
+      $('save-preset-confirm').click();
+      var preview = $('platform-svg').querySelector('pattern');
+      var thumbnail = $('preset-list').querySelector('pattern');
+      assert(preview && thumbnail && preview.id !== thumbnail.id, '同页预览和预设应有各自的纹样');
+      $('line-pattern-clear').click();
+      assert(!A.state.linePattern.enabled && A.state.linePattern.image === null);
+      assert(d.activeElement === $('line-pattern-enabled'));
+      $('preset-list').querySelector('[aria-label="载入预设 试用底纹"]').click();
+      assert(A.state.linePattern.image === image);
+      $('line-pattern-clear').click();
+      chooseFile('project-file', new w.File([project], '底纹项目.json', { type: 'application/json' }));
+      await waitFor(function () { return A.state.linePattern.image === image; });
+      await waitFor(function () { return JSON.parse(w.localStorage.getItem(key)).linePattern.image === image; });
+      $('return-to-settings').click();
+      input('line-pattern-source', 'line-1', 'change');
+      $('line-pattern-clear').click();
+      assert(A.state.linePattern.enabled && A.state.linePattern.source === 'line-1' && A.state.linePattern.image === null,
+        '移除存留的自定义图片时应保留当前内置纹样');
+      assert(d.activeElement === $('line-pattern-import'), '移除后应把焦点移到上传按钮');
+      $('preset-list').querySelector('.preset-remove').click();
+      d.querySelector('[data-library="stations"]').click();
+      restore();
+    });
+    await test('手机宽度可选择底纹和上传图片，切换版式后保留设置', function () {
+      restore(); A.deselect();
+      var oldWidth = frame.style.width;
+      try {
+        frame.style.width = '390px';
+        w.dispatchEvent(new w.Event('resize'));
+        $('line-pattern-enabled').click();
+        input('line-pattern-source', 'line-0', 'change');
+        d.querySelector('[data-mode="vertical"]').click();
+        assert(A.state.linePattern.source === 'line-0');
+        var button = $('line-pattern-import').getBoundingClientRect();
+        assert(button.width > 0 && button.right <= 390);
+        assert($('platform-svg').querySelector('pattern path'));
+      } finally {
+        frame.style.width = oldWidth;
+        w.dispatchEvent(new w.Event('resize'));
+        restore();
+      }
+    });
+    await test('底纹上传：错误格式、超限文件和晚到的上传结果', async function () {
+      restore(); A.deselect();
+      $('line-pattern-enabled').click();
+      var mark = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="12" height="24" fill="white"/></svg>';
+      input('line-pattern-source', 'line-5', 'change');
+      chooseFile('line-pattern-file', new w.File([mark], '文字.txt'));
+      await waitFor(function () { return $('platform-notice').textContent.includes('请选择透明图片'); });
+      chooseFile('line-pattern-file', new w.File([new Uint8Array(10 * 1024 * 1024 + 1)], '大图.png'));
+      await waitFor(function () { return $('platform-notice').textContent.includes('10 兆字节'); });
+      chooseFile('line-pattern-file', new w.File([mark.replace('width="24"', 'width="9000"')], '过宽.svg'));
+      await waitFor(function () { return $('platform-notice').textContent.includes('8192 像素'); });
+      assert(A.state.linePattern.source === 'line-5');
+      chooseFile('line-pattern-file', new w.File([mark], '底纹.svg'));
+      input('line-pattern-source', 'line-6', 'change');
+      await waitFor(function () { return $('platform-notice').textContent.includes('重新选择'); });
+      assert(A.state.linePattern.source === 'line-6' && !A.state.linePattern.image);
+      restore();
+    });
+    await test('自动保存可恢复完整项目，页面离开前刷盘', async function () {
+      restore(); input('station-en', 'Autosave Test'); await waitFor(function () { var saved = localStorage.getItem(key); return saved && S.neighbors(S.deserialize(saved)).current.en === 'Autosave Test'; }); w.dispatchEvent(new w.Event('pagehide')); assert(S.deserialize(localStorage.getItem(key)).stations.length === A.state.stations.length);
+    });
+  } catch (err) { await test('测试启动', function () { throw err; }); }
+  finally {
+    // Unload the test app before restoring its independent autosave, so its pagehide cannot overwrite the backup.
+    await new Promise(function (resolve) { frame.onload = resolve; frame.src = 'about:blank'; });
+    if (saved === null) localStorage.removeItem(key); else localStorage.setItem(key, saved);
+    if (savedPresets === null) localStorage.removeItem(presetKey); else localStorage.setItem(presetKey, savedPresets);
+  }
+  var failed = results.filter(function (r) { return !r.pass; }).length;
+  document.getElementById('summary').textContent = (results.length - failed) + ' 通过 / ' + failed + ' 失败';
+  document.title = failed ? '✖ 站台测试失败' : '✔ 站台测试全部通过';
+  window.__PLATFORM_RESULTS__ = { passed: results.length - failed, failed: failed, results: results };
+})();
+</script></body></html>

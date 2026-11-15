@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
-      - run: node --test
+      - run: node --test test/*.test.mjs
   remove-previous-build:
     if: github.repository == 'PrisamaX0124/CRT-Sign-Web-Editor' && github.run_number == 1
     runs-on: ubuntu-latest

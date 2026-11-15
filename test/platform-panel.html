@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>站台属性面板测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1280px; height: 860px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>站台属性面板测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="站台标识编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  const saved = Object.entries(localStorage).filter(([key]) => key.includes('platform-sign'));
+  let editor, app, state, project;
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  function element(id) { return editor.getElementById(id); }
+  function visible(id) { return element(id)?.getClientRects().length > 0; }
+  function change(id, value, event = 'change') {
+    const input = element(id);
+    input.value = value;
+    input.dispatchEvent(new frame.contentWindow.Event(event, { bubbles: true }));
+  }
+  function mode(value) { editor.querySelector('[data-mode="' + value + '"]').click(); }
+  function reset() { app.deselect(); app.update(() => project); }
+  async function test(name, run) {
+    const result = document.createElement('li');
+    try {
+      reset();
+      await run();
+      result.className = 'pass';
+      result.textContent = name;
+    } catch (error) {
+      result.className = 'fail';
+      result.textContent = name + '。' + error.message;
+    }
+    results.append(result);
+  }
+
+  try {
+    await new Promise(resolve => { frame.addEventListener('load', resolve, { once: true }); frame.src = '../platform.html'; });
+    editor = frame.contentDocument;
+    app = frame.contentWindow.App;
+    state = frame.contentWindow.PlatformState;
+    await app.ready;
+    project = state.replaceStations(state.create(), state.parseStations('01|起点站|First Station\n02|中途站|Middle Station|1,市郊线~Suburban Line:#0057B8\n03|终点站|Last Station', 'chongqing'));
+    project = state.settings(project, { currentId: project.stations[1].id });
+
+    await test('整牌设置按尺寸、线路、牌面颜色、底纹、导出和项目排列，共用一处滚动区', function () {
+      const sections = Array.from(element('property-settings').children, section => section.querySelector('h2').textContent);
+      assert(sections.join('、') === '尺寸与排版、线路与行车方向、牌面颜色、线路底纹、导出、项目', '整牌设置的分组或顺序有误');
+      assert(!editor.querySelector('[data-property-view]') && !visible('return-to-settings'), '标题处应只显示标识牌设置');
+      element('export-png').scrollIntoView({ block: 'nearest' });
+      assert(element('property-scroll').scrollTop > 0 && visible('import-project'), '导出与项目应能在同一面板内滚到');
+    });
+
+    await test('三种版式只显示适用的尺寸和行车设置，自定义尺寸可直接输入', function () {
+      assert(visible('hanging-length') && !visible('vertical-variant') && !visible('show-station-direction'), '全线吊板显示了不适用的字段');
+      change('hanging-length', 'custom');
+      assert(editor.activeElement === element('output-width'), '自定义长度应将焦点移至宽度');
+      change('output-width', '948');
+      assert(app.state.sizes.route.width === 948, '自定义宽度未保存');
+      mode('station');
+      assert(visible('hanging-length') && visible('show-station-direction'), '本站吊板缺少短边或行车提示设置');
+      mode('vertical');
+      assert(!visible('hanging-length') && visible('vertical-variant') && visible('output-height') && element('output-width').readOnly, '纵向版式应直接显示尺寸且锁定宽度');
+      change('vertical-variant', 'double');
+      assert(visible('swap-vertical-columns'), '双列缺少交换按钮');
+    });
+
+    await test('选中站点后只显示相关属性，返回按钮将焦点移回整牌设置标题', function () {
+      element('export-png').scrollIntoView({ block: 'nearest' });
+      app.select(project.currentId);
+      assert(element('property-heading').textContent === '站点属性', '选中站点后的标题有误');
+      assert(visible('station-properties') && visible('transfer-properties') && visible('element-properties') && visible('station-management'), '缺少站点相关分组');
+      assert(!visible('line-number') && !visible('export-png') && element('property-scroll').scrollTop === 0, '站点侧栏应从顶部显示相关属性');
+      element('return-to-settings').click();
+      assert(!app.selectedKey && visible('line-number') && editor.activeElement === element('property-heading'), '返回时应清除选择并恢复键盘焦点');
+    });
+
+    await test('双语名称、换乘颜色和底纹修改保留原有输入框及展开状态', function () {
+      element('line-pattern-enabled').click();
+      const patternSource = element('line-pattern-source');
+      change('line-pattern-source', 'line-10');
+      assert(visible('line-pattern-source') && element('line-pattern-source') === patternSource, '调整底纹后原设置应保持打开');
+      app.select(project.currentId);
+      const name = editor.querySelector('[data-transfer-field="nameZh"]');
+      const colorDetails = name.closest('.transfer-color').querySelector('details');
+      colorDetails.open = true;
+      name.focus();
+      name.value = '郊区线';
+      name.dispatchEvent(new frame.contentWindow.Event('input', { bubbles: true }));
+      change('station-en', 'Updated Station', 'input');
+      assert(editor.activeElement === name && colorDetails.open && name.isConnected, '文字编辑时应保留焦点、输入框和已展开的色板');
+      const station = app.state.stations.find(station => station.id === project.currentId);
+      assert(station.transfers[1].nameZh === '郊区线' && station.en === 'Updated Station', '相邻字段的修改应一并保存');
+    });
+
+    await test('单独选中行车提示只显示位置，多选可同时微调、复位和撤销', function () {
+      mode('station');
+      app.selectElement('station:direction');
+      assert(visible('element-properties') && !visible('station-properties') && !visible('station-management'), '行车提示应只显示位置');
+      mode('route');
+      const keys = project.stations.slice(0, 2).map(station => 'route:' + station.id);
+      app.selectMany(keys, keys[0]);
+      assert(!visible('station-properties') && !visible('element-offset-x') && visible('move-selection') && visible('delete-selected-stations'), '多选应显示整组操作');
+      element('move-selection').querySelector('[data-nudge-x="1"]').click();
+      assert(keys.every(key => app.state.adjustments[key].x === 1), '整组右移应改变每个选中元素的位置');
+      element('reset-element').click();
+      assert(keys.every(key => !app.state.adjustments[key]), '应能还原整组位置');
+      app.undo();
+      assert(keys.every(key => app.state.adjustments[key].x === 1) && visible('move-selection'), '撤销复位应恢复偏移和多选面板');
+    });
+
+    await test('本站吊板可以编辑列表中未画出的站点，多选只移动牌面上显示的元素', function () {
+      const extra = state.addStation(project, project.stations[2].id);
+      app.update(() => extra);
+      mode('station');
+      const hiddenStation = app.state.stations[3];
+      const hiddenKey = 'route:' + hiddenStation.id;
+      app.select(hiddenStation.id);
+      assert(visible('station-properties') && !visible('element-properties'), '未画出的站点应只显示站点相关属性');
+      const shownKey = app.scene.elements.find(item => item.stationId === project.currentId).key;
+      app.selectMany([shownKey, hiddenKey], hiddenKey);
+      element('move-selection').querySelector('[data-nudge-x="1"]').click();
+      assert(app.state.adjustments[shownKey].x === 1 && !app.state.adjustments[hiddenKey], '移动位置只影响当前牌面上的元素');
+      element('delete-selected-stations').click();
+      assert(app.state.stations.length === 2 && visible('line-number'), '删除应一次提交，并返回整牌设置');
+      app.undo();
+      assert(app.state.stations.length === 4 && visible('delete-selected-stations'), '撤销删除应恢复原站点与选择');
+    });
+
+    await test('手机窄屏下，展开色板、文字换乘、导出和删除操作不会让页面横向溢出', async function () {
+      frame.style.width = '320px';
+      frame.style.height = '720px';
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      assert(visible('export-png'), '整牌设置中应能找到导出按钮');
+      element('export-png').scrollIntoView({ block: 'nearest' });
+      assert(element('export-png').getBoundingClientRect().bottom <= 720, '应能滚动到导出按钮');
+      app.select(project.currentId);
+      editor.querySelectorAll('#transfer-colors details').forEach(details => { details.open = true; });
+      element('station-delete').scrollIntoView({ block: 'nearest' });
+      const panel = element('property-scroll').getBoundingClientRect();
+      const deleteButton = element('station-delete').getBoundingClientRect();
+      assert(editor.documentElement.scrollWidth <= 320 && element('property-scroll').scrollWidth <= element('property-scroll').clientWidth, '窄屏面板有横向溢出');
+      assert(deleteButton.left >= panel.left && deleteButton.right <= panel.right && deleteButton.bottom <= frame.contentWindow.innerHeight + 1,
+        '删除站点应可滚动到且完整显示，按钮底边为 ' + deleteButton.bottom + '，窗口高度为 ' + frame.contentWindow.innerHeight);
+      const returnButton = element('return-to-settings').getBoundingClientRect();
+      const workspaceTop = editor.querySelector('.platform-workspace').getBoundingClientRect().top;
+      assert(returnButton.top >= workspaceTop - 1 && returnButton.bottom <= workspaceTop + 58,
+        '下滑到末尾后仍应能返回标识牌设置，返回按钮在 ' + returnButton.top + ' 到 ' + returnButton.bottom + '，滚动区起点为 ' + workspaceTop);
+    });
+  } catch (error) {
+    const result = document.createElement('li');
+    result.className = 'fail';
+    result.textContent = error.message;
+    results.append(result);
+  } finally {
+    frame.remove();
+    for (const key of Object.keys(localStorage).filter(key => key.includes('platform-sign'))) localStorage.removeItem(key);
+    for (const [key, value] of saved) localStorage.setItem(key, value);
+    const passed = results.querySelectorAll('.pass').length;
+    document.getElementById('summary').textContent = passed + ' / ' + results.children.length + ' 通过';
+    document.title = passed === results.children.length ? '✔ 站台属性面板测试全部通过' : '✖ 站台属性面板测试失败';
+  }
+})();
+</script>

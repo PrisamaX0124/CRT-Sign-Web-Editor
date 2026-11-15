@@ -37,7 +37,9 @@
 
 也可以运行 `python -m http.server 8000`，然后打开 <http://localhost:8000>。部署到 GitHub Pages 时，选择 `main` 分支的根目录。
 
-开发检查使用 `node --test`。本分支的功能扩展与修复见[修改记录](docs/fork-changes.md)。
+站台页选中内容后，点右侧标题旁的返回按钮即可回到标识牌设置。导出、导入项目和保存预设都在标识牌设置中。
+
+仓库根目录直接用于开发和部署。测试方式见[开发指南](docs/development.md)，功能变更见[修改记录](docs/fork-changes.md)。
 
 ## 来源与许可
 
