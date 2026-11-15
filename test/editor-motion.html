@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>编辑器页眉和动画测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1280px; height: 860px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>编辑器页眉和动画测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-sign-prefs', 'public-sign-presets', 'public-sign-custom-palettes', 'public-platform-sign-project-v1', 'public-platform-sign-presets-v1'];
+  const savedStorage = storageKeys.map(key => [key, localStorage.getItem(key)]);
+  const editors = [
+    { name: '导向标识', path: 'index.html', otherPath: 'platform.html', toolbar: '#element-toolbar', panel: '#right-panel-body', back: '#close-element-btn', heading: '#right-panel-title' },
+    { name: '站台标识', path: 'platform.html', otherPath: 'index.html', toolbar: '#platform-element-toolbar', panel: '#property-scroll', back: '#return-to-settings', heading: '#property-heading' },
+  ];
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  function load(path) {
+    return new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = path;
+    });
+  }
+  function repaint(window) {
+    return new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+  }
+  function animations(element, children = false) {
+    element.getBoundingClientRect();
+    return element.getAnimations({ subtree: children });
+  }
+  async function finishAnimations(playing) {
+    await Promise.allSettled(playing.map(animation => animation.finished));
+  }
+  function movement(playing, from) {
+    return playing.some(animation => {
+      const frame = animation.effect.getKeyframes()[0];
+      return frame.transform === 'translateX(' + from + 'px)' && frame.easing.startsWith('cubic-bezier(');
+    });
+  }
+  async function test(name, run) {
+    const result = document.createElement('li');
+    try {
+      await run();
+      result.className = 'pass';
+      result.textContent = name;
+    } catch (error) {
+      result.className = 'fail';
+      result.textContent = name + '。' + error.message;
+    }
+    results.append(result);
+  }
+
+  try {
+    storageKeys.forEach(key => localStorage.removeItem(key));
+    for (const editor of editors) {
+      frame.style.width = '1280px';
+      await load('../' + editor.path);
+      const window = frame.contentWindow;
+      const document = window.document;
+      const app = window.App;
+      const toolbar = document.querySelector(editor.toolbar);
+      const panel = document.querySelector(editor.panel);
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      let select, deselect, update;
+
+      if (editor.path === 'index.html') {
+        const deadline = Date.now() + 10000;
+        while (!app.measure && Date.now() < deadline) await repaint(window);
+        assert(app.measure, '导向标识编辑器初始化超时');
+        const state = window.SignState;
+        const sign = state.createSign();
+        const element = state.createElement('bilingual-text', { textZh: '测试站', textEn: 'Test Station' });
+        app.update(() => state.addElement(sign, sign.rows[0].id, element));
+        select = () => app.select(element.id);
+        deselect = () => app.select(null);
+        update = () => app.update(current => state.updateElementProps(current, element.id, { textZh: '新站名' }));
+      } else {
+        await app.ready;
+        const state = window.PlatformState;
+        select = () => app.select(app.state.currentId);
+        deselect = () => app.deselect();
+        update = () => app.update(current => state.patchStation(current, current.currentId, { zh: '新站名' }));
+      }
+      deselect();
+      await repaint(window);
+
+      await test(editor.name + '：页眉在桌面和窄屏保留切换入口、当前位置、仓库图标和加星提示', async function () {
+        for (const width of [1280, 320]) {
+          frame.style.width = width + 'px';
+          await repaint(window);
+          const navigation = document.querySelector('.editor-navigation');
+          const current = navigation?.querySelector('[aria-current="page"]');
+          const other = navigation?.querySelector('a:not([aria-current])');
+          const repository = document.querySelector('.editor-repository');
+          assert(current?.getAttribute('href') === editor.path, '当前页应有明确标记');
+          assert(other?.getAttribute('href') === editor.otherPath, '另一个编辑器应可直接打开');
+          assert(repository?.host === 'github.com' && repository.pathname === '/PrisamaX0124/CRT-Sign-Web-Editor', '仓库链接不正确');
+          assert(repository.querySelector('svg') && repository.textContent.includes('加星'), '缺少仓库图标或加星提示');
+          const left = navigation.getBoundingClientRect();
+          const right = repository.getBoundingClientRect();
+          assert(left.left >= 0 && left.right < right.left && right.right <= width + 1, '两组入口应在页眉左右且完整显示');
+          assert(Math.abs(left.top - right.top) < 1 && document.documentElement.scrollWidth <= width + 1, '窄屏页眉应保持一行且不横向溢出');
+        }
+        frame.style.width = '1280px';
+        await repaint(window);
+      });
+
+      await test(editor.name + '：浮动工具栏进入、退出和打断退出后都能继续操作', async function () {
+        select();
+        const entering = animations(toolbar);
+        assert(!toolbar.hidden && !toolbar.inert, '选中后浮动工具栏应立即可操作');
+        if (reduced) assert(entering.length === 0, '减少动态效果时应直接出现');
+        else assert(entering.some(animation => animation.transitionProperty === 'opacity'), '出现时应渐入');
+        await finishAnimations(entering);
+
+        deselect();
+        const leaving = animations(toolbar);
+        assert(toolbar.hidden && toolbar.inert, '退出时应立即停止响应操作');
+        if (reduced) assert(leaving.length === 0 && window.getComputedStyle(toolbar).display === 'none', '减少动态效果时应立即隐藏');
+        else assert(leaving.some(animation => animation.transitionProperty === 'opacity') && window.getComputedStyle(toolbar).display !== 'none', '退出动画结束前应仍能看到工具栏');
+        select();
+        await finishAnimations(animations(toolbar));
+        assert(!toolbar.hidden && !toolbar.inert && window.getComputedStyle(toolbar).opacity === '1', '再次选中应恢复工具栏');
+        deselect();
+        await finishAnimations(animations(toolbar));
+        assert(window.getComputedStyle(toolbar).display === 'none', '退出结束后应完全隐藏');
+      });
+
+      await test(editor.name + '：属性从右侧进入，返回从左侧进入，修改内容不重播', async function () {
+        select();
+        const forward = animations(panel, true);
+        assert(reduced ? forward.length === 0 : movement(forward, 10), '进入属性时的动画不正确');
+        await finishAnimations(forward);
+        update();
+        assert(animations(panel, true).length === 0, '普通编辑不应触发动画');
+        document.querySelector(editor.back).click();
+        const backward = animations(panel, true);
+        assert(reduced ? backward.length === 0 : movement(backward, -10), '返回标识牌设置时的动画不正确');
+        assert(document.activeElement === document.querySelector(editor.heading), '返回后键盘焦点应落在设置标题');
+        await finishAnimations(backward);
+      });
+    }
+  } catch (error) {
+    await test('打开测试页面', function () { throw error; });
+  } finally {
+    await load('about:blank');
+    for (const [key, value] of savedStorage) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+    const passed = results.querySelectorAll('.pass').length;
+    document.getElementById('summary').textContent = passed + ' / ' + results.children.length + ' 通过';
+    document.title = passed === results.children.length ? '✔ 页眉和动画测试全部通过' : '✖ 页眉和动画测试失败';
+  }
+})();
+</script>

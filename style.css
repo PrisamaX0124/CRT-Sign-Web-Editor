@@ -6,8 +6,6 @@
 
 @import url('fonts.css');
 
-.editor-page-link { display: block; flex: none; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--accent); text-decoration: none; font-size: 11px; white-space: nowrap; }
-
 /* Shared palette manager; scoped so both editor panels use the same layout. */
 .cp-manage { width: 100%; margin-top: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--accent); background: var(--surface-soft); font-size: 12px; }
 .cp-manage:hover { border-color: var(--accent); }
@@ -100,6 +98,8 @@ dialog.pm-dialog { width: min(860px, calc(100vw - 32px)); height: min(660px, cal
   --radius: 8px;
   --control-bg: #ffffff;
   --surface-soft: #f6f8fb;
+  --motion-enter: cubic-bezier(.18, .8, .25, 1);
+  --motion-exit: cubic-bezier(.42, 0, .75, .5);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -127,11 +127,66 @@ input, select {
   color: inherit;
 }
 
+.editor-page { display: flex; flex-direction: column; }
+.editor-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  flex: none;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border);
+}
+.editor-navigation {
+  grid-area: 1 / 1;
+  justify-self: start;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+.editor-navigation a, .editor-repository {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 160ms var(--motion-enter), color 160ms var(--motion-enter);
+}
+.editor-navigation a:hover, .editor-repository:hover { background: var(--accent-soft); }
+.editor-navigation [aria-current="page"] { background: #2563eb; color: #fff; }
+.editor-navigation [aria-current="page"]:hover { background: #1d4ed8; }
+.editor-repository {
+  grid-area: 1 / 3;
+  justify-self: end;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-size: 12px;
+}
+.editor-repository svg { width: 19px; height: 19px; flex: none; }
+.editor-header a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 768px) {
+  .editor-header { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 7px 10px; }
+  .editor-repository { grid-column: 2; }
+  .editor-navigation a, .editor-repository { padding-inline: 9px; }
+}
+
 /* ─── 三栏布局 ─── */
 
 #app {
   display: flex;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -143,7 +198,7 @@ input, select {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: width 0.25s ease, min-width 0.25s ease, opacity 0.2s ease;
+  transition: width 250ms var(--motion-enter), min-width 250ms var(--motion-enter), opacity 200ms var(--motion-enter);
 }
 
 #right-panel {
@@ -1036,9 +1091,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 @media (max-width: 768px) {
   #app {
     flex-direction: column; /* DOM 顺序 left→center→right 天然成立 */
-    height: 100vh;
-    height: 100dvh; /* iOS 地址栏/键盘引起的 vh 跳动由 dvh 修正（旧系统回退 vh） */
   }
+  .editor-page { height: 100dvh; }
 
   /* 顶部：元素选择器横条 */
   #left-panel {
@@ -1077,7 +1131,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     border-right: none;
     border-left: none;
     border-top: 1px solid var(--border);
-    transition: height 0.2s ease;
+    transition: height 220ms var(--motion-enter);
   }
   #right-panel.band-collapsed { height: 48px; }
   #right-panel.band-collapsed .panel-body { display: none; }
@@ -1207,6 +1261,32 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   box-shadow: 0 8px 28px rgba(0,0,0,0.14), 0 2px 5px rgba(0,0,0,0.06);
 }
 #element-toolbar[hidden] { display: none; }
+.floating-toolbar { opacity: 1; scale: 1; }
+.floating-toolbar[hidden] { opacity: 0; scale: .96; pointer-events: none; }
+@supports (transition-behavior: allow-discrete) {
+  .floating-toolbar {
+    transition: opacity 220ms var(--motion-enter), scale 220ms var(--motion-enter), display 220ms allow-discrete;
+  }
+  .floating-toolbar[hidden] {
+    transition: opacity 150ms var(--motion-exit), scale 150ms var(--motion-exit), display 150ms allow-discrete;
+  }
+  @starting-style {
+    .floating-toolbar:not([hidden]) { opacity: 0; scale: .96; }
+  }
+}
+[data-panel-motion="forward"] { --panel-motion-distance: 10px; }
+[data-panel-motion="back"] { --panel-motion-distance: -10px; }
+[data-panel-motion] { animation: panel-arrive 210ms var(--motion-enter); }
+@keyframes panel-arrive {
+  from { opacity: .5; transform: translateX(var(--panel-motion-distance)); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floating-toolbar, .floating-toolbar[hidden], .editor-navigation a, .editor-repository, .side-panel, #right-panel {
+    transition: none;
+  }
+  [data-panel-motion] { animation: none; }
+}
 .toolbar-actions, .toolbar-alignments {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   flex: 0 1 auto; max-width: 100%; min-width: 0;

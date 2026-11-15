@@ -157,14 +157,18 @@
     while (layer.children.length > extra.length) layer.lastChild.remove();
     while (layer.children.length < extra.length) { var box = document.createElement('div'); box.className = 'platform-element-outline selected'; layer.appendChild(box); }
     extra.forEach(function (key, i) { outline(layer.children[i], key); });
-    var toolbar = $('platform-element-toolbar'), item = findElement(App.selectedKey); toolbar.hidden = !item; if (!item) return;
+    var toolbar = $('platform-element-toolbar'), item = findElement(App.selectedKey);
+    var anchor = $('element-selection-outline').getBoundingClientRect();
+    var viewport = $('platform-preview-scroll').getBoundingClientRect();
+    var visible = item && anchor.bottom >= viewport.top && anchor.top <= viewport.bottom && anchor.right >= viewport.left && anchor.left <= viewport.right;
+    toolbar.hidden = toolbar.inert = !visible;
+    if (!visible) return;
     $('toolbar-element-label').textContent = keys.length > 1 ? '已选 ' + keys.length + ' 个元素' : item.label;
     var stationIds = App.selectedStationIds(), hasStation = !!stationIds.length, singleStation = hasStation && keys.length === 1, index = App.state.stations.findIndex(function (s) { return s.id === item.stationId; });
     ['tool-current', 'tool-up', 'tool-down', 'tool-delete'].forEach(function (id) { $(id).hidden = !hasStation; });
     $('tool-current').disabled = !singleStation || stationIds[0] === App.state.currentId;
     $('tool-up').disabled = !singleStation || index <= 0; $('tool-down').disabled = !singleStation || index >= App.state.stations.length - 1; $('tool-delete').disabled = App.state.stations.length <= 1;
-    var anchor = $('element-selection-outline').getBoundingClientRect(), area = document.querySelector('.platform-preview').getBoundingClientRect(), viewport = $('platform-preview-scroll').getBoundingClientRect();
-    if (anchor.bottom < viewport.top || anchor.top > viewport.bottom || anchor.right < viewport.left || anchor.left > viewport.right) { toolbar.hidden = true; return; }
+    var area = document.querySelector('.platform-preview').getBoundingClientRect();
     var left = Math.max(8, Math.min(anchor.left - area.left, area.width - toolbar.offsetWidth - 8));
     var top = anchor.bottom - area.top + 8;
     if (top + toolbar.offsetHeight > viewport.bottom - area.top) top = anchor.top - area.top - toolbar.offsetHeight - 8;
@@ -322,8 +326,13 @@
     var showPosition = keys.some(findElement);
     var selectionName = multiple ? '已选中 ' + keys.length + ' 项' : selectedElement ? selectedElement.label : '';
 
-    $('property-settings').hidden = hasSelection;
-    $('property-selection').hidden = !hasSelection;
+    var settings = $('property-settings'), selection = $('property-selection');
+    if (settings.hidden !== hasSelection) {
+      if (hasSelection) selection.dataset.panelMotion = 'forward';
+      else settings.dataset.panelMotion = 'back';
+      settings.hidden = hasSelection;
+      selection.hidden = !hasSelection;
+    }
     $('return-to-settings').hidden = !hasSelection;
     $('property-heading').textContent = !hasSelection ? '标识牌设置' : multiple ? '批量属性' : showStation ? '站点属性' : '元素属性';
     $('property-selection-name').hidden = !selectionName || showStation;
@@ -399,7 +408,7 @@
   document.querySelectorAll('[data-mode]').forEach(function (button) { button.addEventListener('click', function () { set({ mode: button.dataset.mode }); App.deselect(); }); });
   $('return-to-settings').addEventListener('click', function () {
     App.deselect();
-    $('property-heading').focus();
+    $('property-heading').focus({ preventScroll: true });
   });
   // Preserve controls and text drag selections while allowing blank clicks anywhere on the page.
   var selectionControls = 'button, input, select, textarea, label, a, summary, [contenteditable], [role="button"], .field, .platform-section, #platform-element-toolbar, dialog, #platform-notice';

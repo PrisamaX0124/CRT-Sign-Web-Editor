@@ -4,17 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>站台标识生成器 · 吊板与线路图</title>
-  <link rel="stylesheet" href="style.css?v=public-97229588bee1">
-  <link rel="stylesheet" href="platform.css?v=e32dafddd8b0">
+  <link rel="stylesheet" href="style.css?v=be0a3f20ab5a">
+  <link rel="stylesheet" href="platform.css?v=6c995abf55c0">
 </head>
-<body class="platform-page">
-  <header class="platform-header">
+<body class="editor-page platform-page">
+  <header class="editor-header platform-header">
+    <nav class="editor-navigation" aria-label="切换编辑器">
+      <a href="index.html">导向标识</a>
+      <a href="platform.html" aria-current="page">站台标识</a>
+    </nav>
+    <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
+      <span>给项目加星</span>
+    </a>
     <nav class="mode-tabs" aria-label="标识牌版式">
       <button data-mode="route" aria-pressed="true">全线吊板</button>
       <button data-mode="station" aria-pressed="false">本站吊板</button>
       <button data-mode="vertical" aria-pressed="false">纵向线路图</button>
     </nav>
-    <a class="back-link" href="index.html">导向标识编辑器 ↗</a>
   </header>
   <div class="platform-workspace">
     <aside class="platform-stations">
@@ -34,7 +41,7 @@
         <select id="platform-clipboard-history" aria-label="粘贴最近20次复制或剪切的站点"><option value="">粘贴历史（0/20）</option></select><span id="platform-selection-status" role="status"></span>
       </div>
       <div id="platform-preview-scroll"><div id="platform-paper"><svg id="platform-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="站台标识牌实时预览"></svg><div id="element-hover-outline" class="platform-element-outline" hidden></div><div id="element-selection-outline" class="platform-element-outline selected" hidden></div><div id="element-multi-outlines"></div></div></div>
-      <div id="platform-element-toolbar" role="toolbar" aria-label="标识牌元素快捷操作" hidden>
+      <div id="platform-element-toolbar" class="floating-toolbar" role="toolbar" aria-label="标识牌元素快捷操作" hidden inert>
         <span id="toolbar-element-label"></span>
         <div class="platform-tool-group" role="group" aria-label="站点管理"><button id="tool-current" title="设为本站">本站</button><button id="tool-up" title="站点前移" aria-label="站点前移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 12H8m5-5-5 5 5 5"/></svg><span>前移</span></button><button id="tool-down" title="站点后移" aria-label="站点后移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16M4 12h12m-5-5 5 5-5 5"/></svg><span>后移</span></button><button id="tool-delete" title="删除站点" aria-label="删除站点"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 10v7m4-7v7"/></svg></button></div>
         <div class="platform-tool-group nudge-tools" role="group" aria-label="位置微调"><span class="tool-group-label">微调</span><button data-nudge-x="-1" data-nudge-y="0" title="元素左移 1px" aria-label="元素左移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg></button><button data-nudge-x="1" data-nudge-y="0" title="元素右移 1px" aria-label="元素右移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="-1" title="元素上移 1px" aria-label="元素上移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="1" title="元素下移 1px" aria-label="元素下移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button><button id="tool-reset" title="复位元素微调" aria-label="复位元素微调"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button></div>
@@ -218,6 +225,6 @@
   <script src="js/platform/clipboard.js?v=public-6cb6459bfe88"></script>
   <script src="assets/platform-patterns.js?v=public-1d04b66c025a"></script>
   <script src="js/platform/patterns.js?v=public-8030a731d7c1"></script>
-  <script src="js/platform/main.js?v=af0aeacd97c0"></script>
+  <script src="js/platform/main.js?v=c4a6aaf367e2"></script>
 </body>
 </html>

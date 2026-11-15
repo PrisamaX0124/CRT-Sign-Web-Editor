@@ -75,6 +75,7 @@
     document.getElementById('close-element-btn').addEventListener('click', function () {
       if (App.presetPreviewId) App.previewPreset(null);
       else App.select(null);
+      document.getElementById('right-panel-title').focus({ preventScroll: true });
     });
 
     // 画布尺寸变化（窗口缩放、面板收展）时重算编辑区显示尺寸

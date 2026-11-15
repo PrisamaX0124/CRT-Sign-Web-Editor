@@ -447,6 +447,7 @@
   // ─── 右栏：模式管理与签名同步 ──────────────────────────────
 
   var lastSignature = null;
+  var previousPanelMode = null;
   var syncFns = [];
   var rowBackgroundId = null;
 
@@ -460,8 +461,7 @@
   /** 结构签名：变化才重建面板；纯值变化走 syncFns。
    *  注意设置面板的签名不含任何值——宽度模式等值变化由 syncFns 回显，
    *  否则每次切换都会整面板重建，重建出的控件不带任何选中态。 */
-  function panelSignature() {
-    var mode = panelMode();
+  function panelSignature(mode) {
     if (mode === 'batch') return 'batch:' + App.selectedIds().slice().sort().map(function (id) {
       return id + ':' + State.findElement(App.state, id).element.type;
     }).join(',');
@@ -478,15 +478,19 @@
 
   function syncRightPanel() {
     if (!App.state || !App.measure) return;
-    var sig = panelSignature();
+    var mode = panelMode();
+    var sig = panelSignature(mode);
     if (sig !== lastSignature) {
-      rebuildRightPanel();
+      var content = rebuildRightPanel(mode);
+      if (previousPanelMode && (previousPanelMode === 'settings') !== (mode === 'settings')) {
+        content.dataset.panelMotion = mode === 'settings' ? 'back' : 'forward';
+      }
+      previousPanelMode = mode;
       lastSignature = sig;
     } else {
       syncFns.forEach(function (fn) { fn(); });
     }
     // 标题与返回按钮
-    var mode = panelMode();
     document.getElementById('right-panel-title').textContent =
       mode === 'batch' ? '批量属性' : mode === 'element' ? '元素属性'
         : mode === 'preset' ? '预设预览' : '标识牌设置';
@@ -502,16 +506,15 @@
     }
   }
 
-  function rebuildRightPanel() {
+  function rebuildRightPanel(mode) {
     syncFns = [];
     paletteCityFns = [];
     var body = document.getElementById('right-panel-body');
     body.innerHTML = '';
-    var mode = panelMode();
-    if (mode === 'batch') body.appendChild(buildBatchPanel());
-    else if (mode === 'element') body.appendChild(buildElementPanel());
-    else if (mode === 'preset') body.appendChild(buildPresetPreviewPanel());
-    else body.appendChild(buildSettingsPanel());
+    if (mode === 'batch') return body.appendChild(buildBatchPanel());
+    if (mode === 'element') return body.appendChild(buildElementPanel());
+    if (mode === 'preset') return body.appendChild(buildPresetPreviewPanel());
+    return body.appendChild(buildSettingsPanel());
   }
 
   // ─── 表单控件工厂 ──────────────────────────────────────────

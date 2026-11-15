@@ -286,7 +286,7 @@
     var id = App.selection.elementId;
     var found = id && State.findElement(App.state, id);
     document.getElementById('center-panel').classList.toggle('has-element-selection', !!found);
-    elementToolbar.hidden = !found;
+    elementToolbar.hidden = elementToolbar.inert = !found;
     if (!found) return;
     toolbarPaddingControls.forEach(function (sync) { sync(found); });
     toolbarAlignments.forEach(function (item) {
@@ -310,7 +310,10 @@
     if (!elementToolbar || elementToolbar.hidden || !svg) return;
     // 不插入DOM，也不重建按钮：移动/调边距后焦点仍留在当前按钮。
     var selected = Array.prototype.slice.call(svg.querySelectorAll('g.element.selected'));
-    if (!selected.length) { elementToolbar.hidden = true; return; }
+    if (!selected.length) {
+      elementToolbar.hidden = elementToolbar.inert = true;
+      return;
+    }
     var area = canvasScroll.getBoundingClientRect();
     var centerPanel = document.getElementById('center-panel');
     var center = centerPanel.getBoundingClientRect();
@@ -320,7 +323,7 @@
       top: Math.min.apply(null, rects.map(function (r) { return r.top; })),
       bottom: Math.max.apply(null, rects.map(function (r) { return r.bottom; })) };
     elementToolbar.style.maxWidth = Math.max(80, area.width - 16) + 'px';
-    var size = elementToolbar.getBoundingClientRect();
+    var size = { width: elementToolbar.offsetWidth, height: elementToolbar.offsetHeight };
     // 窄屏换行时按实际操作栏高度留白，避免盖住行管理按钮。
     centerPanel.style.setProperty('--element-toolbar-gap', Math.ceil(size.height + 12) + 'px');
     var left = Core.clamp((el.left + el.right - size.width) / 2, area.left + 8, area.right - size.width - 8);

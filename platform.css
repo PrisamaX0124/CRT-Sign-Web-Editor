@@ -1,4 +1,3 @@
-.platform-page { display: flex; flex-direction: column; }
 .platform-page [hidden] { display: none !important; }
 .station-direction-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
 .station-direction-option label { cursor: pointer; }
@@ -14,17 +13,10 @@
 .station-item.station-drop-before { border-top: 2px solid var(--accent); }
 .station-item.station-drop-after { border-bottom: 2px solid var(--accent); }
 .station-drag-ghost { position: fixed; z-index: 120; pointer-events: none; margin: 0; opacity: .92; background: var(--panel-bg); border: 1px solid var(--accent); box-shadow: 0 4px 18px #0002; }
-.platform-header { height: 72px; flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; padding: 0 22px; background: var(--panel-bg); border-bottom: 1px solid var(--border); }
-.platform-header .mode-tabs { grid-column: 2; }
-.platform-header .back-link { grid-column: 3; justify-self: end; }
-.platform-brand { display: flex; align-items: center; gap: 10px; }
-.brand-mark { background: var(--accent); color: white; border-radius: 8px; width: 34px; height: 34px; display: grid; place-items: center; font-size: 24px; }
-.platform-brand strong { display: block; font-size: 16px; }
-.platform-brand small { display: block; color: var(--text-dim); font-size: 9px; letter-spacing: 1.4px; margin-top: 4px; }
-.mode-tabs { display: flex; padding: 4px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; gap: 3px; }
-.mode-tabs button { padding: 8px 16px; border-radius: 5px; color: var(--text-dim); }
+.platform-header .mode-tabs { grid-area: 1 / 2; }
+.mode-tabs { display: flex; padding: 3px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; gap: 3px; }
+.mode-tabs button { padding: 7px 12px; border-radius: 5px; color: var(--text-dim); white-space: nowrap; }
 .mode-tabs button[aria-pressed="true"] { background: var(--accent); color: white; }
-.back-link, .editor-page-link { text-decoration: none; color: var(--accent); font-size: 12px; }
 .platform-workspace { display: grid; grid-template-columns: 254px minmax(0, 1fr) 290px; flex: 1; min-height: 0; }
 .platform-stations, .platform-properties { background: var(--panel-bg); display: flex; flex-direction: column; min-height: 0; }
 .platform-stations { border-right: 1px solid var(--border); }
@@ -114,8 +106,6 @@
 #batch-error { color: var(--danger); margin-top: 8px; }
 #platform-notice { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--panel-bg); padding: 12px 20px; border-radius: 8px; max-width: calc(100vw - 24px); z-index: 100; font-size: 12px; box-shadow: 0 5px 20px rgba(0,0,0,.2); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.platform-header { height: 56px; }
-.platform-brand strong { font-size: 14px; }
 .platform-workspace { grid-template-columns: 212px minmax(0, 1fr) 272px; }
 .platform-panel-title { padding: 12px 14px; font-size: 12px; }
 .library-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex: none; }
@@ -167,14 +157,10 @@
 #preset-dialog::backdrop { background: rgba(0,0,0,.4); }
 #preset-name { width: 100%; }
 #preset-error { color: var(--danger); font-size: 12px; margin-top: 8px; }
-@media (max-width: 1100px) { .platform-workspace { grid-template-columns: 180px minmax(0, 1fr) 248px; } .platform-header { padding: 0 14px; } .mode-tabs button { padding: 8px 10px; } .platform-brand small { display: none; } .back-link { max-width: 110px; } }
+@media (max-width: 1100px) { .platform-workspace { grid-template-columns: 180px minmax(0, 1fr) 248px; } }
 @media (max-width: 768px) {
-  .platform-header { height: auto; padding: 10px 12px; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 6px; }
-  .platform-header .mode-tabs { grid-column: 1; width: auto; max-width: 100%; }
-  .platform-header .back-link { grid-column: 1; justify-self: center; margin-left: 0; }
-  .platform-brand strong { font-size: 14px; } .brand-mark { width: 28px; height: 28px; font-size: 20px; }
-  .back-link { margin-left: auto; max-width: none; font-size: 10px; }
-  .mode-tabs { order: 0; width: auto; flex: 1; } .mode-tabs button { flex: 1; padding: 7px 4px; font-size: 12px; }
+  .platform-header .mode-tabs { grid-area: 2 / 1 / 3 / -1; justify-self: center; }
+  .mode-tabs button { font-size: 12px; }
   .platform-workspace { display: flex; flex-direction: column; overflow-y: auto; }
   .platform-stations { flex: none; border: 0; }
   .platform-stations .platform-panel-title, .station-list-help { display: none; }
