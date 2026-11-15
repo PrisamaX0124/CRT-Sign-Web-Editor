@@ -3,8 +3,10 @@
   'use strict';
   var Core = global.SignCore;
   function metrics(state, measure) {
-    if (state.mode !== 'vertical') return global.PlatformHanging.metrics(state, measure);
-    return global.PlatformVertical.metrics(state, measure);
+    var scene = state.mode === 'vertical' ? global.PlatformVertical.metrics(state, measure) : global.PlatformHanging.metrics(state, measure);
+    var patterns = global.PlatformPatterns && global.PlatformPatterns.metrics(state, scene);
+    if (patterns) scene.patterns = patterns;
+    return scene;
   }
   function draw(svg, scene, options) {
     svg.replaceChildren();
@@ -14,15 +16,24 @@
     var background = document.createElementNS(Core.SVG_NS, 'rect');
     background.setAttribute('width', scene.output.width); background.setAttribute('height', scene.output.height); background.setAttribute('fill', scene.background);
     svg.appendChild(background);
+    var patternFills = scene.patterns && global.PlatformPatterns.draw(svg, scene.patterns);
     var group = document.createElementNS(Core.SVG_NS, 'g');
     group.setAttribute('transform', 'translate(' + scene.frame.x + ' ' + scene.frame.y + ') scale(' + scene.frame.scale + ')');
     group.setAttribute('class', 'platform-art');
     svg.appendChild(group);
-    scene.nodes.forEach(function (n) {
+    scene.nodes.forEach(function (n, index) {
       var el = document.createElementNS(Core.SVG_NS, n.tag);
       Object.keys(n.attrs).forEach(function (key) { el.setAttribute(key, n.attrs[key]); });
       if (n.text !== undefined) el.textContent = n.text;
       group.appendChild(el);
+      if (patternFills && patternFills[index]) {
+        // 整条底色先铺实，重复的小块之间才不会露出牌面背景。
+        var overlay = el.cloneNode(false);
+        ['data-role', 'data-element-key', 'data-station-id'].forEach(function (key) { overlay.removeAttribute(key); });
+        overlay.setAttribute('fill', patternFills[index]);
+        overlay.setAttribute('pointer-events', 'none');
+        group.appendChild(overlay);
+      }
     });
     // Rotated labels and transfer branches can make adjacent group boxes overlap.
     // Shapes receive their own pointer events; only text needs a full ink hit area.

@@ -316,7 +316,7 @@
     $('hanging-size-controls').hidden = !hanging; $('fit-ratio').hidden = true;
     $('output-width').readOnly = !hanging; $('output-height').readOnly = false;
     $('station-direction-option').hidden = state.mode !== 'station';
-    $('show-station-direction').checked = state.showStationDirection;
+    $('show-station-direction').setAttribute('aria-checked', String(state.showStationDirection));
     $('vertical-layout-controls').hidden = hanging;
     value('vertical-variant', state.verticalVariant);
     $('swap-vertical-columns').hidden = state.verticalVariant !== 'double';
@@ -331,6 +331,7 @@
     document.querySelectorAll('[data-mode]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); });
     $('preview-title').textContent = names[state.mode]; $('preview-dimensions').textContent = size.width + ' × ' + size.height + ' px';
     value('line-number', state.line); value('line-name', state.lineName); value('palette-city', state.city); value('travel-direction', state.direction);
+    if (global.PlatformPatterns) global.PlatformPatterns.sync(state);
     value('station-code', s.code); value('station-zh', s.zh); value('station-en', s.en);
     value('station-transfers', S.formatTransfers(s.transfers));
     $('add-text-transfer').disabled=s.transfers.length>=6;
@@ -405,7 +406,7 @@
   $('line-name').addEventListener('input', function (event) { set({ lineName: event.target.value }, 'line-name'); });
   $('palette-city').addEventListener('change', function (event) { changeCity(event.target.value); });
   $('travel-direction').addEventListener('change', function (event) { set({ direction: Number(event.target.value) }); });
-  $('show-station-direction').addEventListener('change', function (event) { set({ showStationDirection: event.target.checked }); });
+  $('show-station-direction').addEventListener('click', function () { set({ showStationDirection: !App.state.showStationDirection }); });
   $('vertical-variant').addEventListener('change', function(event) { App.update(function(state){return S.setVerticalVariant(state,event.target.value);}); });
   $('swap-vertical-columns').addEventListener('click',function(){App.update(S.swapVerticalColumns);});
   $('reverse-stations').addEventListener('click',function(){App.update(S.reverseStations);});
@@ -536,6 +537,7 @@
     if(!Core.isPalette(App.state.city))set({city:'chongqing'});else sync();
   });
   global.PlatformClipboard.init(App, notice);
+  if (global.PlatformPatterns) global.PlatformPatterns.init(App, notice);
   render();
   App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message); });
 })(window);

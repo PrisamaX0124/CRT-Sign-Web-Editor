@@ -1,7 +1,7 @@
 .platform-page { display: flex; flex-direction: column; }
 .platform-page [hidden] { display: none !important; }
-.station-direction-option { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; font-size: 12px; cursor: pointer; }
-.station-direction-option input { flex: none; accent-color: var(--accent); }
+.station-direction-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: 12px; }
+.station-direction-option label { cursor: pointer; }
 .platform-page button:disabled { opacity: .4; cursor: default; }
 .station-list-help { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .station-list-help button { display: flex; align-items: center; gap: 3px; border: 1px solid var(--border); border-radius: 5px; padding: 4px; white-space: nowrap; }
@@ -72,6 +72,21 @@
 .platform-swatch { width: 20px; height: 20px; border-radius: 4px; border: 1px solid rgba(100,100,100,.25); }
 .platform-swatch[aria-pressed="true"] { outline: 2px solid var(--text); outline-offset: 2px; }
 .section-heading { display: flex; justify-content: space-between; }
+.line-pattern-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.line-pattern-heading h2 { margin: 0; }
+.platform-switch { display: grid; place-items: center; width: 44px; height: 36px; padding: 0; flex: none; }
+.platform-switch span { display: flex; align-items: center; width: 36px; height: 20px; padding: 2px; border: 1px solid var(--text-dim); border-radius: 12px; background: var(--control-bg); }
+.platform-switch span::after { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--text-dim); }
+.platform-switch[aria-checked="true"] span { justify-content: flex-end; background: var(--accent); border-color: var(--accent); }
+.platform-switch[aria-checked="true"] span::after { background: white; }
+#line-pattern-controls { margin-top: 6px; }
+#line-pattern-status:empty { display: none; }
+#line-pattern-values output { float: right; }
+#line-pattern-values input[type="range"] { accent-color: var(--accent); }
+.line-pattern-adjustment { display: flex; align-items: center; gap: 8px; }
+.line-pattern-adjustment input { flex: 1; min-width: 0; }
+.line-pattern-adjustment .icon-btn { display: grid; place-items: center; width: 36px; height: 36px; flex: none; }
+.line-pattern-adjustment svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 #current-station-label { color: var(--accent); font-size: 10px; }
 #transfer-colors { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
 .transfer-color { display: flex; align-items: flex-start; gap: 7px; font-size: 11px; }

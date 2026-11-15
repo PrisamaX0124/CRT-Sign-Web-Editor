@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>站台标识生成器 · 吊板与线路图</title>
   <link rel="stylesheet" href="style.css?v=public-97229588bee1">
-  <link rel="stylesheet" href="platform.css?v=public-56c37302219a">
+  <link rel="stylesheet" href="platform.css?v=public-cf4ba5dac56d">
 </head>
 <body class="platform-page">
   <header class="platform-header">
@@ -52,6 +52,46 @@
           <div class="field"><label for="travel-direction" id="travel-direction-label">列车行驶方向</label><select id="travel-direction"><option value="-1">前往列表首站 ← / ↓</option><option value="1">前往列表末站 → / ↑</option></select></div>
           <div class="field"><label for="line-color-hex">线路色</label><div id="line-color-picker"></div></div>
         </section>
+        <section class="platform-section" data-panel="sign" id="line-pattern-section">
+          <div class="line-pattern-heading">
+            <h2>线路底纹</h2>
+            <button type="button" id="line-pattern-enabled" class="platform-switch" role="switch" aria-label="启用线路底纹" aria-checked="false" aria-controls="line-pattern-controls"><span aria-hidden="true"></span></button>
+          </div>
+          <div id="line-pattern-controls" hidden>
+            <div class="field">
+              <label for="line-pattern-source">纹样来源</label>
+              <select id="line-pattern-source" aria-describedby="line-pattern-status">
+                <option value="automatic">按重庆线路匹配</option>
+                <optgroup label="内置纹样" id="line-pattern-built-in"></optgroup>
+                <option value="custom" id="line-pattern-custom" disabled>自定义图片</option>
+              </select>
+              <small id="line-pattern-status" role="status"></small>
+            </div>
+            <div id="line-pattern-values" hidden>
+              <div class="field">
+                <label for="line-pattern-size">大小 <output id="line-pattern-size-value" for="line-pattern-size"></output></label>
+                <div class="line-pattern-adjustment">
+                  <input id="line-pattern-size" type="range" min="50" max="200">
+                  <button type="button" class="icon-btn" id="line-pattern-reset-size" aria-label="重置底纹大小" title="重置底纹大小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="line-pattern-opacity">深浅 <output id="line-pattern-opacity-value" for="line-pattern-opacity"></output></label>
+                <div class="line-pattern-adjustment">
+                  <input id="line-pattern-opacity" type="range" min="0" max="100">
+                  <button type="button" class="icon-btn" id="line-pattern-reset-opacity" aria-label="重置底纹深浅" title="重置底纹深浅"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
+                </div>
+              </div>
+            </div>
+            <div class="field-pair">
+              <button type="button" class="btn" id="line-pattern-import" aria-describedby="line-pattern-file-help">上传图片</button>
+              <button type="button" class="btn" id="line-pattern-clear" hidden>移除图片</button>
+            </div>
+            <input id="line-pattern-file" type="file" accept=".png,.svg,image/png,image/svg+xml" hidden>
+            <p class="field-help" id="line-pattern-file-help">支持 .png 和 .svg 图片。透明处显示线路底色。</p>
+            <p class="field-help" id="line-pattern-credit" hidden>内置纹样改编自 <a href="https://hachiiiiiiii.co/" target="_blank" rel="noopener">Hachi</a>，按<a href="https://creativecommons.org/licenses/by-nc/4.0/deed.zh-hans" target="_blank" rel="noopener">署名与非商业性使用许可</a>提供。</p>
+          </div>
+        </section>
         <section class="platform-section" id="station-properties" data-panel="station"><div class="section-heading"><h2>站点编辑</h2><span id="current-station-label"></span></div>
           <div class="field"><label for="station-code">站点编号</label><input id="station-code" type="text" maxlength="8"></div>
           <div class="field"><label for="station-zh">中文站名</label><input id="station-zh" type="text" maxlength="80"></div>
@@ -66,7 +106,10 @@
         <section class="platform-section" data-panel="sign" id="dimension-section"><h2>尺寸与排版</h2>
           <div id="vertical-layout-controls" hidden><div class="field"><label for="vertical-variant">纵向线路图版式</label><select id="vertical-variant"><option value="left">单列左版</option><option value="right">单列右版</option><option value="double">双列 · 岛式站台</option></select></div><button id="swap-vertical-columns" class="btn" hidden>⇄ 交换左右列</button><p id="vertical-layout-help" class="field-help">与吊板共用站点、本站、行车方向、换乘和颜色。</p></div>
           <div id="hanging-size-controls"><div class="field"><label for="hanging-length">吊板长度（每格 256px）</label><select id="hanging-length"><option value="custom">自定义像素</option><option value="1">1格 · 256px</option><option value="2">2格 · 512px</option><option value="3">3格 · 768px</option><option value="4">4格 · 1024px</option><option value="5">5格 · 1280px</option><option value="6">6格 · 1536px</option><option value="7">7格 · 1792px</option><option value="8">8格 · 2048px</option><option value="9">9格 · 2304px</option><option value="10">10格 · 2560px</option><option value="11">11格 · 2816px</option><option value="12">12格 · 3072px</option><option value="13">13格 · 3328px</option><option value="14">14格 · 3584px</option><option value="15">15格 · 3840px</option></select></div><div class="field"><label for="hanging-height">吊板短边</label><select id="hanging-height"><option value="192">地铁 · 0.75格 / 192px</option><option value="256">单轨 · 1格 / 256px</option><option value="custom">自定义像素</option></select></div></div>
-          <label id="station-direction-option" class="station-direction-option" hidden><input id="show-station-direction" type="checkbox">显示行车方向提示</label>
+          <div id="station-direction-option" class="station-direction-option" hidden>
+            <label id="station-direction-caption" for="show-station-direction">显示行车方向提示</label>
+            <button type="button" id="show-station-direction" class="platform-switch" role="switch" aria-labelledby="station-direction-caption" aria-checked="true"><span aria-hidden="true"></span></button>
+          </div>
           <details id="advanced-layout"><summary>像素尺寸与文字样式</summary>
           <div class="field-pair"><div class="field"><label for="output-width">宽度 px</label><input id="output-width" type="number" min="128" max="8192" step="1"></div><div class="field"><label for="output-height">高度 px</label><input id="output-height" type="number" min="128" max="8192" step="1"></div></div>
           <button id="fit-ratio" class="btn" hidden>高度自动适配</button>
@@ -87,15 +130,17 @@
   <script src="js/palette-manager.js?v=public-71d85de854d0"></script>
   <script src="js/color-picker.js?v=public-f48d3fe82ac8"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
-  <script src="js/platform/state.js?v=public-982ba139d074"></script>
+  <script src="js/platform/state.js?v=public-001363d6ae5d"></script>
   <script src="js/platform/reference.js?v=public-80b402bac929"></script>
   <script src="js/platform/vertical-reference.js?v=public-a036244575d0"></script>
   <script src="js/platform/route.js?v=public-b8986b777b72"></script>
   <script src="js/platform/hanging.js?v=public-17c54cd4b071"></script>
   <script src="js/platform/vertical.js?v=public-4c1e378ef3fd"></script>
-  <script src="js/platform/render.js?v=public-6f4750e53f04"></script>
+  <script src="js/platform/render.js?v=public-1a8db166e6e2"></script>
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
   <script src="js/platform/clipboard.js?v=public-6cb6459bfe88"></script>
-  <script src="js/platform/main.js?v=public-2f8710a9955f"></script>
+  <script src="assets/platform-patterns.js?v=public-1d04b66c025a"></script>
+  <script src="js/platform/patterns.js?v=public-8030a731d7c1"></script>
+  <script src="js/platform/main.js?v=public-a800a4746e6d"></script>
 </body>
 </html>

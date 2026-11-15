@@ -7,6 +7,9 @@ const context = vm.createContext({ serial: 0, crypto: { randomUUID: () => 'stati
 for (const file of ['core', 'palettes', 'platform/reference', 'platform/vertical-reference', 'platform/state', 'platform/route', 'platform/hanging', 'platform/vertical', 'platform/render']) {
   vm.runInContext(readFileSync(new URL('../js/' + file + '.js', import.meta.url), 'utf8'), context);
 }
+for (const path of ['assets/platform-patterns.js', 'js/platform/patterns.js']) {
+  vm.runInContext(readFileSync(new URL('../' + path, import.meta.url), 'utf8'), context);
+}
 const S = context.PlatformState, R = context.PlatformRender;
 const measure = (text, family, weight, size) => String(text).length * size * .9;
 measure.ink = (text, family, weight, size) => ({ abl: 0, abr: measure(text, family, weight, size), adv: measure(text, family, weight, size) });
@@ -24,6 +27,20 @@ test('editing and project round trips preserve immutable state', () => {
   assert.equal(S.serialize(original), before);
   assert.equal(edited.stations[0].zh, '站点 A');
   assert.equal(S.serialize(S.deserialize(S.serialize(edited))), S.serialize(edited));
+});
+
+test('公开版可启用重庆底纹，纵向顶栏保持纯色', () => {
+  const initial = S.create();
+  assert.equal(initial.linePattern.enabled, false);
+  const state = S.settings(initial, { mode: 'vertical', line: '10', linePattern: { enabled: true, source: 'automatic' } });
+  const scene = R.metrics(state, measure);
+  assert.equal(scene.patterns.design.name, '10号线');
+  assert.equal(scene.patterns.design.repeat, 3 * 143 / 647);
+  const header = scene.nodes.findIndex(node => node.attrs['data-role'] === 'vertical-header');
+  assert.ok(header >= 0);
+  assert.equal(header in scene.patterns.sizes, false);
+  assert.ok(scene.nodes.some((node, index) =>
+    node.attrs['data-role'] === 'vertical-current-band' && index in scene.patterns.sizes));
 });
 
 test('terminal hanging signs have flat grey bars and no missing-neighbor captions; departures retain the next station', () => {

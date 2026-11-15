@@ -79,6 +79,7 @@
       fontScale: number(value.fontScale, 1, 0.7, 1.4),
       showStationDirection: value.showStationDirection !== false,
       texture: false,
+      ...(global.PlatformPatterns ? { linePattern: global.PlatformPatterns.settings(value.linePattern) } : {}),
       routeLayout: 'responsive',
       routeLengthAuto: sizes.route.width === (sizes.route.height === 256 ? 1280 : 768) && (value.version < 3 || value.routeLengthAuto !== false),
       sizes: sizes, stations: stations, adjustments: adjustments,
