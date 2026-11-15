@@ -3,11 +3,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=1100">
   <title>导向标识生成器</title>
-  <link rel="stylesheet" href="style.css?v=20373272744f">
-  <link rel="stylesheet" href="platform.css?v=43f64788cc5d">
-  <link rel="stylesheet" href="transfer.css?v=f7380501469b">
+  <link rel="stylesheet" href="style.css?v=804d499ab69d">
+  <link rel="stylesheet" href="platform.css?v=2bbd43e16f77">
+  <link rel="stylesheet" href="transfer.css?v=e8bfd1a0d050">
 </head>
 <body class="editor-page">
 
@@ -69,13 +69,10 @@
             </div>
             <div id="empty-hint" hidden>从左侧拖放元素到此处开始编辑</div>
           </div>
-          <!-- 移动端行管理条：interact.js 填充（行控件外置，不与牌面元素叠加） -->
-          <div id="row-strip"></div>
           <button id="add-row-btn" title="在底部添加新行">＋ 添加行</button>
         </div>
       </div>
-      <!-- 画布缩放徽标：仅移动布局显示，interact.js 更新倍率并接线复位 -->
-      <button id="zoom-badge" title="当前缩放，点按复位">100%</button>
+
       <div id="element-toolbar" class="floating-toolbar" role="toolbar" aria-label="元素快捷操作" hidden inert></div>
     </main>
 
@@ -97,6 +94,19 @@
   </div>
 
   <div id="transfer-editor" class="editor-workspace" hidden>
+    <aside class="platform-stations editor-left" id="transfer-content" aria-labelledby="transfer-content-heading">
+      <h2 class="platform-panel-title" id="transfer-content-heading">线路与元素</h2>
+      <div class="panel-body">
+        <section class="platform-section transfer-section">
+          <h3 class="section-title" id="transfer-arrangement-heading">线路分组</h3>
+          <div id="transfer-arrangements" role="group" aria-labelledby="transfer-arrangement-heading"></div>
+        </section>
+        <section class="platform-section transfer-section">
+          <h3 class="section-title">牌面元素</h3>
+          <div id="transfer-groups"></div>
+        </section>
+      </div>
+    </aside>
     <main class="platform-preview editor-center" id="transfer-preview" aria-label="换乘标识预览">
       <div class="preview-toolbar">
         <div class="transfer-preview-heading">
@@ -123,19 +133,6 @@
       </div>
       <div class="preview-footer"><div id="transfer-status" role="status">本地自动保存</div></div>
     </main>
-    <aside class="platform-stations editor-left" id="transfer-content" aria-labelledby="transfer-content-heading">
-      <h2 class="platform-panel-title" id="transfer-content-heading">线路与元素</h2>
-      <div class="panel-body">
-        <section class="platform-section transfer-section">
-          <h3 class="section-title" id="transfer-arrangement-heading">线路分组</h3>
-          <div id="transfer-arrangements" role="group" aria-labelledby="transfer-arrangement-heading"></div>
-        </section>
-        <section class="platform-section transfer-section">
-          <h3 class="section-title">牌面元素</h3>
-          <div id="transfer-groups"></div>
-        </section>
-      </div>
-    </aside>
     <aside class="platform-properties editor-right" id="transfer-properties" aria-labelledby="transfer-heading">
       <header class="panel-header">
         <div class="panel-heading">
@@ -210,14 +207,14 @@
   <script src="js/directions.js?v=e236a676ed91"></script>
   <script src="js/state.js?v=public-821e25ad8636"></script>
   <script src="js/render.js?v=public-02d87d9bea0d"></script>
-  <script src="js/ui.js?v=public-bf98befe39c2"></script>
+  <script src="js/ui.js?v=public-bc12f3ec68d5"></script>
   <script src="js/clipboard.js?v=public-d58c305be636"></script>
   <script src="js/presets.js?v=public-e3eeae2acdc5"></script>
   <script src="js/storage.js?v=public-85ae228675bd"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
   <script src="js/color-picker.js?v=01972a3cfee5"></script>
-  <script src="js/panel.js?v=71a97908a077"></script>
-  <script src="js/interact.js?v=f2b231cf5417"></script>
+  <script src="js/panel.js?v=f39f97d708ec"></script>
+  <script src="js/interact.js?v=b442a0d55219"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = '换乘标识生成器';
@@ -229,7 +226,7 @@
       document.querySelector('.editor-navigation a[href="index.html?editor=transfer"]').setAttribute('aria-current', 'page');
     }
   </script>
-  <script src="js/main.js?v=a3a61de75576"></script>
+  <script src="js/main.js?v=9a2ef38c901c"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
   <script src="js/platform/patterns.js?v=05b46d9c241d"></script>
   <script src="js/transfer/state.js?v=619cd2b42adb"></script>

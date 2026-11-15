@@ -145,7 +145,7 @@
       assert(app.state.stations.length === 4 && visible('delete-selected-stations'), '撤销删除应恢复原站点与选择');
     });
 
-    await test('手机窄屏下，展开色板、文字换乘、导出和删除操作不会让页面横向溢出', async function () {
+    await test('窄窗口横向滚动到右栏后，可使用色板、文字换乘、导出和删除控件', async function () {
       frame.style.width = '320px';
       frame.style.height = '720px';
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -155,15 +155,15 @@
       app.select(project.currentId);
       editor.querySelectorAll('#transfer-colors .cp-current').forEach(button => button.click());
       element('station-delete').scrollIntoView({ block: 'nearest' });
+      frame.contentWindow.scrollTo(editor.documentElement.scrollWidth, 0);
       const panel = element('property-scroll').getBoundingClientRect();
       const deleteButton = element('station-delete').getBoundingClientRect();
-      assert(editor.documentElement.scrollWidth <= 320 && element('property-scroll').scrollWidth <= element('property-scroll').clientWidth, '窄屏面板有横向溢出');
+      assert(frame.contentWindow.scrollX > 0 && panel.left >= 0 && panel.right <= 321 &&
+        element('property-scroll').scrollWidth <= element('property-scroll').clientWidth, '应能横向滚动到右栏且显示完整控件');
       assert(deleteButton.left >= panel.left && deleteButton.right <= panel.right && deleteButton.bottom <= frame.contentWindow.innerHeight + 1,
         '删除站点应可滚动到且完整显示，按钮底边为 ' + deleteButton.bottom + '，窗口高度为 ' + frame.contentWindow.innerHeight);
       const returnButton = element('return-to-settings').getBoundingClientRect();
-      const workspaceTop = editor.querySelector('.platform-workspace').getBoundingClientRect().top;
-      assert(returnButton.top >= workspaceTop - 1 && returnButton.bottom <= workspaceTop + 58,
-        '下滑到末尾后仍应能返回标识牌设置，返回按钮在 ' + returnButton.top + ' 到 ' + returnButton.bottom + '，滚动区起点为 ' + workspaceTop);
+      assert(returnButton.top >= 0 && returnButton.bottom <= panel.top, '右栏滚动到底后，返回按钮仍应在标题中可用');
     });
   } catch (error) {
     const result = document.createElement('li');

@@ -61,7 +61,7 @@ test('批量背景色区分透明、混合值、失效选择，连续编辑不�
   assert.equal(application.state, before);
 });
 
-test('预览外层、图形与覆盖层共用显示宽度，缩放和窗口变化不会累积缩小', () => {
+test('预览外层、图形与覆盖层共用显示宽度，窗口变化后仍按画布宽度计算', () => {
   const context = { window: null, Date };
   context.window = context;
   const elements = {
@@ -75,18 +75,15 @@ test('预览外层、图形与覆盖层共用显示宽度，缩放和窗口变�
   const application = context.App;
   for (const width of [256, 512, 768, 1024, 1280, 1536, 2048]) {
     application.layout = { width };
-    for (const available of [1400, 320, 1000]) {
+    for (const available of [2400, 1400, 320, 1000]) {
       elements['canvas-area'].clientWidth = available;
-      for (const zoom of [1, 0.5, 2]) {
-        application.canvasZoom = zoom;
-        application.fitSignDisplay();
-        const expected = Math.min(available, 1600, width) * zoom + 'px';
-        assert.equal(elements['canvas-wrap'].style.width, expected);
-        assert.equal(elements['sign-svg'].style.width, expected);
-        assert.equal(elements['sign-overlay'].style.width, expected);
-        application.fitSignDisplay();
-        assert.equal(elements['canvas-wrap'].style.width, expected);
-      }
+      application.fitSignDisplay();
+      const expected = Math.min(available, 1600, width) + 'px';
+      assert.equal(elements['canvas-wrap'].style.width, expected);
+      assert.equal(elements['sign-svg'].style.width, expected);
+      assert.equal(elements['sign-overlay'].style.width, expected);
+      application.fitSignDisplay();
+      assert.equal(elements['canvas-wrap'].style.width, expected);
     }
   }
 });

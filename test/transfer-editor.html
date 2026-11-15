@@ -128,7 +128,7 @@
       returnToSettings();
     });
 
-    await test('窄桌面下，版式 B 的四个分组按钮都能在左栏点选', async () => {
+    await test('窄窗口仍可在左栏点选版式 B 的四个分组按钮', async () => {
       const originalWidth = frame.style.width;
       frame.style.width = '769px';
       try {
@@ -526,26 +526,41 @@
       }
     });
 
-    await test('窄屏页眉、选框、浮动工具栏和导出可正常使用', async () => {
-      const workspace = element('#transfer-editor');
-      select('arrow:lower');
-      for (const width of [1280, 861, 769, 390, 320]) {
-        frame.style.width = width + 'px';
+    await test('窄窗口的页眉和浮动工具栏留在中栏，右栏可以横向到达并独立滚动', async () => {
+      const originalWidth = frame.style.width;
+      const originalHeight = frame.style.height;
+      try {
+        select('arrow:lower');
+        for (const width of [1280, 1100, 769, 390, 320]) {
+          frame.style.width = width + 'px';
+          await new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
+          editor.scrollTo(0, 0);
+          const navigation = element('.editor-navigation').getBoundingClientRect();
+          const repository = element('.editor-repository').getBoundingClientRect();
+          const modes = element('#transfer-modes').getBoundingClientRect();
+          const toolbar = element('#transfer-element-toolbar').getBoundingClientRect();
+          const preview = element('#transfer-preview').getBoundingClientRect();
+          assert(navigation.left >= preview.left && navigation.right < repository.left && repository.right <= preview.right,
+            '编辑器切换入口和仓库链接应留在中栏');
+          assert(modes.top >= navigation.bottom || (modes.left >= navigation.right && modes.right <= repository.left), '版式按钮和入口重叠');
+          assert(toolbar.left >= preview.left && toolbar.right <= preview.right, '浮动工具栏应留在中栏');
+        }
+        frame.style.height = '420px';
         await new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
-        const navigation = element('.editor-navigation').getBoundingClientRect();
-        const repository = element('.editor-repository').getBoundingClientRect();
-        const modes = element('#transfer-modes').getBoundingClientRect();
-        const toolbar = element('#transfer-element-toolbar').getBoundingClientRect();
-        assert(navigation.right < repository.left && repository.right <= width, '页眉超出窗口或入口重叠');
-        assert(modes.top >= navigation.bottom || (modes.left >= navigation.right && modes.right <= repository.left), '版式按钮和入口重叠');
-        assert(toolbar.left >= 0 && toolbar.right <= width, '浮动工具栏横向溢出');
-        assert(page.documentElement.scrollWidth <= width && workspace.scrollWidth <= width, '工作区横向溢出');
+        select('line:first');
+        if (element('#line-pattern-enabled').getAttribute('aria-checked') !== 'true') click('#line-pattern-enabled');
+        const properties = element('#transfer-property-scroll');
+        properties.scrollTop = properties.scrollHeight;
+        assert(properties.scrollTop > 0, '右栏属性应能单独滚动');
+        editor.scrollTo(page.documentElement.scrollWidth, 0);
+        const exportButton = element('#transfer-export-image').getBoundingClientRect();
+        assert(editor.scrollX > 0 && exportButton.left >= 0 && exportButton.right <= editor.innerWidth &&
+          exportButton.bottom <= editor.innerHeight, '横向滚动后应能看到导出按钮');
+      } finally {
+        frame.style.width = originalWidth;
+        frame.style.height = originalHeight;
+        editor.scrollTo(0, 0);
       }
-      select('line:first');
-      click('#line-pattern-enabled');
-      assert(workspace.scrollHeight > workspace.clientHeight, '设置区域无法随页面滚动');
-      element('#transfer-export-image').scrollIntoView();
-      assert(element('#transfer-export-image').getBoundingClientRect().bottom <= editor.innerHeight, '滚动后仍无法看到导出按钮');
     });
 
     await test('从含第三条线路的文字属性切到版式 A，再切回时可正常选中', () => {

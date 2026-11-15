@@ -62,18 +62,14 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
       elements.forEach(function (element) { sign = state.addElement(sign, sign.rows[0].id, element); });
       return sign;
     });
-    await test('一至六格、宽牌、动态宽度及缩放的外层宽度与牌面一致', function () {
+    await test('一至六格、宽牌和动态宽度下，外层宽度与牌面一致', function () {
       [256, 512, 768, 1024, 1280, 1536, 2048].forEach(function (width) {
         application.update(function (sign) { return state.updateSignSettings(sign, { widthMode: 'fixed', width: width }); });
-        [0.5, 1, 2].forEach(function (zoom) {
-          application.canvasZoom = zoom; application.fitSignDisplay();
-          var graphic = query('#sign-svg').getBoundingClientRect(), container = query('#canvas-wrap').getBoundingClientRect();
-          assert(Math.abs(graphic.width - container.width) < 1, '外层宽度不一致：' + width + '，缩放：' + zoom);
-          assert(Math.abs(graphic.right - container.right) < 1);
-          assert(Math.abs(query('#sign-overlay').getBoundingClientRect().width - graphic.width) < 1);
-        });
+        var graphic = query('#sign-svg').getBoundingClientRect(), container = query('#canvas-wrap').getBoundingClientRect();
+        assert(Math.abs(graphic.width - container.width) < 1, '牌面宽度为 ' + width + ' 时，外层宽度应与牌面一致');
+        assert(Math.abs(graphic.right - container.right) < 1);
+        assert(Math.abs(query('#sign-overlay').getBoundingClientRect().width - graphic.width) < 1);
       });
-      application.canvasZoom = 1;
       application.update(function (sign) { return state.updateSignSettings(sign, { widthMode: 'dynamic' }); });
       assert(query('#sign-svg').style.width === query('#canvas-wrap').style.width);
       application.update(function (sign) { return state.updateSignSettings(sign, { widthMode: 'fixed', width: 1280 }); });
@@ -140,18 +136,22 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
       var bitmap = await editorWindow.createImageBitmap(image);
       assert(bitmap.width === application.layout.width && bitmap.height === application.layout.height); bitmap.close();
     });
-    await test('三百二十像素和三百七十五像素宽度下，右栏与工具栏不超出编辑区', async function () {
+    await test('窄窗口仍能横向滚动到右栏，浮动工具栏留在中栏', async function () {
       for (var width of [320, 375]) {
-        frame.style.width = width + 'px'; editorWindow.dispatchEvent(new editorWindow.Event('resize'));
-        await waitFor(function () { return application.isMobileView(); });
+        frame.style.width = width + 'px';
+        await waitFor(function () { return editorWindow.innerWidth === width; });
         application.select(elements[4].id); application.fitSignDisplay();
         var toolbar = query('#element-toolbar').getBoundingClientRect();
-        assert(toolbar.left >= 0 && toolbar.right <= width, '浮动栏超出屏幕');
+        var center = query('#center-panel').getBoundingClientRect();
+        assert(toolbar.left >= center.left && toolbar.right <= center.right, '浮动栏应留在中栏');
+        editorWindow.scrollTo(editorDocument.documentElement.scrollWidth, 0);
+        var properties = query('#right-panel').getBoundingClientRect();
+        assert(properties.left >= 0 && properties.right <= width + 1, '应能滚动到右栏');
         var panel = query('#right-panel-body'); assert(panel.scrollWidth <= panel.clientWidth, '属性面板横向溢出');
         assert(query('#right-panel-body [data-align="align"]').querySelectorAll('button').length === 3);
       }
     });
-    application.canvasZoom = 1; application.update(function () { return saved; }); application.select(null);
+    application.update(function () { return saved; }); application.select(null);
   } catch (error) { await test('页面启动', function () { throw error; }); }
   var failed = results.filter(function (result) { return !result.pass; }).length;
   document.getElementById('summary').textContent = (results.length - failed) + ' 通过 / ' + failed + ' 失败';

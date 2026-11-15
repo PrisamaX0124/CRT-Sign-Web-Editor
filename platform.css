@@ -146,41 +146,5 @@
 #preset-dialog::backdrop { background: rgba(0,0,0,.4); }
 #preset-name { width: 100%; }
 #preset-error { color: var(--danger); font-size: 12px; margin-top: 8px; }
-@media (width > 768px) {
-  .platform-stations { width: 212px; }
-  .platform-workspace .platform-properties { width: 272px; }
-}
-@media (768px < width <= 1100px) {
-  .platform-stations { width: 180px; }
-  .platform-workspace .platform-properties { width: 248px; }
-}
-@media (max-width: 768px) {
-  .platform-workspace { overflow-y: auto; }
-  .platform-stations { flex: none; border: 0; }
-  .platform-stations .platform-panel-title, .station-list-help { display: none; }
-  .platform-stations .station-list-help { display: flex; padding: 4px 10px 0; }
-  #station-list { display: flex; overflow-x: auto; overflow-y: hidden; padding: 8px; gap: 6px; flex: none; }
-  .station-item { width: 160px; min-width: 160px; margin: 0; padding: 8px; min-height: 56px; }
-  .station-item.station-drop-before { border-top: 1px solid transparent; border-left: 2px solid var(--accent); }
-  .station-item.station-drop-after { border-bottom: 1px solid transparent; border-right: 2px solid var(--accent); }
-  .station-list-actions { padding: 6px 10px; border: 0; } .station-list-actions .btn { width: auto; font-size: 11px; padding: 5px 12px; }
-  .platform-preview { flex: none; height: 310px; border-block: 1px solid var(--border); }
-  .preview-toolbar { padding: 9px 12px; } #preview-dimensions { margin-left: 4px; font-size: 10px; }
-  #platform-edit-actions { padding: 4px 10px; gap: 2px; }
-  #platform-edit-actions button { padding-inline: 7px; }
-  #platform-clipboard-history { flex: 1; width: 120px; }
-  #platform-selection-status { width: 100%; margin: 0; }
-  #platform-preview-scroll { padding: 16px; } .preview-footer { padding: 7px 12px; } .preview-footer > span:last-child { display: none; }
-  .platform-properties { flex: none; border: 0; }
-  .platform-properties .panel-header { position: sticky; top: 0; z-index: 1; background: var(--panel-bg); }
-  #property-scroll { overflow: visible; }
-  .platform-properties :is(.field input:not([type="color"]), select), #batch-text { font-size: 16px; }
-  .platform-properties .btn { min-height: 44px; }
-  .platform-page button { min-height: 36px; } .platform-page .platform-swatch { min-height: 26px; width: 26px; }
-  .library-pane { flex: none; }
-  .library-tabs { padding-block: 4px; }
-  #preset-list { display: flex; overflow-x: auto; gap: 8px; }
-  .platform-preset { min-width: 170px; width: 170px; margin: 0; }
-  #save-preset { margin-block: 0 8px; }
-  #platform-element-toolbar button { min-height: 30px; }
-}
+.platform-stations { width: 212px; }
+.platform-workspace .platform-properties { width: 272px; }

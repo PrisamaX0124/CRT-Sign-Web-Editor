@@ -4,14 +4,13 @@ import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-function paletteHarness(mobile = false, presets = []) {
+function paletteHarness(presets = []) {
   class Node {
     constructor(tag) {
       this.tagName = tag;
       this.children = [];
       this.attrs = {};
       this.events = {};
-      this.scrollLeft = 0;
       this.classList = {
         contains: name => (this.attrs.class || '').split(' ').includes(name),
         add: name => this.classList.toggle(name, true),
@@ -61,7 +60,7 @@ function paletteHarness(mobile = false, presets = []) {
     SignRender: { renderElementStandalone: () => ({ node: new Node('svg') }) },
     SignPresets: { list: () => presets, onChange: fn => { context.presetChanged = fn; } },
     App: {
-      measure: () => 0, isMobileView: () => mobile,
+      measure: () => 0,
       previewPreset: id => { context.previews.push(id); },
     },
     previews: [],
@@ -84,26 +83,23 @@ test('选择区把预设分入独立选项卡，方向保留全部12种且分类
   assert.equal(root.querySelectorAll('.palette-empty').length, 1);
 });
 
-test('移动分类切换保留chip节点与滚动位置，存预设重建保留位置', () => {
-  const { root, context } = paletteHarness(true);
-  const chips = root.querySelector('.palette-chips');
-  assert.equal(root.querySelectorAll('.palette-chip').length, 6);
-  chips.scrollLeft = 120;
-  const last = root.querySelectorAll('.palette-chip')[5];
-  last.click();
-  assert.equal(root.querySelector('.palette-chips'), chips);
-  assert.equal(root.querySelectorAll('.palette-chip')[5], last);
-  assert.equal(chips.scrollLeft, 120);
-  context.presetChanged();
-  assert.equal(root.querySelector('.palette-chips').scrollLeft, 120);
+test('保存预设后保留当前选项卡，元素与预设卡片都可拖动', () => {
+  const presets = [];
+  const { root, context } = paletteHarness(presets);
+  const cards = root.querySelectorAll('.palette-card');
+  assert.ok(cards.length > 0 && cards.every(card => card.getAttribute('draggable') === 'true'));
   root.querySelector('.palette-tab[data-value="presets"]').click();
-  assert.equal(root.querySelectorAll('.palette-chip').length, 0);
+  presets.push({ id: 'saved-preset', name: '常用方向', elements: [] });
+  context.presetChanged();
+  assert.equal(root.querySelector('.palette-tab[data-value="presets"]').getAttribute('aria-selected'), 'true');
+  assert.equal(root.querySelector('.preset-card').getAttribute('draggable'), 'true');
   root.querySelector('.palette-tab[data-value="elements"]').click();
-  assert.equal(root.querySelector('.palette-chips').scrollLeft, 120);
+  assert.equal(root.querySelectorAll('.palette-category').length, 3);
+  assert.equal(root.querySelectorAll('.preset-card').length, 0);
 });
 
 test('预设卡片可用Enter/Space打开预览，内部删除按钮的按键不会重复打开', () => {
-  const { root, context } = paletteHarness(false, [{ id: 'preset-1', name: '常用方向', elements: [] }]);
+  const { root, context } = paletteHarness([{ id: 'preset-1', name: '常用方向', elements: [] }]);
   root.querySelector('.palette-tab[data-value="presets"]').click();
   const card = root.querySelector('.preset-card');
   assert.equal(card.getAttribute('role'), 'button');

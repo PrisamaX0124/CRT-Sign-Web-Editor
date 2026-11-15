@@ -15,7 +15,7 @@
 
 希望能方便有类似需求的人使用，比如同样在 Minecraft 里建设轨道交通的玩家。
 
-两个编辑页面均已适配移动端，并支持电脑端快捷键操作。中英文字体主要使用 MiSans，数字和线路号使用 Frutiger。
+三个编辑器统一使用桌面布局。导向和站台编辑器支持键盘快捷键。中英文字体主要使用 MiSans，数字和线路号使用 Frutiger。
 
 
 <img width="1280" height="675" alt="image" src="https://github.com/user-attachments/assets/662173bf-2bb4-4377-b422-54499e59859e" />

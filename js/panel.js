@@ -39,16 +39,6 @@
 
   var CATEGORIES = [
     { name: '方向指示', items: DIRECTION_ICONS },
-    { name: '线路标识', items: ['number-line', 'text-line', 'big-number'] },
-    { name: '位置标识', items: ['entrance', 'exit'] },
-    { name: '文本', items: ['bilingual-text', 'small-bilingual-text'] },
-    { name: '服务图标', items: [{ type: 'icon', icon: 'elevator', name: '图标' }] },
-    { name: '辅助', items: ['space'] },
-  ];
-
-  // 桌面不需要为每一种元素单开分组：方向、常用文字标识、辅助元素三组即可。
-  var DESKTOP_CATEGORIES = [
-    CATEGORIES[0],
     { name: '标识与文字', items: ['number-line', 'text-line', 'big-number', 'entrance', 'exit', 'bilingual-text', 'small-bilingual-text'] },
     { name: '图标与间隔', items: [{ type: 'icon', icon: 'elevator', name: '图标' }, 'space'] },
   ];
@@ -108,17 +98,8 @@
     ev.dataTransfer.effectAllowed = 'copy';
   }
 
-  /** 移动端禁用卡片 HTML5 拖拽：触屏长按会唤起原生拖拽会话（卡片置灰、页面卡住收不了场） */
-  function cardDraggableAttr() {
-    return App.isMobileView && App.isMobileView() ? 'false' : 'true';
-  }
-
   function wireCardDrag(card, payload) {
     card.addEventListener('dragstart', function (ev) {
-      if (App.isMobileView && App.isMobileView()) {
-        ev.preventDefault(); // 添加只走点击；桌面保持拖入编辑区
-        return;
-      }
       setDragPayload(ev, payload);
       card.classList.add('dragging');
     });
@@ -126,13 +107,6 @@
   }
 
   var activePaletteTab = 'elements';
-  var activeCategory = 0;
-  var paletteChipsScroll = 0;
-
-  function rememberPaletteScroll(root) {
-    var chips = root.querySelector('.palette-chips');
-    if (chips) paletteChipsScroll = chips.scrollLeft;
-  }
 
   function buildPaletteTabs() {
     var tabs = h('div', { class: 'palette-tabs', role: 'tablist', 'aria-label': '选择区内容' });
@@ -163,46 +137,27 @@
       class: 'palette-content', id: 'palette-content', role: 'tabpanel',
       'aria-labelledby': 'palette-tab-' + activePaletteTab,
     });
-    var mobile = App.isMobileView && App.isMobileView();
     if (activePaletteTab === 'presets') {
-      if (mobile) {
-        var strip = h('div', { class: 'palette-strip palette-preset-strip' });
-        buildPresetCards().forEach(function (card) { strip.appendChild(card); });
-        content.appendChild(strip);
-      } else {
-        var list = h('div', { class: 'palette-presets' });
-        buildPresetCards().forEach(function (card) { list.appendChild(card); });
-        content.appendChild(list);
-      }
-    } else if (mobile) {
-      buildPaletteMobile(content);
+      var list = h('div', { class: 'palette-presets' });
+      buildPresetCards().forEach(function (card) { list.appendChild(card); });
+      content.appendChild(list);
     } else {
-      DESKTOP_CATEGORIES.forEach(function (cat) { content.appendChild(buildDesktopCategory(cat)); });
+      CATEGORIES.forEach(function (category) { content.appendChild(buildPaletteCategory(category)); });
     }
     return content;
   }
 
-  function restorePaletteScroll(root) {
-    var chips = root.querySelector('.palette-chips');
-    if (chips) chips.scrollLeft = paletteChipsScroll;
-  }
-
   function buildPalette() {
     var root = document.getElementById('palette');
-    // chip 行滑动位置跨结构重建保留（预设增删、断点跨越）：整树重建会把
-    // scrollLeft 归零，用户滑到右侧后 chip 行弹回最左、刚点中的分类飞出视口。
-    rememberPaletteScroll(root);
     root.innerHTML = '';
     root.appendChild(buildPaletteTabs());
     root.appendChild(buildPaletteContent());
-    restorePaletteScroll(root);
   }
 
   /** 选项卡切换只更新活动态与内容，保留选项卡的焦点和 DOM。 */
   function selectPaletteTab(tab) {
     if (activePaletteTab === tab) return;
     var root = document.getElementById('palette');
-    rememberPaletteScroll(root);
     activePaletteTab = tab;
     var tabs = root.querySelectorAll('.palette-tab');
     for (var i = 0; i < tabs.length; i++) {
@@ -213,69 +168,17 @@
     }
     var content = root.querySelector('.palette-content');
     content.parentNode.replaceChild(buildPaletteContent(), content);
-    restorePaletteScroll(root);
   }
 
-  /** 移动端当前元素分类的卡片节点。 */
-  function buildActiveCards() {
-    return CATEGORIES[activeCategory].items.map(function (item) { return buildItemCard(item); });
-  }
-
-  /** 当前分类的横向卡片条 */
-  function buildCardStrip() {
-    var strip = h('div', { class: 'palette-strip' });
-    buildActiveCards().forEach(function (n) { strip.appendChild(n); });
-    return strip;
-  }
-
-  /** ≤768px：元素页的六个分类 chip + 当前分类横向卡片条。 */
-  function buildPaletteMobile(root) {
-    var chips = h('div', { class: 'palette-chips' });
-    function chip(label, idx) {
-      return h('button', {
-        class: 'palette-chip' + (activeCategory === idx ? ' active' : ''),
-        text: label,
-      });
-    }
-    CATEGORIES.forEach(function (cat, i) {
-      var c = chip(cat.name, i);
-      c.addEventListener('click', function () { selectPaletteCategory(i); });
-      chips.appendChild(c);
-    });
-    root.appendChild(chips);
-    root.appendChild(buildCardStrip());
-  }
-
-  /**
-   * 切换当前分类：chip 行的结构不随分类变化，故只翻转 active 态、就地替换
-   * 下方卡片条，不整树重建——重建会归零 chip 行的 scrollLeft（chip 行滑到
-   * 右侧点选分类后弹回最左、刚点中的分类飞出视口），也会打断滑动惯性。
-   */
-  function selectPaletteCategory(idx) {
-    if (activeCategory === idx) return;
-    activeCategory = idx;
-    var root = document.getElementById('palette');
-    var chips = root.querySelectorAll('.palette-chip');
-    for (var i = 0; i < chips.length; i++) {
-      chips[i].classList.toggle('active', i === idx);
-    }
-    var strip = root.querySelector('.palette-strip');
-    if (strip) strip.parentNode.replaceChild(buildCardStrip(), strip);
-  }
-
-  function buildDesktopCategory(cat) {
-    var grid = h('div', { class: 'palette-grid' + (cat.items === DIRECTION_ICONS ? ' direction-grid' : '') });
-    cat.items.forEach(function (item) { grid.appendChild(buildItemCard(item)); });
+  function buildPaletteCategory(category) {
+    var grid = h('div', { class: 'palette-grid' + (category.items === DIRECTION_ICONS ? ' direction-grid' : '') });
+    category.items.forEach(function (item) { grid.appendChild(buildItemCard(item)); });
     return h('div', { class: 'palette-category' }, [
-      h('div', { class: 'palette-category-title', text: cat.name }),
+      h('div', { class: 'palette-category-title', text: category.name }),
       grid,
     ]);
   }
 
-  /**
-   * 元素卡片：两端点击即添加（桌面不选中，移动端添加后自动选中）；
-   * 桌面另支持 HTML5 拖入编辑区。
-   */
   function buildItemCard(item) {
     var sample = createElementForItem(item);
     // 空白占位无可见内容，用虚线框示意
@@ -285,7 +188,7 @@
     var direction = typeof item !== 'string' && item.icon.indexOf('arrow_') === 0;
     var card = h('button', {
       class: 'palette-card' + (direction ? ' direction-card' : ''), type: 'button',
-      draggable: cardDraggableAttr(),
+      draggable: 'true',
       title: itemDisplayName(item) + '：点击添加到当前行，或拖入编辑区',
       'aria-label': '添加' + itemDisplayName(item),
     }, [
@@ -298,12 +201,10 @@
       props: typeof item === 'string' ? undefined : { icon: item.icon },
     });
     card.addEventListener('click', function () {
-      // 先创建再入状态：id 可捕获，供移动端添加后选中
       var created = createElementForItem(item);
       App.update(function (s) {
         return State.addElement(s, targetRowId(s), created);
       });
-      if (App.isMobileView && App.isMobileView()) App.select(created.id);
       SignUI.toast('已添加「' + itemDisplayName(item) + '」', 'success');
     });
     return card;
@@ -344,7 +245,6 @@
     return svg;
   }
 
-  /** 预设卡片节点列表（空时为提示节点）；桌面入分类容器，移动端入横向卡片条 */
   function buildPresetCards() {
     var nodes = [];
     var items = Presets.list();
@@ -369,7 +269,7 @@
       var card = h('div', {
         class: 'preset-card', role: 'button', tabindex: '0',
         'aria-label': '预览预设：' + p.name,
-        draggable: cardDraggableAttr(),
+        draggable: 'true',
         title: '拖入空行使用；点击预览',
       }, [
         h('div', { class: 'preset-thumb' }, [renderRowThumb(p.elements, 48)]),
@@ -481,14 +381,6 @@
         : mode === 'preset' ? '预设预览' : '标识牌设置';
     document.getElementById('close-element-btn').hidden = mode === 'settings';
     document.getElementById('close-element-btn').title = '返回标识牌设置';
-    // 移动端：选中元素/进预览时底部属性带自动展开（折叠只由用户手动控制）
-    if (mode !== 'settings' && App.isMobileView && App.isMobileView()) {
-      var band = document.getElementById('right-panel');
-      if (band.classList.contains('band-collapsed')) {
-        band.classList.remove('band-collapsed');
-        if (App.syncMobileChrome) App.syncMobileChrome();
-      }
-    }
   }
 
   function rebuildRightPanel(mode) {

@@ -8,11 +8,6 @@
 (function (global) {
   'use strict';
 
-  // 移动布局断点（与 style.css @media、main.js 断点监听共用同一数值）
-  var mobileQuery = typeof window.matchMedia === 'function'
-    ? window.matchMedia('(max-width: 768px)')
-    : null;
-
   // 只保存本会话最近20次有效编辑。状态本身不可变，历史复用其引用。
   var undoStack = [], redoStack = [];
   var historyKey = null, historyTime = 0;
@@ -53,15 +48,8 @@
     layout: null,                 // 最近一次渲染的布局（SignRender.layoutSign 结果）
     selection: { elementId: null, elementIds: [], anchorId: null },
     presetPreviewId: null,        // 右栏预设预览模式
-    panels: { left: true, right: true },
-    canvasZoom: 1,                // 画布显示缩放（会话态，不持久化；移动端 pinch 用）
     // 编辑器偏好（非标识牌数据，localStorage 持久化；main.js 启动时以存档覆盖）
     prefs: { autoLineColor: true, paletteCity: 'shanghai' },
-
-    /** ≤768px 走移动三段式布局（palette 分支 / 底部属性带 / 触屏手势都依赖它） */
-    isMobileView: function () {
-      return !!(mobileQuery && mobileQuery.matches);
-    },
 
     /** 状态变更入口：pureFn(sign) → 新 sign；continuous用于显式结束的指针会话。 */
     update: function (pureFn, key, options) {
@@ -107,14 +95,7 @@
       if (global.SignClipboard) SignClipboard.sync();
     },
 
-    /**
-     * 编辑区显示尺寸：适配画布宽度，但缩放不超过 100%——
-     * 窄标识牌不放大（否则行高会被等比放大得过大），宽标识牌铺满画布；
-     * 该适配宽度再乘 App.canvasZoom（pinch 缩放，1x 即原始适配结果）。
-     * 覆盖层（指示线/行手柄的百分比基准）同步为 SVG 实际显示区，
-     * 否则窄牌右侧留白会使拖放指示线漂移。
-     * canvas-wrap 尺寸变化（窗口缩放/面板收展）由 ResizeObserver 触发重算（main.js）。
-     */
+    // 放大窄牌会使行高过大。覆盖层比牌面宽时，拖放指示线会偏移。
     fitSignDisplay: function () {
       if (!App.layout) return;
       var svg = document.getElementById('sign-svg');
@@ -124,7 +105,7 @@
       if (!svg || !wrap) return;
       var avail = area ? Math.min(area.clientWidth, 1600) : wrap.clientWidth;
       if (avail > 0) {
-        svg.style.width = Math.min(avail, App.layout.width) * (App.canvasZoom || 1) + 'px';
+        svg.style.width = Math.min(avail, App.layout.width) + 'px';
         wrap.style.width = svg.style.width;
         if (overlay) {
           overlay.style.width = svg.style.width;

@@ -208,21 +208,22 @@
   }
   function updateStationDrop() {
     var drag=stationDrag;if(!drag||!drag.active)return;
-    var list=$('station-list'),box=list.getBoundingClientRect(),horizontal=global.matchMedia('(max-width:768px)').matches;
+    var list=$('station-list'),box=list.getBoundingClientRect();
     var inside=drag.x>=box.left-8&&drag.x<=box.right+8&&drag.y>=box.top-8&&drag.y<=box.bottom+8;
     clearDropMarker();drag.gap=null;if(!inside)return;
-    var point=horizontal?drag.x:drag.y,cards=Array.from(list.children);
-    var gap=cards.filter(function(card){var b=card.getBoundingClientRect();return point>(horizontal?(b.left+b.right)/2:(b.top+b.bottom)/2);}).length;
+    var cards = Array.from(list.children);
+    var gap = cards.filter(function (card) {
+      var bounds = card.getBoundingClientRect();
+      return drag.y > (bounds.top + bounds.bottom) / 2;
+    }).length;
     drag.gap=gap;var target=cards[Math.min(gap,cards.length-1)];
     target.classList.add(gap===cards.length?'station-drop-after':'station-drop-before');
   }
   function scrollStationDrag() {
     var drag=stationDrag;if(!drag||!drag.active)return;
-    var list=$('station-list'),box=list.getBoundingClientRect(),horizontal=global.matchMedia('(max-width:768px)').matches;
-    var p=horizontal?drag.x:drag.y,lo=horizontal?box.left:box.top,hi=horizontal?box.right:box.bottom;
+    var list=$('station-list'),box=list.getBoundingClientRect();
     if(drag.x>=box.left-8&&drag.x<=box.right+8&&drag.y>=box.top-8&&drag.y<=box.bottom+8) {
-      var step=p<lo+28?-8:p>hi-28?8:0;
-      if(horizontal)list.scrollLeft+=step;else list.scrollTop+=step;
+      list.scrollTop += drag.y < box.top + 28 ? -8 : drag.y > box.bottom - 28 ? 8 : 0;
       updateStationDrop();
     }
     dragFrame=global.requestAnimationFrame(scrollStationDrag);

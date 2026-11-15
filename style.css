@@ -59,25 +59,6 @@ dialog.pm-dialog { width: min(860px, calc(100vw - 32px)); height: min(660px, cal
 .pm-status.error { color: var(--danger); }
 .pm-footer-actions { display: flex; gap: 8px; flex: none; }
 .pm-dialog button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (max-width: 640px) {
-  dialog.pm-dialog { width: calc(100vw - 16px); height: calc(100dvh - 24px); border-radius: 12px; }
-  .pm-heading { padding: 16px; }
-  .pm-heading h2 { font-size: 18px; }
-  .pm-body { display: flex; flex-direction: column; overflow-y: auto; }
-  .pm-sidebar { flex: none; border-right: none; border-bottom: 1px solid var(--border); padding: 12px 16px; gap: 10px; }
-  .pm-sidebar-actions, .pm-file-actions { grid-template-columns: 1fr 1fr; }
-  .pm-list { display: flex; overflow-x: auto; overflow-y: hidden; min-height: 0; }
-  .pm-card { min-width: 140px; flex: none; max-width: 200px; }
-  .pm-empty { padding: 0; }
-  .pm-editor { flex: none; padding: 16px; overflow: visible; }
-  .pm-row { grid-template-columns: 32px minmax(0,1fr) 94px; gap: 8px; }
-  .pm-row-actions { grid-column: 2 / 4; justify-content: end; height: 24px; }
-  .pm-dialog .pm-color { width: 32px; }
-  .pm-dialog input[type=text] { font-size: 16px; }
-  .pm-footer { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 16px; }
-  .pm-footer-actions { justify-content: end; }
-  .pm-footer-actions .btn { flex: 1; padding: 10px 6px; }
-}
 
 /* ─── 基础 ─── */
 
@@ -116,6 +97,8 @@ html, body {
   overflow: hidden;
 }
 
+html { overflow-x: auto; }
+
 button {
   font: inherit;
   color: inherit;
@@ -130,7 +113,6 @@ input, select {
   color: inherit;
 }
 
-.editor-page { display: flex; flex-direction: column; }
 .editor-header {
   container-type: inline-size;
   flex: none;
@@ -196,40 +178,21 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
   .editor-navigation a, .editor-repository { padding-inline: 9px; }
   .editor-header .mode-tabs { grid-area: 2 / 1 / 3 / -1; }
 }
-@media (max-width: 768px) {
-  .mode-tabs button { font-size: 12px; }
-}
-@container (max-width: 365px) {
-  .editor-navigation a { padding-inline: 5px; font-size: 12px; }
-  .editor-repository { padding-inline: 7px; }
-  .editor-navigation, .editor-header-content { gap: 4px; }
-}
-@container (max-width: 305px) {
-  .editor-repository span { display: none; }
-}
 
 /* ─── 三栏布局 ─── */
 
-.editor-workspace {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
+.editor-page {
+  position: relative;
+  min-width: 1100px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
 }
-
-@media (width > 768px) {
-  .editor-page {
-    position: relative;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-  .editor-workspace, #modal-root { display: contents; }
-  .editor-header { grid-area: 1 / 2; }
-  .editor-left { grid-area: 1 / 1 / -1 / 2; }
-  .editor-center, .expander { grid-area: 2 / 2; }
-  .editor-right { grid-area: 1 / 3 / -1 / 4; }
-}
+.editor-workspace, #modal-root { display: contents; }
+.editor-header { grid-area: 1 / 2; }
+.editor-left { grid-area: 1 / 1 / -1 / 2; }
+.editor-center, .expander { grid-area: 2 / 2; }
+.editor-right { grid-area: 1 / 3 / -1 / 4; }
 
 .side-panel {
   width: var(--panel-width);
@@ -341,7 +304,6 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
   border-radius: 4px;
   overflow: visible; /* 行手柄悬于外侧 */
   user-select: none;
-  -webkit-touch-callout: none; /* iOS 长按不呼出系统菜单 */
 }
 
 #sign-svg {
@@ -376,8 +338,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
   cursor: grab;
   pointer-events: auto;
   user-select: none;
-  -webkit-touch-callout: none;
-  touch-action: none; /* 触屏行手柄拖拽不触发页面滚动 */
+  touch-action: none;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -391,7 +352,6 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
   display: flex;
   gap: 6px;
   pointer-events: auto;
-  touch-action: manipulation; /* 触屏点按钮去掉双击缩放延迟 */
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -463,7 +423,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
   stroke: transparent;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
-  touch-action: none; /* 触屏按住元素拖拽时不触发页面滚动 */
+  touch-action: none;
 }
 .element:hover .hitbox { stroke: var(--selection); }
 .element.selected .hitbox {
@@ -534,7 +494,6 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
 .palette-tab:focus-visible,
 .palette-card:focus-visible,
 .preset-card:focus-visible,
-.palette-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .palette-presets { display: grid; gap: 12px; padding-top: 6px; }
 .palette-category { margin-bottom: 14px; }
 .palette-category-title {
@@ -571,8 +530,6 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
   gap: 4px;
   cursor: grab;
   user-select: none;
-  -webkit-touch-callout: none;
-  touch-action: manipulation; /* 触屏点卡片去掉双击缩放延迟 */
   transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.1s ease;
 }
 .palette-card:hover {
@@ -631,7 +588,6 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
   padding: 8px;
   cursor: grab;
   user-select: none;
-  -webkit-touch-callout: none;
   touch-action: manipulation;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
@@ -1102,218 +1058,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .test-pass { color: var(--ok); }
 .test-fail { color: var(--danger); }
 
-/* ═══ 移动端适配（≤768px 纵向三段式）═══ */
-
-/* 顶部选择器：分类 chip 行（仅移动 palette 分支生成这些节点） */
-
-.palette-chips {
-  display: flex;
-  gap: 6px;
-  padding: 8px 10px 6px;
-  overflow-x: auto;
-  touch-action: pan-x; /* 横向滚动交给浏览器，同时屏蔽页面捏合/双击缩放 */
-  scrollbar-width: none;
-}
-.palette-chips::-webkit-scrollbar { display: none; }
-.palette-chip {
-  flex: none;
-  padding: 7px 14px;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--text-dim);
-  font-size: 13px;
-}
-.palette-chip.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-/* 当前分类的横向卡片条 */
-
-.palette-strip {
-  display: flex;
-  gap: 8px;
-  padding: 2px 10px 10px;
-  overflow-x: auto;
-  touch-action: pan-x;
-  scrollbar-width: none;
-}
-.palette-strip::-webkit-scrollbar { display: none; }
-.palette-strip .palette-card,
-.palette-strip .preset-card { flex: none; }
-.palette-strip .palette-card { width: 88px; }
-.palette-strip .preset-card { width: 150px; }
-.palette-strip .palette-empty { flex: 1; }
-
-/* 画布缩放徽标（仅移动布局显示，interact.js 更新倍率文案） */
-
-#zoom-badge {
-  display: none;
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 40;
-  padding: 6px 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--text-dim);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  box-shadow: 0 1px 6px rgba(15, 25, 40, 0.12);
-}
-
-@media (max-width: 768px) {
-  #app { overflow: hidden; }
-  .editor-page { height: 100dvh; }
-
-  /* 顶部：元素选择器横条 */
-  #left-panel {
-    flex: none;
-    width: 100%;
-    min-width: 0;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-  #left-panel .panel-header { display: none; }
-  #left-panel .panel-body {
-    flex: none;
-    overflow: visible;
-    padding: 0;
-  }
-  .palette-tabs { position: static; margin: 6px 10px 0; padding: 2px; }
-  .palette-tab { min-height: 34px; }
-  .palette-preset-strip { padding-top: 10px; min-height: 102px; }
-
-  /* 中部：画布。touch-action:none 把原生滚动交给 interact.js 的手势层
-     （单指平移 / pinch 缩放 / 双击复位），鼠标滚轮不受影响 */
-  /* min-height:0 解除纵向 flex item 的内容最小高度：牌面多行/动态宽变高时
-     画布在 #canvas-scroll 内滚动，不把底部属性带挤出视口（删除按钮不可达） */
-  #center-panel { min-height: 0; }
-  #canvas-scroll {
-    padding: 12px;
-    touch-action: none;
-  }
-
-  /* 底部：属性带（40vh，可折叠成 48px 只留标题行） */
-  #right-panel {
-    flex: none;
-    width: 100%;
-    min-width: 0;
-    height: 40vh;
-    border-right: none;
-    border-left: none;
-    border-top: 1px solid var(--border);
-    transition: height 220ms var(--motion-enter);
-  }
-  #right-panel.band-collapsed { height: 48px; }
-  #right-panel.band-collapsed .panel-body { display: none; }
-  #right-panel .panel-body { touch-action: pan-y; }
-  /* 折叠把手箭头转向：⟩ 旋成 ∨（折叠）/ ∧（展开） */
-  #right-panel #right-collapse { transform: rotate(90deg); }
-  #right-panel.band-collapsed #right-collapse { transform: rotate(-90deg); }
-
-  /* 桌面侧栏收展件在移动端无意义（跨断点时 main.js 同步清理状态类） */
-  #left-expander, #right-expander { display: none !important; }
-
-  /* 触控目标放大 */
-  .icon-btn { width: 44px; height: 44px; }
-  .seg-group button { padding: 10px 0; }
-  input[type="checkbox"] { width: 20px; height: 20px; }
-  .btn { padding: 11px 10px; }
-  button { touch-action: manipulation; }
-
-  #empty-hint { font-size: 15px; letter-spacing: 1px; padding: 0 16px; text-align: center; }
-
-  /* 移到底部属性带上方居中（折叠成 48px 时由 main.js 精确同步偏移） */
-  #toasts {
-    top: auto;
-    bottom: calc(40vh + 14px);
-    left: 12px;
-    right: 12px;
-    align-items: center;
-  }
-
-  #zoom-badge { display: inline-flex; }
-}
-
-/* ─── 无悬停设备（触屏）：行手柄/行按钮常显 ───
-   独立于断点：宽视口平板同样适用；桌面 hover 规则原样保留（hover:none
-   只在无悬停能力的设备上命中，不会覆盖桌面） */
-
-@media (hover: none) {
-  .row-band .row-handle {
-    left: 8px; /* 从画布外 -38px 内移到行带内缘，悬于内容上层 */
-    opacity: 1;
-    width: 44px; height: 44px; /* 触控目标 ≥44px */
-    background: rgba(255, 255, 255, 0.72); /* 半透明底，内容透出 */
-    box-shadow: 0 1px 4px rgba(15, 25, 40, 0.14);
-  }
-  .row-band .row-actions { opacity: 1; }
-  .row-band .row-actions button {
-    height: 44px;
-    padding: 0 12px;
-    background: rgba(255, 255, 255, 0.88);
-  }
-}
-
-/* ─── 移动端行管理条：行控件移出牌面（行内悬浮会与元素互相叠加）───
-   ≤768px 时行带内不渲染任何控件（interact.js 分流），改由牌面下方
-   #row-strip 按行出芯片：▲▼ 调序 / 存预设 / 删行。置于 hover:none
-   块之后，display:none 赢得同特异级联。 */
-
-#row-strip { display: none; }
-
-@media (max-width: 768px) {
-  #row-strip {
-    display: flex;
-    align-self: stretch;
-    gap: 8px;
-    padding: 10px 12px 0;
-    overflow-x: auto;
-    touch-action: pan-x;
-    scrollbar-width: none;
-  }
-  #row-strip::-webkit-scrollbar { display: none; }
-
-  .row-strip-chip {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: #fff;
-  }
-  .row-strip-chip .rs-label {
-    font-size: 12px;
-    color: var(--text-dim);
-    padding: 0 4px 0 6px;
-    white-space: nowrap;
-  }
-  .row-strip-chip .rs-btn {
-    min-width: 44px;
-    height: 40px;
-    padding: 0 10px;
-    border-radius: 7px;
-    font-size: 13px;
-    color: var(--text-dim);
-    touch-action: manipulation;
-    user-select: none;
-    -webkit-touch-callout: none;
-  }
-  .row-strip-chip .rs-btn:disabled { opacity: 0.35; }
-  .row-strip-chip .rs-btn:active { background: var(--accent-soft); color: var(--accent); }
-  .row-strip-chip .rs-danger:active { background: rgba(220, 38, 38, 0.12); color: var(--danger); }
-
-  /* 行带内控件一律不显示（行条已接管） */
-  .row-band .row-handle,
-  .row-band .row-actions { display: none; }
-}
-
 /* ─── 属性面板：内容、排版、颜色分组 ─── */
 .guide-action-bar {
   flex: none;
@@ -1328,11 +1072,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 #selection-status { color: var(--text-dim); font-size: 11px; }
 .batch-properties > .hint-text { margin-bottom: 12px; }
 .batch-padding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-@media (max-width: 768px) {
-  #edit-actions { gap: 4px; }
-  #edit-actions button { min-height: 36px; padding: 4px 8px; }
-  #selection-status { margin-left: auto; }
-}
 #element-toolbar {
   position: absolute; z-index: 60; display: flex; flex-wrap: wrap;
   width: max-content; align-items: center; gap: 8px; padding: 6px;
@@ -1419,19 +1158,6 @@ body.padding-scrubbing, body.padding-scrubbing * { cursor: ew-resize !important;
 #element-toolbar .padding-stepper button { width: 20px; height: 17px; border-radius: 4px; }
 #element-toolbar .padding-stepper button svg { width: 14px; height: 14px; }
 .has-element-selection #add-row-btn { margin-top: var(--element-toolbar-gap, 68px); }
-@media (max-width: 768px) {
-  #element-toolbar { gap: 6px; }
-  .toolbar-actions { flex: 1 1 100%; justify-content: space-between; gap: 2px; }
-  .toolbar-group { padding: 0; }
-  .toolbar-alignments { flex: 1 1 100%; }
-  .toolbar-alignments .alignment-control { flex: 1; }
-  #element-toolbar button { height: 44px; }
-  .padding-value { height: 44px; }
-  #element-toolbar .padding-stepper button { height: 22px; }
-  #element-toolbar .alignment-control select { min-height: 40px; }
-  .has-element-selection #row-strip { padding-top: var(--element-toolbar-gap, 68px); }
-  .has-element-selection #add-row-btn { margin-top: 18px; }
-}
 .panel-heading { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .icon-btn svg { width: 20px; height: 20px; }
 .sr-only {
@@ -1539,11 +1265,6 @@ select option { background: var(--control-bg); color: var(--text); }
 button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-visible {
   outline: 2px solid var(--selection); outline-offset: 2px;
 }
-@media (max-width: 768px) {
-  .alignment-buttons button { min-height: 44px; }
-  .format-btn { width: 44px; height: 44px; }
-  .icon-seg-group button { min-height: 44px; }
-}
 
 /* 仅编辑器表面跟随系统主题；SVG 牌面及预览保持项目原色。 */
 @media (prefers-color-scheme: dark) {
@@ -1565,9 +1286,8 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
     --danger: #ee9292;
   }
   .palette-card, .preset-card { background: var(--surface-soft); }
-  .palette-chip, .row-strip-chip, .modal { background: var(--panel-bg); }
-  .palette-chip.active { background: var(--accent); color: var(--accent-text); }
-  #add-row-btn, #add-row-btn:hover, #zoom-badge,
+  .modal { background: var(--panel-bg); }
+  #add-row-btn, #add-row-btn:hover,
   .row-band .row-handle, .row-band .row-actions button { background: var(--control-bg); }
   .le-add { border-color: var(--border); }
   .line-entry .le-remove:hover { background: rgba(203, 55, 55, 0.18); }

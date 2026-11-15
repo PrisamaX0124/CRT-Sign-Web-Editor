@@ -2,6 +2,8 @@
 
 `index.html` 打开导向标识编辑器，从页眉可以切换到换乘标识编辑器。也可以直接打开 `index.html?editor=transfer` 编辑换乘标识，或打开 `platform.html` 编辑站台标识。页面、样式、脚本和字体都在仓库内，由浏览器直接加载。
 
+三个编辑器共用桌面三栏，页面最小宽度为 1100 像素。窗口更窄时可以横向滚动，手机浏览器会把同一页面缩放到屏幕宽度。
+
 ## 编辑、排版与保存
 
 - 导向标识的状态、排版和属性面板分别在 `js/state.js`、`js/render.js` 和 `js/panel.js`。站台标识的状态与排版在 `js/platform/`，交互入口在 `js/platform/main.js`。
@@ -20,11 +22,11 @@
 | 页面 | 核对内容 |
 | --- | --- |
 | [test.html](../test.html) | 导向标识的真实字体排版、颜色和图片导出 |
-| [e2e.html](../e2e.html) | 导向标识的选择、编辑、排序、撤销重做、项目保存和触屏操作 |
+| [e2e.html](../e2e.html) | 导向标识的选择、编辑、排序、撤销重做、项目保存和窄窗口桌面交互 |
 | [platform-test.html](../platform-test.html) | 三种站台版式、首末站、换乘、底纹、选框、自动保存和导出 |
-| [test/editor-ui.html](../test/editor-ui.html) | 导向标识的属性面板、批量设置和窄屏操作 |
-| [test/platform-panel.html](../test/platform-panel.html) | 站台面板分组、现场编辑、单选、多选、返回和手机滚动 |
-| [test/editor-motion.html](../test/editor-motion.html) | 三个编辑器的桌面和窄屏布局、导向侧栏收展、编辑器切换入口和动画 |
+| [test/editor-ui.html](../test/editor-ui.html) | 导向标识的属性面板、批量设置和预览宽度 |
+| [test/platform-panel.html](../test/platform-panel.html) | 站台面板分组、现场编辑、单选、多选、返回和属性栏滚动 |
+| [test/editor-motion.html](../test/editor-motion.html) | 三个编辑器的桌面布局、窄窗口横向滚动、导向侧栏收展、切换入口和动画 |
 | [test/transfer-editor.html](../test/transfer-editor.html) | 换乘标识切换、两种版式、左栏选取元素和调整分组、线路底纹、本地保存和图片导出 |
 
 请用测试地址或独立的浏览器窗口运行浏览器用例，测试会向同源的浏览器存储写入数据。

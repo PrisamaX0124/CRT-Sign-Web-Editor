@@ -24,7 +24,7 @@
   ];
   const layouts = [
     { name: '导向标识', path: 'index.html', left: '#left-panel', middle: '#center-panel', right: '#right-panel' },
-    { name: '换乘标识', path: 'index.html?editor=transfer', left: '#transfer-content', middle: '#transfer-preview', right: '#transfer-properties', previewFirst: true },
+    { name: '换乘标识', path: 'index.html?editor=transfer', left: '#transfer-content', middle: '#transfer-preview', right: '#transfer-properties' },
     { name: '站台标识', path: 'platform.html', left: '.platform-stations', middle: '.platform-preview', right: '.platform-properties' },
   ];
 
@@ -80,7 +80,7 @@
       };
 
       await test(layout.name + '：两侧栏贯穿桌面窗口，页眉与预览共用中间一栏', async function () {
-        for (const width of [1396, 1024, 769]) {
+        for (const width of [1396, 1280, 1100]) {
           frame.style.width = width + 'px';
           await repaint(window);
           const left = bounds(layout.left);
@@ -129,20 +129,22 @@
         });
       }
 
-      await test(layout.name + '：窄屏页眉铺满窗口，编辑区和属性按上下顺序排列', async function () {
+      await test(layout.name + '：窄窗口继续使用桌面三栏，横向滚动可到达右栏', async function () {
         for (const width of [768, 390, 320]) {
           frame.style.width = width + 'px';
           await repaint(window);
+          window.scrollTo(0, 0);
           const header = bounds('.editor-header');
           const content = bounds(layout.left);
           const preview = bounds(layout.middle);
           const properties = bounds(layout.right);
-          const [first, second] = layout.previewFirst ? [preview, content] : [content, preview];
-          assert(header.top === 0 && header.left === 0 && header.right === width &&
-            header.bottom <= first.top && first.bottom <= second.top && second.bottom <= properties.top,
-            width + ' 像素宽时，页眉和各区域应按顺序显示');
-          assert(document.documentElement.scrollWidth === width && [first, second, properties].every(region => region.right <= width),
-            width + ' 像素宽时，各区域不应横向溢出');
+          assert(content.top === 0 && properties.top === 0 && header.top === 0 &&
+            content.right === header.left && header.right === properties.left && header.bottom === preview.top &&
+            preview.left === header.left && preview.right === header.right && preview.width > 400,
+            width + ' 像素宽时仍应显示完整的桌面三栏');
+          assert(document.documentElement.scrollWidth >= 1100, '桌面布局应保留至少 1100 像素宽');
+          window.scrollTo(document.documentElement.scrollWidth, 0);
+          assert(window.scrollX > 0 && bounds(layout.right).right <= width + 1, '应能横向滚动到右栏');
         }
       });
       await load('about:blank');
@@ -179,8 +181,8 @@
       deselect();
       await repaint(window);
 
-      await test(editor.name + '：页眉在桌面和窄屏保留切换入口、当前位置、仓库图标和加星提示', async function () {
-        for (const width of [1280, 769, 320]) {
+      await test(editor.name + '：页眉保留切换入口、当前位置、仓库图标和加星提示', async function () {
+        for (const width of [1280, 1100]) {
           frame.style.width = width + 'px';
           await repaint(window);
           const navigation = document.querySelector('.editor-navigation');
@@ -197,7 +199,7 @@
           const left = navigation.getBoundingClientRect();
           const right = repository.getBoundingClientRect();
           assert(left.left >= 0 && left.right < right.left && right.right <= width + 1, '两组入口应在页眉左右且完整显示');
-          assert(Math.abs(left.top - right.top) < 1 && document.documentElement.scrollWidth <= width + 1, '窄屏页眉应保持一行且不横向溢出');
+          assert(Math.abs(left.top - right.top) < 1 && document.documentElement.scrollWidth <= width + 1, '切换入口和加星链接应保持在同一行');
         }
         frame.style.width = '1280px';
         await repaint(window);

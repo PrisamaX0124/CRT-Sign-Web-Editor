@@ -1219,26 +1219,40 @@
       }
     }
 
-    // S36：canvasZoom 缩放管线（fitSignDisplay × 缩放系数，覆盖层跟随）
-    function s36_canvasZoomFit() {
-      var w = W();
-      var svg = $('#sign-svg');
-      var base = parseFloat(svg.style.width);
-      w.App.canvasZoom = 2;
-      w.App.fitSignDisplay();
-      var doubled = parseFloat(svg.style.width);
-      ok('S36 canvasZoom=2 → 显示宽度翻倍', Math.abs(doubled - base * 2) < 1, base + '→' + doubled);
-      ok('S36 覆盖层跟随缩放宽度', $('#sign-overlay').style.width === svg.style.width,
-        'overlay=' + $('#sign-overlay').style.width);
-      w.App.canvasZoom = 0.5;
-      w.App.fitSignDisplay();
-      ok('S36 canvasZoom=0.5 → 显示宽度减半', Math.abs(parseFloat(svg.style.width) - base / 2) < 1);
-      w.App.canvasZoom = 1;
-      w.App.fitSignDisplay();
-      ok('S36 复位 1x 恢复显示宽度', Math.abs(parseFloat(svg.style.width) - base) < 1);
+    async function resizeEditor(width) {
+      var editor = W();
+      frame.style.width = width + 'px';
+      await new Promise(function (resolve) {
+        editor.requestAnimationFrame(function () { editor.requestAnimationFrame(resolve); });
+      });
+      editor.scrollTo(0, 0);
     }
 
-    // S37：pagehide 立即刷盘自动存档（移动端切后台不触发 beforeunload）
+    async function s36_previewFollowsWindowWidth() {
+      var editor = W();
+      var saved = editor.App.state;
+      editor.App.update(function (sign) {
+        return editor.SignState.updateSignSettings(sign, { widthMode: 'fixed', width: 2048 });
+      });
+      var graphic = $('#sign-svg');
+      var initialWidth = parseFloat(graphic.style.width);
+      try {
+        await resizeEditor(1100);
+        var narrowWidth = parseFloat(graphic.style.width);
+        ok('S36 窗口变窄后宽牌随画布缩小', narrowWidth < initialWidth);
+        ok('S36 覆盖层宽度与牌面一致', $('#sign-overlay').style.width === graphic.style.width);
+        $('#left-collapse').click();
+        var grew = await waitFor(function () { return parseFloat(graphic.style.width) > narrowWidth; });
+        ok('S36 收起侧栏后，宽牌随画布变宽', grew && $('#sign-overlay').style.width === graphic.style.width);
+      } finally {
+        if (!$('#left-expander').hidden) $('#left-expander').click();
+        await resizeEditor(1280);
+      }
+      var restored = await waitFor(function () { return Math.abs(parseFloat(graphic.style.width) - initialWidth) < 1; });
+      ok('S36 恢复窗口和侧栏后，宽牌恢复原来的显示宽度', restored);
+      editor.App.update(function () { return saved; });
+    }
+
     async function s37_pagehideFlush() {
       var w = W();
       w.App.update(function (st) {
@@ -1256,279 +1270,64 @@
       });
     }
 
-    // S38：移动端壳层（375px 视口）——palette 分支、自动选中、底部带折叠、pinch/平移/双击复位
-    async function s38_mobileShell() {
-      var w = W();
-      var frameEl = frame;
-      frameEl.style.width = '375px';
-      // 真实浏览器视口变化必然同步派发 resize；IAB 里 iframe 样式变更的
-      // 布局/事件可能被节流推迟，这里补发 resize 直达应用的断点检查
-      W().dispatchEvent(new (W().Event)('resize'));
-      var switched = await waitFor(function () {
-        return w.App.isMobileView() && $$('.palette-chip').length === 6;
-      }, 6000);
-      ok('S38 窄视口进入移动布局（6 分类 + 独立预设选项卡）', switched,
-        'mobile=' + w.App.isMobileView() + ' chips=' + $$('.palette-chip').length);
-
-      // chip 切换分类重渲染卡片条
-      $$('.palette-chip')[3].click(); // 文本（2 张卡片）
-      var textCards = await waitFor(function () { return $$('.palette-strip .palette-card').length === 2; });
-      ok('S38 chip 切换分类重渲染卡片条', textCards &&
-        $$('.palette-chip')[3].classList.contains('active'));
-      ok('S38 文本分类包含大号与小号双语文本',
-        $$('.palette-strip .palette-card').some(function (c) { return c.textContent.indexOf('小号双语文本') !== -1; }));
-      $$('.palette-chip')[0].click(); // 回方向指示
-
-      // 行控件外置：行带内不再有手柄/按钮（防与元素叠加），改由下方行条承接
-      ok('S38 行带内无手柄与按钮（不与元素叠加）',
-        $$('.row-band .row-handle').length === 0 && $$('.row-band .row-actions').length === 0,
-        'handles=' + $$('.row-band .row-handle').length + ' actions=' + $$('.row-band .row-actions').length);
-      var S38s = w.SignState;
-      w.App.update(S38s.addRow);
-      var stripChips = $$('#row-strip .row-strip-chip');
-      ok('S38 行条按行数渲染', stripChips.length === w.App.state.rows.length,
-        'chips=' + stripChips.length + ' rows=' + w.App.state.rows.length);
-      var firstRowId = w.App.state.rows[0].id;
-      stripChips[0].querySelectorAll('.rs-btn')[1].click(); // ▼ 下移
-      ok('S38 行条 ▼ 下移一行', w.App.state.rows[1].id === firstRowId,
-        'rows=' + w.App.state.rows.map(function (r) { return r.id; }).join(','));
-      $$('#row-strip .row-strip-chip')[1].querySelectorAll('.rs-btn')[0].click(); // ▲ 上移
-      ok('S38 行条 ▲ 上移恢复', w.App.state.rows[0].id === firstRowId);
-
-      // 移动端禁用卡片原生拖拽（回归：触屏长按唤起原生拖拽 → 卡片置灰、页面卡死）
-      var mCard = $$('.palette-strip .palette-card')[0];
-      ok('S38 移动端卡片 draggable=false', mCard.getAttribute('draggable') === 'false',
-        'draggable=' + mCard.getAttribute('draggable'));
-      var dEv = new w.DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: new w.DataTransfer() });
-      mCard.dispatchEvent(dEv);
-      ok('S38 移动端 dragstart 被阻止且不置灰',
-        dEv.defaultPrevented === true && !mCard.classList.contains('dragging'),
-        'prevented=' + dEv.defaultPrevented + ' dragging=' + mCard.classList.contains('dragging'));
-
-      // 底部带折叠 → 点击添加 → 自动选中新元素并展开
-      $('#right-collapse').click();
-      ok('S38 底部属性带可折叠', $('#right-panel').classList.contains('band-collapsed'));
-      var rowsBefore = w.App.state.rows[w.App.state.rows.length - 1].elements.length;
-      $$('.palette-strip .palette-card')[0].click();
-      var selected = await waitFor(function () { return w.App.selection.elementId !== null; });
-      var rowAfter = w.App.state.rows[w.App.state.rows.length - 1];
-      ok('S38 移动端点击卡片 → 添加并自动选中',
-        selected && rowAfter.elements.length === rowsBefore + 1 &&
-        rowAfter.elements[rowAfter.elements.length - 1].id === w.App.selection.elementId);
-      ok('S38 选中元素 → 属性带自动展开',
-        !$('#right-panel').classList.contains('band-collapsed') &&
-        $('#right-panel-title').textContent === '元素属性');
-
-      // 触屏手势（合成 pointerType=touch）
-      var cs = w.document.getElementById('canvas-scroll');
-      var csr = cs.getBoundingClientRect();
-      function touch(type, x, y, id) {
-        pointer(type, cs, x, y, { pointerId: id, pointerType: 'touch', isPrimary: id === 1 });
+    async function s38_desktopControlsInNarrowWindow() {
+      var editor = W();
+      var state = editor.SignState;
+      var card = $('.palette-card');
+      var saved = editor.App.state;
+      editor.App.select(null);
+      editor.App.update(state.addRow);
+      $('#left-collapse').click();
+      try {
+        await resizeEditor(375);
+        ok('S38 窗口变窄后，已收起的左栏仍处于收起状态', $('#left-panel').classList.contains('collapsed') && !$('#left-expander').hidden);
+        $('#left-expander').click();
+        ok('S38 左栏展开后保留原来的分类、元素卡片和拖放', $('.palette-card') === card && $$('.palette-category').length === 3 && card.draggable);
+        ok('S38 窄窗口仍使用牌面旁的行手柄和操作按钮', $$('.row-band .row-handle').length === editor.App.state.rows.length &&
+          $$('.row-band .row-actions').length === editor.App.state.rows.length && !$('#row-strip') && !$('#zoom-badge'));
+        var count = editor.App.state.rows.at(-1).elements.length;
+        card.click();
+        ok('S38 点击卡片添加到最后一行，并保留当前选择', editor.App.state.rows.at(-1).elements.length === count + 1 && !editor.App.selection.elementId);
+      } finally {
+        await resizeEditor(1280);
+        editor.App.update(function () { return saved; });
       }
-      // pinch：两指落下 → 分开 → 抬起
-      var cx = csr.left + csr.width / 2, cy = csr.top + csr.height / 2;
-      touch('pointerdown', cx - 40, cy, 1);
-      touch('pointerdown', cx + 40, cy, 2);
-      var svgW = parseFloat($('#sign-svg').style.width);
-      touch('pointermove', cx - 90, cy, 1);
-      touch('pointermove', cx + 90, cy, 2);
-      var zoomed = parseFloat($('#sign-svg').style.width);
-      ok('S38 pinch 两指分开 → 画布放大（无拖拽幽灵残留）',
-        zoomed > svgW * 1.9 && !$('.drag-ghost'), svgW + '→' + zoomed);
-      ok('S38 缩放徽标显示当前倍率', $('#zoom-badge').textContent !== '100%',
-        $('#zoom-badge').textContent);
-      touch('pointerup', cx - 90, cy, 1);
-      touch('pointerup', cx + 90, cy, 2);
-
-      // 单指平移：空白处（上内边距）拖动 → 滚动跟随
-      var sl0 = cs.scrollLeft;
-      touch('pointerdown', csr.left + 300, csr.top + 6, 1);
-      touch('pointermove', csr.left + 220, csr.top + 6, 1);
-      var sl1 = cs.scrollLeft;
-      touch('pointerup', csr.left + 220, csr.top + 6, 1);
-      ok('S38 单指空白拖动 → 画布平移', sl1 > sl0, sl0 + '→' + sl1);
-
-      // 双击复位：空白处两次轻点（合成事件背靠背派发，避免环境节流拉大间隔）
-      touch('pointerdown', csr.left + 6, csr.top + 6, 1);
-      touch('pointerup', csr.left + 6, csr.top + 6, 1);
-      touch('pointerdown', csr.left + 6, csr.top + 6, 1);
-      touch('pointerup', csr.left + 6, csr.top + 6, 1);
-      ok('S38 双击复位 100%', Math.abs(w.App.canvasZoom - 1) < 0.01 &&
-        $('#zoom-badge').textContent === '100%', 'zoom=' + w.App.canvasZoom);
-
-      w.App.select(null);
-
-      // 还原桌面视口
-      frameEl.style.width = '1280px';
-      W().dispatchEvent(new (W().Event)('resize'));
-      var restored = await waitFor(function () {
-        return !w.App.isMobileView() && $$('.palette-category').length === 3;
-      }, 6000);
-      ok('S38 回宽视口恢复桌面 palette 且无移动态残留', restored &&
-        !$('#right-panel').classList.contains('band-collapsed') &&
-        w.getComputedStyle($('#zoom-badge')).display === 'none');
-      ok('S38 回桌面恢复行带控件、清空行条、卡片恢复可拖',
-        $$('.row-band .row-handle').length > 0 &&
-        $$('#row-strip .row-strip-chip').length === 0 &&
-        $$('.palette-card')[0].getAttribute('draggable') === 'true',
-        'handles=' + $$('.row-band .row-handle').length +
-        ' stripChips=' + $$('#row-strip .row-strip-chip').length +
-        ' draggable=' + $$('.palette-card')[0].getAttribute('draggable'));
     }
 
-    // S39：移动端高牌面不挤飞底部属性带（回归：行多 / 动态宽度 → 牌面变高，
-    // 底部属性带被挤出视口，元素表单滚到底也够不到删除按钮）
-    async function s39_mobileTallSignBand() {
-      var w = W();
-      var frameEl = frame;
-      frameEl.style.width = '375px';
-      W().dispatchEvent(new (W().Event)('resize'));
-      var switched = await waitFor(function () {
-        return w.App.isMobileView() && $$('.palette-chip').length === 6;
-      }, 6000);
-      ok('S39 窄视口进入移动布局', switched,
-        'mobile=' + w.App.isMobileView() + ' chips=' + $$('.palette-chip').length);
-      if (!switched) return;
-
-      var S = w.SignState;
-      // 选中一个元素（元素表单底部才有删除按钮）
-      var elId = null;
-      w.App.update(function (st) {
-        var el = S.createElement('bilingual-text', {});
-        elId = el.id;
-        return S.addElement(st, st.rows[0].id, el);
-      });
-      w.App.select(elId);
-
-      function bandState() {
-        var vh = W().innerHeight;
-        var rp = rectOf($('#right-panel'));
-        return { vh: vh, rpBottom: rp.y + rp.h };
-      }
-      function delBtnAfterBottomScroll() {
-        var body = $('#right-panel-body');
-        body.scrollTop = body.scrollHeight; // 属性带内部滚到底
-        var btns = $$('#right-panel-body .btn-danger').filter(function (b) {
-          return b.textContent.indexOf('删除元素') !== -1;
+    async function s39_tallSignKeepsPropertiesReachable() {
+      var editor = W();
+      var state = editor.SignState;
+      var saved = editor.App.state;
+      try {
+        await resizeEditor(375);
+        var element = state.createElement('bilingual-text');
+        editor.App.update(function () {
+          var sign = state.createSign();
+          for (var index = 1; index < 15; index++) sign = state.addRow(sign);
+          return state.addElement(sign, sign.rows[0].id, element);
         });
-        if (!btns.length) return null;
-        var r = rectOf(btns[0]);
-        return r.y + r.h;
+        editor.App.select(element.id);
+        editor.scrollTo(editor.document.documentElement.scrollWidth, 0);
+        var panel = $('#right-panel');
+        var properties = $('#right-panel-body');
+        var canvas = $('#canvas-scroll');
+        for (var mode of ['fixed', 'dynamic']) {
+          editor.App.update(function (sign) { return state.updateSignSettings(sign, { widthMode: mode }); });
+          properties.scrollTop = properties.scrollHeight;
+          var panelBounds = panel.getBoundingClientRect();
+          var deleteBounds = properties.querySelector('.btn-danger').getBoundingClientRect();
+          ok('S39 多行牌面下右栏仍从窗口顶部延伸到底部，宽度模式为 ' + mode,
+            panelBounds.top === 0 && panelBounds.bottom <= editor.innerHeight && panelBounds.right <= editor.innerWidth + 1);
+          ok('S39 右栏滚动后可到达删除按钮，宽度模式为 ' + mode, deleteBounds.bottom <= panelBounds.bottom + 1);
+          ok('S39 高牌面在画布内滚动，宽度模式为 ' + mode, canvas.scrollHeight > canvas.clientHeight);
+        }
+      } finally {
+        await resizeEditor(1280);
+        editor.App.update(function () { return saved; });
+        editor.App.select(null);
       }
-
-      // 触发一：固定宽度下行数多（行高累加）
-      while (w.App.state.rows.length < 15) w.App.update(S.addRow);
-      var rowsCase = bandState();
-      var rowsDel = delBtnAfterBottomScroll();
-      var cs = w.document.getElementById('canvas-scroll');
-      ok('S39 多行高牌面：底部属性带仍在视口内', rowsCase.rpBottom <= rowsCase.vh + 0.5,
-        'bandBottom=' + rowsCase.rpBottom + ' vh=' + rowsCase.vh);
-      ok('S39 多行高牌面：删除按钮滚到底后可达', rowsDel !== null && rowsDel <= rowsCase.vh + 0.5,
-        'delBottom=' + rowsDel + ' vh=' + rowsCase.vh);
-      ok('S39 多行高牌面：画布在滚动容器内溢出（而非撑破布局）',
-        cs.scrollHeight > cs.clientHeight + 40,
-        'scrollHeight=' + cs.scrollHeight + ' clientHeight=' + cs.clientHeight);
-
-      // 触发二：动态宽度（牌面宽度收窄到内容 → 同样行数下显示高度暴涨）
-      w.App.update(function (st) {
-        return S.updateSignSettings(st, { widthMode: 'dynamic' });
-      });
-      var dyn = bandState();
-      var dynDel = delBtnAfterBottomScroll();
-      ok('S39 动态宽度高牌面：底部属性带仍在视口内', dyn.rpBottom <= dyn.vh + 0.5,
-        'bandBottom=' + dyn.rpBottom + ' vh=' + dyn.vh);
-      ok('S39 动态宽度高牌面：删除按钮滚到底后可达', dynDel !== null && dynDel <= dyn.vh + 0.5,
-        'delBottom=' + dynDel + ' vh=' + dyn.vh);
-
-      w.App.select(null);
-      // 还原桌面视口
-      frameEl.style.width = '1280px';
-      W().dispatchEvent(new (W().Event)('resize'));
-      var restored = await waitFor(function () {
-        return !w.App.isMobileView() && $$('.palette-category').length === 3;
-      }, 6000);
-      ok('S39 回宽视口恢复桌面布局', restored, 'mobile=' + w.App.isMobileView());
     }
 
-    // S40：移动端切换元素分类不得重置 chip 行横向滑动位置（回归：buildPalette
-    // 整树重建 → .palette-chips scrollLeft 归零；用户把 chip 行滑到右侧点选
-    // 分类后，chip 行立刻弹回最左，刚点中的分类飞出视口）
-    async function s40_mobileChipScrollKeeps() {
-      var w = W();
-      var frameEl = frame;
-      frameEl.style.width = '375px';
-      W().dispatchEvent(new (W().Event)('resize'));
-      var switched = await waitFor(function () {
-        return w.App.isMobileView() && $$('.palette-chip').length === 6;
-      }, 6000);
-      ok('S40 窄视口进入移动布局', switched,
-        'mobile=' + w.App.isMobileView() + ' chips=' + $$('.palette-chip').length);
-      if (!switched) return;
-
-      function chipRow() { return $('.palette-chips'); }
-      // 前置条件：chip 行确实可横向滑动（否则本用例无意义）
-      var row = chipRow();
-      ok('S40 chip 行可横向滑动（前置条件）', row.scrollWidth > row.clientWidth + 20,
-        'scrollWidth=' + row.scrollWidth + ' clientWidth=' + row.clientWidth +
-        ' viewport=' + W().innerWidth);
-
-      // 滑到最右端（末位「辅助」chip 进入视口，预设已移至独立选项卡）
-      row.scrollLeft = row.scrollWidth;
-      var before = chipRow().scrollLeft;
-      ok('S40 chip 行已滑到右端', before > 20, 'scrollLeft=' + before);
-
-      // 点选最右侧分类 chip → 触发卡片条重建
-      var rowNode = chipRow();
-      var chipNode = $$('.palette-chip')[5];
-      chipNode.click();
-      ok('S40 点选末位分类 chip 生效（卡片条已切换）',
-        $$('.palette-chip')[5].classList.contains('active'));
-
-      // chip 行结构不随分类变化：同一 DOM 节点原地保留（滑动惯性/焦点不被打断）
-      ok('S40 切换分类不重建 chip 行（节点原地保留）',
-        chipRow() === rowNode && $$('.palette-chip')[5] === chipNode,
-        'rowSame=' + (chipRow() === rowNode) + ' chipSame=' + ($$('.palette-chip')[5] === chipNode));
-
-      var after = chipRow().scrollLeft;
-      ok('S40 切换分类后 chip 行滑动位置保持', Math.abs(after - before) <= 2,
-        'before=' + before + ' after=' + after);
-
-      // 用户症状：刚点中的分类 chip 仍在可视区内（未被弹回左侧挤出视口）
-      var chipR = rectOf($$('.palette-chip')[5]);
-      var rowR = rectOf(chipRow());
-      ok('S40 被点选分类 chip 仍在 chip 行视口内',
-        chipR.x >= rowR.x - 0.5 && chipR.x + chipR.w <= rowR.x + rowR.w + 0.5,
-        'chip=' + (chipR.x + '..' + (chipR.x + chipR.w)) + ' row=' + (rowR.x + '..' + (rowR.x + rowR.w)));
-
-      // 同一分类重复点选不重建，滑动位置同样不受影响
-      $$('.palette-chip')[5].click();
-      ok('S40 重复点选同分类不动滑动位置', Math.abs(chipRow().scrollLeft - before) <= 2,
-        'scrollLeft=' + chipRow().scrollLeft);
-
-      // 结构重建路径（存预设 → Presets.onChange → buildPalette 整树重建）同样不得重置
-      w.SignPresets.save('S40 预设', w.App.state.rows[0].elements);
-      ok('S40 存预设（结构重建）后 chip 行滑动位置保持',
-        Math.abs(chipRow().scrollLeft - before) <= 2, 'scrollLeft=' + chipRow().scrollLeft);
-
-      // 元素 / 预设页互切也保留分类滚动与上一次选中的元素分类。
-      $('.palette-tab[data-value="presets"]').click();
-      ok('S40 移动预设独立成页', $$('.palette-chip').length === 0 && $$('.preset-card').length > 0);
-      $('.palette-tab[data-value="elements"]').click();
-      ok('S40 返回元素页保留分类与滚动位置',
-        $$('.palette-chip')[5].classList.contains('active') && Math.abs(chipRow().scrollLeft - before) <= 2,
-        'scrollLeft=' + chipRow().scrollLeft);
-
-      // 回方向指示分类；还原桌面视口
-      $$('.palette-chip')[0].click();
-      frameEl.style.width = '1280px';
-      W().dispatchEvent(new (W().Event)('resize'));
-      var restored = await waitFor(function () {
-        return !w.App.isMobileView() && $$('.palette-category').length === 3;
-      }, 6000);
-      ok('S40 回宽视口恢复桌面布局', restored, 'mobile=' + w.App.isMobileView());
-    }
-
-    // S41：独立元素 / 预设页，12 个方向以紧凑网格展示，保留点击与拖放。
     function s41_paletteTabsAndCompactDirections() {
       var w = W(), S = w.SignState;
       var tabs = $$('.palette-tab');
@@ -1668,17 +1467,15 @@
       ok('S44 移除深色规则后恢复系统界面', w.getComputedStyle($('#right-panel')).backgroundColor === beforeBg);
     }
 
-    async function s45_mobilePresetApply() {
+    async function s45_applyPresetInNarrowWindow() {
       var w = W(), S = w.SignState, P = w.SignPresets;
-      frame.style.width = '375px';
-      w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return w.App.isMobileView(); }, 6000);
-      P.save('触屏复用预设', [S.createElement('big-number', { text: '15' })]);
+      await resizeEditor(375);
+      P.save('窄窗口预设', [S.createElement('big-number', { text: '15' })]);
       $('#palette .palette-tab[data-value="presets"]').click();
-      var card = $$('#palette .preset-card').filter(function (n) { return n.textContent.indexOf('触屏复用预设') !== -1; })[0];
+      var card = $$('#palette .preset-card').filter(function (n) { return n.textContent.indexOf('窄窗口预设') !== -1; })[0];
       card.click();
       var apply = $('#right-panel-body .preset-apply-new-row');
-      ok('S45 触屏预设可点击应用，无需拖放', !!apply);
+      ok('S45 窄窗口可从桌面预设列表打开应用按钮', !!apply);
       if (apply) {
         var before = S.serializeSign(w.App.state), rowCount = w.App.state.rows.length;
         apply.click();
@@ -1687,9 +1484,7 @@
       }
       w.App.previewPreset(null);
       $('#palette .palette-tab[data-value="elements"]').click();
-      frame.style.width = '1280px';
-      w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return !w.App.isMobileView(); }, 6000);
+      await resizeEditor(1280);
     }
 
     function s46_independentGridDimensions() {
@@ -1733,40 +1528,17 @@
       var p = S.findElement(w.App.state, a.id).element.props;
       ok('S47 左右内边距独立增减并钉住自动值', Math.abs(p.padding.left - p0.left - 0.05) < 1e-9 && Math.abs(p.padding.right - p0.right + 0.05) < 1e-9 && !p.paddingAuto);
       ok('S47 浮动栏没有进入导出SVG', w.SignExporters.buildExportSVGString(w.App.state, w.App.measure, {}).indexOf('element-toolbar') === -1);
-      frame.style.width = '375px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return w.App.isMobileView(); }, 6000);
-      await new Promise(function (resolve) { w.requestAnimationFrame(resolve); });
-      function visibleBar() {
-        var r = bar.getBoundingClientRect(), edit = $('#canvas-scroll').getBoundingClientRect();
-        return r.left >= edit.left - 1 && r.right <= edit.right + 1 && r.top >= edit.top - 1 && r.bottom <= edit.bottom + 1;
-      }
-      ok('S47 移动端浮动栏在编辑区内且不横向溢出', visibleBar());
-      w.SignInteract.setCanvasZoom(2);
-      await new Promise(function (resolve) { w.requestAnimationFrame(resolve); });
-      ok('S47 缩放后浮动栏仍在可见编辑区内', visibleBar());
-      var scroller = $('#canvas-scroll');
-      scroller.scrollLeft = 100;
-      scroller.dispatchEvent(new w.Event('scroll'));
-      await new Promise(function (resolve) { w.requestAnimationFrame(resolve); });
-      ok('S47 平移编辑区后浮动栏仍可操作', scroller.scrollLeft > 0 && visibleBar() && !bar.querySelector('[data-action="delete"]').disabled);
-      w.SignInteract.setCanvasZoom(1);
-      frame.style.width = '769px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return !w.App.isMobileView(); }, 6000);
-      // 桌面侧栏恢复宽度带过渡，等待 ResizeObserver 完成最终定位。
-      await waitFor(function () { return visibleBar() && bar.scrollWidth <= bar.clientWidth; }, 2000);
-      ok('S47 桌面三栏的窄编辑区也容纳全部快捷操作', visibleBar() && bar.scrollWidth <= bar.clientWidth,
-        JSON.stringify({ toolbar: bar.getBoundingClientRect().toJSON(), area: $('#canvas-scroll').getBoundingClientRect().toJSON(), scrollWidth: bar.scrollWidth, clientWidth: bar.clientWidth }));
-      frame.style.width = '320px'; w.dispatchEvent(new w.Event('resize'));
-      await new Promise(function (resolve) { w.requestAnimationFrame(function () { w.requestAnimationFrame(resolve); }); });
-      ok('S47 320px窄屏浮动栏换行后不遮挡行管理条', visibleBar() && $('#row-strip .row-strip-chip').getBoundingClientRect().top >= bar.getBoundingClientRect().bottom - 1);
+      await resizeEditor(320);
+      var toolbarBounds = bar.getBoundingClientRect();
+      var canvasBounds = $('#canvas-scroll').getBoundingClientRect();
+      ok('S47 窄窗口的桌面画布仍容纳全部浮动工具栏按钮', toolbarBounds.left >= canvasBounds.left &&
+        toolbarBounds.right <= canvasBounds.right && bar.scrollWidth <= bar.clientWidth);
       $('#canvas-area').click();
       ok('S47 取消选择即隐藏浮动栏并返回设置', bar.hidden && !w.App.selection.elementId && $('#right-panel-title').textContent === '标识牌设置');
       w.App.select(b.id);
       bar.querySelector('[data-action="delete"]').click();
       ok('S47 快捷删除当前元素，取消选择且隐藏浮动栏', !S.findElement(w.App.state, b.id) && !w.App.selection.elementId && bar.hidden);
-      w.SignInteract.setCanvasZoom(1);
-      frame.style.width = '1280px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return !w.App.isMobileView(); }, 6000);
+      await resizeEditor(1280);
     }
 
     function s48_toolbarAlignmentDropdowns() {
@@ -1872,32 +1644,6 @@
       await new Promise(function (resolve) { setTimeout(resolve, 20); });
       $('#canvas-scroll').click();
       ok('S49 拖拽后下一次主动点击空白正常取消选择', !w.App.selection.elementId);
-      frame.style.width = '375px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return w.App.isMobileView(); }, 6000);
-      w.App.select(a.id);
-      w.SignInteract.setCanvasZoom(2);
-      var cs = $('#canvas-scroll'), r = cs.getBoundingClientRect();
-      pointer('pointerdown', cs, r.left + 170, r.top + 10, { pointerId: 93, pointerType: 'touch' });
-      pointer('pointerdown', cs, r.left + 250, r.top + 10, { pointerId: 94, pointerType: 'touch' });
-      pointer('pointermove', cs, r.left + 290, r.top + 10, { pointerId: 94, pointerType: 'touch' });
-      pointer('pointerup', cs, r.left + 170, r.top + 10, { pointerId: 93, pointerType: 'touch' });
-      cs.click();
-      pointer('pointerup', cs, r.left + 290, r.top + 10, { pointerId: 94, pointerType: 'touch' });
-      cs.click();
-      ok('S49 两指缩放结束后产生的click保持元素选择', w.App.selection.elementId === a.id);
-      pointer('pointerdown', cs, r.left + 250, r.top + 10, { pointerId: 91, pointerType: 'touch' });
-      pointer('pointermove', cs, r.left + 190, r.top + 10, { pointerId: 91, pointerType: 'touch' });
-      pointer('pointerup', cs, r.left + 190, r.top + 10, { pointerId: 91, pointerType: 'touch' });
-      cs.click();
-      ok('S49 触屏平移后产生的click保持元素选择', w.App.selection.elementId === a.id);
-      await new Promise(function (resolve) { setTimeout(resolve, 20); });
-      pointer('pointerdown', cs, r.left + 10, r.top + 10, { pointerId: 92, pointerType: 'touch' });
-      pointer('pointerup', cs, r.left + 10, r.top + 10, { pointerId: 92, pointerType: 'touch' });
-      cs.click();
-      ok('S49 移动端轻点空白取消选择并隐藏浮动栏', !w.App.selection.elementId && $('#element-toolbar').hidden);
-      w.SignInteract.setCanvasZoom(1);
-      frame.style.width = '1280px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return !w.App.isMobileView(); }, 6000);
     }
 
     // ─── 主流程 ───────────────────────────────────────────
@@ -1971,15 +1717,13 @@
       ok('S51 空白占位禁用边距输入与入口', input.disabled && bar.querySelector('[data-padding="left"] .padding-trigger').disabled);
       w.App.select(el.id);
       ok('S51 切回元素同步最新值', !input.disabled && input.value === '8');
-      frame.style.width = '375px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return w.App.isMobileView(); }, 6000);
+      await resizeEditor(375);
       bar.querySelector('[data-padding="right"] .padding-trigger').click();
       var right = bar.querySelector('[data-padding="right"] input');
       var r = right.getBoundingClientRect(), area = $('#canvas-scroll').getBoundingClientRect();
-      ok('S51 手机点击图标可输入且不溢出编辑区', w.document.activeElement === right && r.left >= area.left && r.right <= area.right);
+      ok('S51 窄窗口可打开边距输入框并在画布内聚焦', w.document.activeElement === right && r.left >= area.left && r.right <= area.right);
       right.blur();
-      frame.style.width = '1280px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return !w.App.isMobileView(); }, 6000);
+      await resizeEditor(1280);
     }
 
     function s52_darkAlignmentOptions() {
@@ -2055,14 +1799,11 @@
       select = $('#right-panel-body .row-bg-select');
       ok('S54 删除所选行后安全切到仍存在的行', select.options.length === 3 &&
         w.App.state.rows.some(function (row) { return row.id === select.value; }));
-      frame.style.width = '390px';
-      w.dispatchEvent(new Event('resize'));
-      await waitFor(function () { return w.App.isMobileView(); });
-      ok('S54 移动端保留独立行颜色控件', !!$('#right-panel-body .row-bg-select') &&
+      var panel = $('#right-panel-body .row-bg-select');
+      await resizeEditor(390);
+      ok('S54 窄窗口仍可使用同一个行背景色控件', panel === $('#right-panel-body .row-bg-select') &&
         !!$('#right-panel-body .color-picker[data-scope="当前行背景色"]'));
-      frame.style.width = '1280px';
-      w.dispatchEvent(new Event('resize'));
-      await waitFor(function () { return !w.App.isMobileView(); });
+      await resizeEditor(1280);
     }
 
     async function s55_textSelectionRelease() {
@@ -2367,13 +2108,14 @@
         JSON.stringify({ actual: $('#element-drop-indicator').style.left, centerWidth: centerWidth, signWidth: w.App.layout.width }));
       pointer('pointercancel', w.document, target.x, target.y);
       await new Promise(function (resolve) { setTimeout(resolve, 20); });
-      frame.style.width = '320px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return w.App.isMobileView(); });
-      var bar = $('#edit-actions').getBoundingClientRect();
-      ok('S59 窄屏全选及剪贴板操作可见且不横向溢出', bar.left >= 0 && bar.right <= 320 && $('#edit-actions').scrollWidth <= $('#edit-actions').clientWidth &&
+      await resizeEditor(320);
+      var actions = $('#edit-actions');
+      var actionBounds = actions.getBoundingClientRect();
+      var center = $('#center-panel').getBoundingClientRect();
+      ok('S59 窄窗口的全选和剪贴板仍在桌面中栏，右栏继续显示批量属性',
+        actionBounds.left >= center.left && actionBounds.right <= center.right && actions.scrollWidth <= actions.clientWidth &&
         $('#right-panel-title').textContent === '批量属性');
-      frame.style.width = '1280px'; w.dispatchEvent(new w.Event('resize'));
-      await waitFor(function () { return !w.App.isMobileView(); });
+      await resizeEditor(1280);
     }
 
     function start() {
@@ -2407,7 +2149,7 @@
           s42_propertyToolsAndColors();
           s43_widthUnitsAndFrameColor();
           s44_systemDarkModeIsolation();
-          await s45_mobilePresetApply();
+          await s45_applyPresetInNarrowWindow();
           return;
         }
         setupScenario();
@@ -2447,16 +2189,15 @@
         s34_hexInputNoClobber();
         await s53_exportWithoutFontFetch();
         await s35_exportButtonFeedback();
-        s36_canvasZoomFit();
+        await s36_previewFollowsWindowWidth();
         await s37_pagehideFlush();
-        await s38_mobileShell();
-        await s39_mobileTallSignBand();
-        await s40_mobileChipScrollKeeps();
+        await s38_desktopControlsInNarrowWindow();
+        await s39_tallSignKeepsPropertiesReachable();
         s41_paletteTabsAndCompactDirections();
         s42_propertyToolsAndColors();
         s43_widthUnitsAndFrameColor();
         s44_systemDarkModeIsolation();
-        await s45_mobilePresetApply();
+        await s45_applyPresetInNarrowWindow();
         s46_independentGridDimensions();
         await s47_floatingElementActions();
         s48_toolbarAlignmentDropdowns();

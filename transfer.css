@@ -116,12 +116,4 @@
 .transfer-export .btn { flex: 1; margin: 0; }
 #transfer-status { white-space: normal; overflow-wrap: anywhere; }
 
-@media (width > 768px) {
-  #transfer-properties { width: 304px; }
-}
-@media (max-width: 768px) {
-  #transfer-editor { overflow-y: auto; }
-  #transfer-editor .platform-preview { height: clamp(320px, 56dvh, 520px); }
-  #transfer-content .panel-body, #transfer-property-scroll { overflow: visible; }
-  #transfer-toolbar-title { max-width: 86px; }
-}
+#transfer-properties { width: 304px; }

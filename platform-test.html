@@ -100,10 +100,13 @@
       for(var j=0;j<20;j++)key('z',{ctrlKey:true});assert(A.state.lineName==='历史4'&&$('undo').disabled,'仅保留最近20步');
       key('z',{ctrlKey:true,shiftKey:true});assert(A.state.lineName==='历史5');restore();
     });
-    await test('版式选择器在页眉中间，窄屏按钮和剪贴板没有横向溢出', async function () {
+    await test('窗口变窄时，版式选择器和剪贴板仍在桌面中栏内', async function () {
       function centered(){var nav=d.querySelector('.mode-tabs').getBoundingClientRect(),header=d.querySelector('.editor-header').getBoundingClientRect();assert(Math.abs(nav.left+nav.right-header.left-header.right)<=1,'版式选择器没有在页眉居中');}
       centered();var oldWidth=frame.style.width;frame.style.width='390px';w.dispatchEvent(new w.Event('resize'));await new Promise(function(resolve){w.requestAnimationFrame(function(){w.requestAnimationFrame(resolve);});});
-      centered();assert(d.documentElement.scrollWidth<=w.innerWidth+1,'窄屏横向溢出');var bar=$('platform-edit-actions').getBoundingClientRect();assert(bar.right<=w.innerWidth+1);
+      centered();
+      var toolbar = $('platform-edit-actions').getBoundingClientRect();
+      var preview = d.querySelector('.platform-preview').getBoundingClientRect();
+      assert(d.documentElement.scrollWidth >= 1100 && toolbar.left >= preview.left && toolbar.right <= preview.right);
       frame.style.width=oldWidth;w.dispatchEvent(new w.Event('resize'));restore();
     });
     function inkBox(n){
@@ -576,18 +579,46 @@
       await choose(S.serialize(imported)); await waitFor(function () { return A.state.mode === 'vertical' && A.state.line === '5'; }); assert(A.state.color === '#00A3E0' && A.state.stations.length === 8);
       var before = S.serialize(A.state); await choose('{"kind":"wrong","stations":[]}'); await waitFor(function () { return $('platform-notice').textContent.includes('导入失败'); }); assert(S.serialize(A.state) === before);
     });
-    await test('手机宽度：站点横向滚动保留，导出按钮可滚动到达，无横向溢出', async function () {
-      restore(); frame.style.width = '390px'; w.dispatchEvent(new w.Event('resize')); await waitFor(function () { return w.innerWidth === 390; });
-      await waitFor(function () { return $('platform-svg').getBoundingClientRect().width < 390; });
-      var list=$('station-list'),first=A.state.stations[0].id;list.scrollLeft=0;
-      var grip=list.children[0].querySelector('.station-drag-handle'),start=grip.getBoundingClientRect(),end=list.children[1].getBoundingClientRect();
-      grip.dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,pointerId:52,button:0,pointerType:'touch',clientX:start.left+3,clientY:start.top+3}));
-      d.dispatchEvent(new w.PointerEvent('pointermove',{bubbles:true,pointerId:52,pointerType:'touch',clientX:end.right-4,clientY:end.top+end.height/2}));
-      d.dispatchEvent(new w.PointerEvent('pointerup',{bubbles:true,pointerId:52,pointerType:'touch'}));
-      assert(A.state.stations[1].id===first,'手机横向站点拖动未提交');$('undo').click();assert(A.state.stations[0].id===first);
-      A.selectElement('route:' + A.state.currentId); var toolbar = $('platform-element-toolbar').getBoundingClientRect(); assert(!$('platform-element-toolbar').hidden && toolbar.left >= 0 && toolbar.right <= 390, '浮动栏边界：' + toolbar.left + ',' + toolbar.right);
-      list.scrollLeft = 150; var scrollBefore = list.scrollLeft; input('station-zh', '手机测试站'); assert(Math.abs(list.scrollLeft - scrollBefore) < .5, '站点滚动位置：' + list.scrollLeft); $('return-to-settings').click(); $('export-png').scrollIntoView(); var r = $('export-png').getBoundingClientRect(); assert(r.left >= 0 && r.right <= 390, '按钮边界：' + r.left + ',' + r.right); assert(d.documentElement.scrollWidth <= 390, '页面宽度：' + d.documentElement.scrollWidth);
-      frame.style.width = '1280px';
+    await test('窄窗口仍可纵向拖动和滚动站点，横向滚动后可使用导出按钮', async function () {
+      restore();
+      var oldWidth = frame.style.width, oldHeight = frame.style.height;
+      frame.style.width = '390px';
+      frame.style.height = '420px';
+      try {
+        await waitFor(function () { return w.innerWidth === 390 && w.innerHeight === 420; });
+        w.scrollTo(0, 0);
+        var list = $('station-list');
+        var first = A.state.stations[0].id;
+        list.scrollTop = 0;
+        var handle = list.children[0].querySelector('.station-drag-handle');
+        var start = handle.getBoundingClientRect();
+        var end = list.children[1].getBoundingClientRect();
+        handle.dispatchEvent(new w.PointerEvent('pointerdown', { bubbles: true, pointerId: 52, button: 0, pointerType: 'mouse', clientX: start.left + 3, clientY: start.top + 3 }));
+        d.dispatchEvent(new w.PointerEvent('pointermove', { bubbles: true, pointerId: 52, pointerType: 'mouse', clientX: start.left + 3, clientY: end.bottom - 4 }));
+        d.dispatchEvent(new w.PointerEvent('pointerup', { bubbles: true, pointerId: 52, pointerType: 'mouse' }));
+        assert(A.state.stations[1].id === first, '纵向拖动应调整站序');
+        $('undo').click();
+        assert(A.state.stations[0].id === first, '撤销应恢复站序');
+        A.selectElement('route:' + A.state.currentId);
+        var toolbar = $('platform-element-toolbar').getBoundingClientRect();
+        var preview = d.querySelector('.platform-preview').getBoundingClientRect();
+        assert(!$('platform-element-toolbar').hidden && toolbar.left >= preview.left && toolbar.right <= preview.right);
+        list.scrollTop = 150;
+        var previousScroll = list.scrollTop;
+        input('station-zh', '窄窗口测试站');
+        assert(previousScroll > 0 && Math.abs(list.scrollTop - previousScroll) < 0.5, '编辑站名应保留站点列表的纵向滚动位置');
+        $('return-to-settings').click();
+        w.scrollTo(d.documentElement.scrollWidth, 0);
+        $('export-png').scrollIntoView({ block: 'center', inline: 'nearest' });
+        await new Promise(function (resolve) { w.requestAnimationFrame(resolve); });
+        var button = $('export-png').getBoundingClientRect();
+        assert(w.scrollX > 0 && button.left >= 0 && button.right <= 391 && button.bottom <= w.innerHeight,
+          '应能滚动到导出按钮，当前边界为 ' + JSON.stringify(button.toJSON()));
+      } finally {
+        frame.style.width = oldWidth;
+        frame.style.height = oldHeight;
+        w.scrollTo(0, 0);
+      }
     });
     await test('文字换乘支持双语编辑、颜色、撤销与三种纵向版式，12起站号使用参考轮廓', async function () {
       restore(); A.select(A.state.stations[0].id);
@@ -830,7 +861,7 @@
       d.querySelector('[data-library="stations"]').click();
       restore();
     });
-    await test('手机宽度可选择底纹和上传图片，切换版式后保留设置', function () {
+    await test('窄窗口可从右栏选择底纹，切换版式后保留设置和上传入口', function () {
       restore(); A.deselect();
       var oldWidth = frame.style.width;
       try {
@@ -840,12 +871,14 @@
         input('line-pattern-source', 'line-0', 'change');
         d.querySelector('[data-mode="vertical"]').click();
         assert(A.state.linePattern.source === 'line-0');
+        $('line-pattern-import').scrollIntoView({ block: 'nearest', inline: 'nearest' });
         var button = $('line-pattern-import').getBoundingClientRect();
-        assert(button.width > 0 && button.right <= 390);
+        assert(w.scrollX > 0 && button.width > 0 && button.right <= 391);
         assert($('platform-svg').querySelector('pattern path'));
       } finally {
         frame.style.width = oldWidth;
         w.dispatchEvent(new w.Event('resize'));
+        w.scrollTo(0, 0);
         restore();
       }
     });
