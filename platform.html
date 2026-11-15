@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>站台标识生成器 · 吊板与线路图</title>
-  <link rel="stylesheet" href="style.css?v=be0a3f20ab5a">
-  <link rel="stylesheet" href="platform.css?v=6c995abf55c0">
+  <link rel="stylesheet" href="style.css?v=742923db24d3">
+  <link rel="stylesheet" href="platform.css?v=f428e09db355">
 </head>
 <body class="editor-page platform-page">
   <header class="editor-header platform-header">
@@ -68,17 +68,22 @@
               </div>
               <button id="swap-vertical-columns" class="btn" hidden>交换左右列</button>
             </div>
-            <div id="hanging-size-controls">
-              <div class="field"><label for="hanging-length">吊板长度（每格 256px）</label><select id="hanging-length"><option value="custom">自定义像素</option><option value="1">1格 · 256px</option><option value="2">2格 · 512px</option><option value="3">3格 · 768px</option><option value="4">4格 · 1024px</option><option value="5">5格 · 1280px</option><option value="6">6格 · 1536px</option><option value="7">7格 · 1792px</option><option value="8">8格 · 2048px</option><option value="9">9格 · 2304px</option><option value="10">10格 · 2560px</option><option value="11">11格 · 2816px</option><option value="12">12格 · 3072px</option><option value="13">13格 · 3328px</option><option value="14">14格 · 3584px</option><option value="15">15格 · 3840px</option></select></div>
-              <div class="field"><label for="hanging-height">吊板短边</label><select id="hanging-height"><option value="192">地铁 · 0.75格 / 192px</option><option value="256">单轨 · 1格 / 256px</option><option value="custom">自定义像素</option></select></div>
-            </div>
-            <details id="advanced-layout" class="platform-size-details">
-              <summary id="size-summary">自定义像素尺寸</summary>
-              <div class="field-pair">
-                <div class="field"><label for="output-width">宽度（像素）</label><input id="output-width" type="number" min="128" max="8192" step="1"></div>
-                <div class="field"><label for="output-height">高度（像素）</label><input id="output-height" type="number" min="128" max="8192" step="1"></div>
+            <div class="field size-field">
+              <div class="size-heading">
+                <label for="output-width" id="output-width-label">吊板长度</label>
+                <div class="size-number"><input id="output-width" type="number" min="128" max="8192" step="1" aria-label="宽度（像素）"><span aria-hidden="true">px</span></div>
               </div>
-            </details>
+              <input id="hanging-length" type="range" min="1" max="15" step="1" aria-label="吊板长度（按格调整）">
+              <div class="size-range-labels" id="hanging-length-labels"><span>1 格</span><output class="size-range-value" id="hanging-length-value" for="hanging-length"></output><span>15 格</span></div>
+            </div>
+            <div class="field size-field">
+              <div class="size-heading">
+                <label for="output-height" id="output-height-label">吊板短边</label>
+                <div class="size-number"><input id="output-height" type="number" min="128" max="8192" step="1" aria-label="高度（像素）"><span aria-hidden="true">px</span></div>
+              </div>
+              <input id="hanging-height" type="range" min="192" max="256" step="64" aria-label="吊板短边（地铁或单轨）">
+              <div class="size-range-labels" id="hanging-height-labels"><span>地铁</span><output class="size-range-value" id="hanging-height-value" for="hanging-height"></output><span>单轨</span></div>
+            </div>
             <div class="field">
               <label for="font-scale">站名文字比例 <output id="font-scale-label" for="font-scale"></output></label>
               <input id="font-scale" type="range" min="0.7" max="1.4" step="0.05">
@@ -212,7 +217,7 @@
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
   <script src="js/palette-manager.js?v=public-71d85de854d0"></script>
-  <script src="js/color-picker.js?v=public-f48d3fe82ac8"></script>
+  <script src="js/color-picker.js?v=01972a3cfee5"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
   <script src="js/platform/state.js?v=public-001363d6ae5d"></script>
   <script src="js/platform/reference.js?v=public-80b402bac929"></script>
@@ -225,6 +230,6 @@
   <script src="js/platform/clipboard.js?v=public-6cb6459bfe88"></script>
   <script src="assets/platform-patterns.js?v=public-1d04b66c025a"></script>
   <script src="js/platform/patterns.js?v=public-8030a731d7c1"></script>
-  <script src="js/platform/main.js?v=c4a6aaf367e2"></script>
+  <script src="js/platform/main.js?v=df534e7b9a61"></script>
 </body>
 </html>

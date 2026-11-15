@@ -64,10 +64,16 @@
 
     await test('三种版式只显示适用的尺寸和行车设置，自定义尺寸可直接输入', function () {
       assert(visible('hanging-length') && !visible('vertical-variant') && !visible('show-station-direction'), '全线吊板显示了不适用的字段');
-      change('hanging-length', 'custom');
-      assert(editor.activeElement === element('output-width'), '自定义长度应将焦点移至宽度');
+      assert(element('hanging-length').type === 'range' && element('hanging-height').type === 'range', '吊板长度和高度应使用滑条');
+      assert(visible('output-width') && visible('output-height'), '精确尺寸应直接可见');
       change('output-width', '948');
-      assert(app.state.sizes.route.width === 948, '自定义宽度未保存');
+      assert(app.state.sizes.route.width === 948 && element('hanging-length').getAttribute('aria-valuetext').includes('948'), '自定义宽度应保存并回显');
+      change('hanging-length', '5', 'input');
+      change('hanging-length', '6', 'input');
+      change('hanging-length', '6');
+      assert(app.state.sizes.route.width === 1536 && element('output-width').value === '1536', '拖动应即时改变牌面和像素值');
+      app.undo();
+      assert(app.state.sizes.route.width === 948, '一次撤销应恢复拖动前的自定义宽度');
       mode('station');
       assert(visible('hanging-length') && visible('show-station-direction'), '本站吊板缺少短边或行车提示设置');
       mode('vertical');
@@ -93,13 +99,14 @@
       assert(visible('line-pattern-source') && element('line-pattern-source') === patternSource, '调整底纹后原设置应保持打开');
       app.select(project.currentId);
       const name = editor.querySelector('[data-transfer-field="nameZh"]');
-      const colorDetails = name.closest('.transfer-color').querySelector('details');
-      colorDetails.open = true;
+      const picker = name.closest('.transfer-color').querySelector('.color-picker');
+      const palette = picker.querySelector('.cp-options');
+      picker.querySelector('.cp-current').click();
       name.focus();
       name.value = '郊区线';
       name.dispatchEvent(new frame.contentWindow.Event('input', { bubbles: true }));
       change('station-en', 'Updated Station', 'input');
-      assert(editor.activeElement === name && colorDetails.open && name.isConnected, '文字编辑时应保留焦点、输入框和已展开的色板');
+      assert(editor.activeElement === name && !palette.hidden && name.isConnected, '文字编辑时应保留焦点、输入框和已展开的色板');
       const station = app.state.stations.find(station => station.id === project.currentId);
       assert(station.transfers[1].nameZh === '郊区线' && station.en === 'Updated Station', '相邻字段的修改应一并保存');
     });
@@ -146,7 +153,7 @@
       element('export-png').scrollIntoView({ block: 'nearest' });
       assert(element('export-png').getBoundingClientRect().bottom <= 720, '应能滚动到导出按钮');
       app.select(project.currentId);
-      editor.querySelectorAll('#transfer-colors details').forEach(details => { details.open = true; });
+      editor.querySelectorAll('#transfer-colors .cp-current').forEach(button => button.click());
       element('station-delete').scrollIntoView({ block: 'nearest' });
       const panel = element('property-scroll').getBoundingClientRect();
       const deleteButton = element('station-delete').getBoundingClientRect();

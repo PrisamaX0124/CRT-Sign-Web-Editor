@@ -450,7 +450,7 @@
         'lines=' + st.props.lines.map(function (l) { return l.number; }).join(','));
       ok('S17 他处输入后原修改保持（显示）', inputs[0].value === '3', 'val=' + inputs[0].value);
       // 输入命中上海线路表 → 自动预填线路色并同步到色板显示
-      var cp = $('#right-panel-body .line-entry .cp-current');
+      var cp = $('#right-panel-body .line-entry .current-color');
       ok('S17 线路色自动匹配并同步显示', /rgb\(252,\s*214,\s*0\)/i.test(cp.style.background),
         'bg=' + cp.style.background);
       w.App.select(null);
@@ -1598,8 +1598,8 @@
         typeInto(bg.querySelector('.hex-input'), '#ABCDEF');
         var p = S.findElement(w.App.state, el.id).element.props;
         ok('S42 两个颜色仅修改各自范围', p.color === '#123456' && p.backgroundColor === '#ABCDEF' && w.App.state.backgroundColor === signBg);
-        var details = color.querySelector('details');
-        ok('S42 色板默认折叠，减少重复色块', !!details && !details.open);
+        var palette = color.querySelector('.cp-options');
+        ok('S42 色板默认折叠，减少重复色块', !!palette && palette.hidden);
         w.App.update(function (st) { return S.updateElementProps(st, el.id, { color: '#654321' }); });
         ok('S42 外部改值后选择器同步', color.querySelector('.hex-input').value === '#654321');
       }
@@ -1611,17 +1611,25 @@
       var w = W(), S = w.SignState;
       w.App.select(null);
       w.App.update(function (st) { return S.updateSignSettings(st, { aspectLocked: true, rowHeight: 256, widthMode: 'fixed' }); });
-      var units = $('#right-panel-body .width-units-select');
-      ok('S43 设置提供1–15宽度快捷值与自定义', !!units && units.options.length === 16);
+      var units = $('#right-panel-body .width-units-slider');
+      var pixels = $('#right-panel-body .sign-width-input');
+      ok('S43 设置提供 1 至 15 格滑条与精确宽度输入', !!units && units.type === 'range' && units.min === '1' && units.max === '15' && pixels.type === 'number');
       if (units) {
         var body = $('#right-panel-body').firstChild;
-        units.value = '5'; units.dispatchEvent(new w.Event('change', { bubbles: true }));
+        var widthBeforeDrag = w.App.state.width;
+        units.value = '4'; units.dispatchEvent(new w.Event('input', { bubbles: true }));
+        units.value = '5'; units.dispatchEvent(new w.Event('input', { bubbles: true }));
+        units.dispatchEvent(new w.Event('change', { bubbles: true }));
         ok('S43 5格宽度保留行高并关闭比例锁', w.App.state.width === 1280 && w.App.state.rowHeight === 256 && !w.App.state.aspectLocked);
-        ok('S43 快捷宽度值即时同步且不重建', units.value === '5' && body === $('#right-panel-body').firstChild);
+        ok('S43 滑条和像素宽度即时同步且控件保留', units.value === '5' && pixels.value === '1280' && body === $('#right-panel-body').firstChild);
+        w.App.undo();
+        var restored = w.App.state.aspectLocked && w.App.state.width === widthBeforeDrag && pixels.value === String(widthBeforeDrag);
+        w.App.redo();
+        ok('S43 拖动滑条一次撤销，多步改值一并恢复', restored && w.App.state.width === 1280);
         w.App.update(function (st) { return S.updateSignSettings(st, { rowHeight: 128 }); });
         ok('S43 改行高仍保持5格宽度', w.App.state.width === 1280 && units.value === '5');
-        w.App.update(function (st) { return S.updateSignSettings(st, { aspectLocked: false, width: 777 }); });
-        ok('S43 自定义宽度不会被快捷值覆盖', w.App.state.width === 777 && units.value === 'custom');
+        pixels.value = '777'; pixels.dispatchEvent(new w.Event('change', { bubbles: true }));
+        ok('S43 精确输入 777 像素，滑条标示自定义宽度', w.App.state.width === 777 && pixels.value === '777' && units.getAttribute('aria-valuetext').includes('777'));
       }
       var frameColor = $('#right-panel-body .color-picker[data-scope="灰框颜色"]');
       ok('S43 灰框颜色可调', !!frameColor);
@@ -1653,8 +1661,8 @@
       var style = d.createElement('style');
       style.textContent = darkRules.map(function (r) { return Array.prototype.map.call(r.cssRules, function (c) { return c.cssText; }).join('\n'); }).join('\n');
       d.head.appendChild(style);
-      ok('S44 深色规则改变面板背景', w.getComputedStyle($('#right-panel')).backgroundColor === 'rgb(30, 35, 43)');
-      ok('S44 输入框采用深色表面', w.getComputedStyle($('#right-panel-body input[type="number"]')).backgroundColor === 'rgb(38, 44, 54)');
+      ok('S44 深色规则将面板改为炭灰', w.getComputedStyle($('#right-panel')).backgroundColor === 'rgb(34, 34, 34)');
+      ok('S44 输入框采用深灰表面', w.getComputedStyle($('#right-panel-body input[type="number"]')).backgroundColor === 'rgb(41, 41, 41)');
       ok('S44 牌面渲染与导出内容不改变', $('#sign-svg').outerHTML === beforeSign && JSON.stringify(w.App.state) === beforeData && w.SignExporters.buildExportSVGString(w.App.state, w.App.measure, {}) === beforeExport && w.getComputedStyle($('#sign-svg')).filter === 'none');
       style.remove();
       ok('S44 移除深色规则后恢复系统界面', w.getComputedStyle($('#right-panel')).backgroundColor === beforeBg);
@@ -1690,8 +1698,8 @@
       w.App.select(null);
       w.App.update(function () { return S.createSign(); });
       ok('S46 新建标识牌默认单行192px、宽8格2048px', w.App.state.rowHeight === 192 && w.App.state.width === 2048 && !w.App.state.aspectLocked);
-      var units = $('#right-panel-body .width-units-select');
-      units.value = '3'; units.dispatchEvent(new w.Event('change', { bubbles: true }));
+      var units = $('#right-panel-body .width-units-slider');
+      units.value = '3'; units.dispatchEvent(new w.Event('input', { bubbles: true }));
       ok('S46 3格=768px，行高仍192px，SVG尺寸与输入一致', w.App.state.width === 768 && w.App.state.rowHeight === 192 && $('#sign-svg').getAttribute('viewBox') === '0 0 768 192');
       typeInto($('#right-panel-body input[aria-label="行高（px）"], #right-panel-body input[min="32"][max="2048"]'), '160');
       ok('S46 改高度不改变3格宽度及快捷值', w.App.state.rowHeight === 160 && w.App.state.width === 768 && units.value === '3');
@@ -1977,12 +1985,12 @@
     function s52_darkAlignmentOptions() {
       var w = W(), d = frame.contentDocument;
       var style = d.createElement('style');
-      style.textContent = ':root { color-scheme:dark; --control-bg:#262c36; --surface-soft:#242a33; --text:#edf1f7; }';
+      style.textContent = ':root { color-scheme:dark; --control-bg:#292929; --surface-soft:#282828; --text:#f1f1f1; }';
       d.head.appendChild(style);
       var options = $$('#element-toolbar [data-align] option, #right-panel-body [data-align] option');
       ok('S52 深色模式浮动栏与右栏选项使用不透明灰底和亮色文字', options.length >= 6 && options.every(function (option) {
         var css = w.getComputedStyle(option);
-        return css.backgroundColor === 'rgb(38, 44, 54)' && css.color === 'rgb(237, 241, 247)';
+        return css.backgroundColor === 'rgb(41, 41, 41)' && css.color === 'rgb(241, 241, 241)';
       }));
       ok('S52 网页界面使用系统字体', w.getComputedStyle(d.body).fontFamily.indexOf('MiSans') === -1);
       style.remove();

@@ -5,20 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>导向标识生成器</title>
-  <link rel="stylesheet" href="style.css?v=be0a3f20ab5a">
+  <link rel="stylesheet" href="style.css?v=742923db24d3">
 </head>
 <body class="editor-page">
-
-  <header class="editor-header">
-    <nav class="editor-navigation" aria-label="切换编辑器">
-      <a href="index.html" aria-current="page">导向标识</a>
-      <a href="platform.html">站台标识</a>
-    </nav>
-    <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
-      <span>给项目加星</span>
-    </a>
-  </header>
 
   <!-- 字体加载指示 -->
   <div id="loading-overlay" hidden>
@@ -42,12 +31,22 @@
 
     <!-- ══ 中栏：SVG 编辑区 ══ -->
     <main id="center-panel">
-      <div id="edit-actions" role="toolbar" aria-label="选择与剪贴板">
-        <button type="button" data-edit-action="select-all" title="全选元素（Ctrl+A）">全选</button>
-        <button type="button" data-edit-action="copy" title="复制选中元素（Ctrl+C）" disabled>复制</button>
-        <button type="button" data-edit-action="cut" title="剪切选中元素（Ctrl+X）" disabled>剪切</button>
-        <button type="button" data-edit-action="paste" title="粘贴元素（Ctrl+V）">粘贴</button>
-        <span id="selection-status" aria-live="polite">Ctrl 单击加选 · Shift 单击范围选择</span>
+      <div class="guide-action-bar">
+        <nav class="editor-navigation" aria-label="切换编辑器">
+          <a href="index.html" aria-current="page">导向标识</a>
+          <a href="platform.html">站台标识</a>
+        </nav>
+        <div id="edit-actions" role="toolbar" aria-label="选择与剪贴板">
+          <button type="button" data-edit-action="select-all" title="全选元素（Ctrl+A）">全选</button>
+          <button type="button" data-edit-action="copy" title="复制选中元素（Ctrl+C）" disabled>复制</button>
+          <button type="button" data-edit-action="cut" title="剪切选中元素（Ctrl+X）" disabled>剪切</button>
+          <button type="button" data-edit-action="paste" title="粘贴元素（Ctrl+V）">粘贴</button>
+          <span id="selection-status" aria-live="polite">Ctrl 单击加选 · Shift 单击范围选择</span>
+        </div>
+        <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
+          <span>给项目加星</span>
+        </a>
       </div>
       <div id="canvas-scroll">
         <div id="canvas-area">
@@ -100,8 +99,8 @@
   <script src="js/presets.js?v=public-e3eeae2acdc5"></script>
   <script src="js/storage.js?v=public-85ae228675bd"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
-  <script src="js/color-picker.js?v=public-f48d3fe82ac8"></script>
-  <script src="js/panel.js?v=6300f85f8599"></script>
+  <script src="js/color-picker.js?v=01972a3cfee5"></script>
+  <script src="js/panel.js?v=0a9997244028"></script>
   <script src="js/interact.js?v=f2b231cf5417"></script>
   <script src="js/main.js?v=7feb40836fa2"></script>
 </body>

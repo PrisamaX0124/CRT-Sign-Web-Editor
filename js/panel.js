@@ -666,39 +666,46 @@
       App.update(function (st) { return State.updateSignSettings(st, { widthMode: v }); });
     })));
 
-    var unitsSelect = h('select', { class: 'width-units-select' });
-    unitsSelect.appendChild(h('option', { value: 'custom', text: '自定义像素宽度' }));
-    for (var unit = 1; unit <= 15; unit++) {
-      unitsSelect.appendChild(h('option', { value: String(unit), text: String(unit) }));
-    }
-    unitsSelect.addEventListener('change', function () {
-      if (unitsSelect.value === 'custom') { widthInput.focus(); return; }
-      App.update(function (st) { return State.setSignWidthUnits(st, Number(unitsSelect.value)); });
+    var widthSlider = h('input', { type: 'range', class: 'width-units-slider', min: '1', max: '15', step: '1',
+      'aria-label': '标识牌宽度（按格调整）' });
+    widthSlider.addEventListener('input', function () {
+      App.update(function (state) { return State.setSignWidthUnits(state, widthSlider.valueAsNumber); },
+        'sign-width-slider', { continuous: true });
     });
-    function paintUnits() {
-      unitsSelect.value = String(State.signWidthUnits(App.state) || 'custom');
-    }
-    paintUnits();
-    syncFns.push(paintUnits);
-    var unitsField = field('标识牌宽度（1–15 格）', unitsSelect, '每格 256 px');
-    function paintUnitsField() { unitsField.hidden = App.state.widthMode !== 'fixed'; }
-    paintUnitsField();
-    syncFns.push(paintUnitsField);
-    root.appendChild(unitsField);
-
-    var widthInput = numberInput({ class: 'sign-width-input', min: '32', max: '32768', step: '16' }, function (v) {
+    widthSlider.addEventListener('change', App.breakHistoryGroup);
+    widthSlider.addEventListener('blur', App.breakHistoryGroup);
+    var widthId = 'panel-field-' + (++fieldId);
+    var widthInput = numberInput({ id: widthId, class: 'sign-width-input', min: '32', max: '32768', step: '1',
+      'aria-label': '标识牌宽度（像素）' }, function (v) {
       App.update(function (st) {
         return State.updateSignSettings(st, { width: Math.round(Core.clamp(v, 32, 32768)) });
       });
+      widthInput.value = App.state.width;
     });
-    widthInput.value = s.width;
-    bindSync(widthInput, function () { return App.state.width; });
-    var widthField = field('固定宽度（px）', widthInput);
-    syncFns.push(function () {
-      widthField.style.display = App.state.widthMode === 'fixed' ? '' : 'none';
-    });
-    widthField.style.display = s.widthMode === 'fixed' ? '' : 'none';
-    root.appendChild(widthField);
+    widthInput.addEventListener('blur', function () { widthInput.value = App.state.width; });
+    var gridValue = h('output', { class: 'size-range-value' });
+    var widthControls = h('div', { class: 'field size-field' }, [
+      h('div', { class: 'size-heading' }, [
+        h('label', { for: widthId, text: '标识牌宽度' }),
+        h('div', { class: 'size-number' }, [widthInput, h('span', { 'aria-hidden': 'true', text: 'px' })]),
+      ]),
+      widthSlider,
+      h('div', { class: 'size-range-labels' }, [
+        h('span', { text: '1 格' }), gridValue, h('span', { text: '15 格' }),
+      ]),
+    ]);
+    function syncWidth() {
+      var state = App.state;
+      var grids = State.signWidthUnits(state);
+      widthControls.hidden = state.widthMode !== 'fixed';
+      widthSlider.value = Math.round(state.width / Core.SIGN_GRID_SIZE);
+      widthSlider.setAttribute('aria-valuetext', (grids ? grids + ' 格，' : '自定义，') + state.width + ' 像素');
+      gridValue.textContent = grids ? grids + ' 格' : '自定义';
+      if (document.activeElement !== widthInput) widthInput.value = state.width;
+    }
+    syncWidth();
+    syncFns.push(syncWidth);
+    root.appendChild(widthControls);
 
     var dynamicHint = h('div', { class: 'hint-text', text: '' });
     syncFns.push(function () {

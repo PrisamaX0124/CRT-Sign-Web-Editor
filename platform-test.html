@@ -148,7 +148,7 @@
       var ref=verticalProject(),legacy=JSON.parse(S.serialize(ref));legacy.sizes.vertical={width:768,height:2048};legacy.verticalHeightAuto=true;legacy.verticalWidthAuto=false;
       A.update(function(){return S.deserialize(JSON.stringify(legacy));});A.deselect();
       assert(A.state.sizes.vertical.width===384&&A.state.sizes.vertical.height===768,'旧自动高度应迁移为默认3格高');
-      assert($('output-width').readOnly&&!$('output-height').readOnly&&$('size-summary').hidden,'固定宽度，高度可手动修改');
+      assert($('output-width').readOnly&&!$('output-height').readOnly&&$('hanging-length').hidden,'固定宽度，高度可手动修改');
       $('add-station').click();assert(A.state.stations.length===12&&A.state.sizes.vertical.height===768);$('undo').click();assert(A.state.stations.length===11&&A.state.sizes.vertical.height===768);$('redo').click();assert(A.state.stations.length===12&&A.state.sizes.vertical.height===768);$('undo').click();A.deselect();
       input('output-height','1024','change');assert(A.state.sizes.vertical.height===1024&&A.scene.output.height===1024,'手动固定高度须用于预览');assert(S.deserialize(S.serialize(A.state)).sizes.vertical.height===1024);$('undo').focus();$('undo').click();assert(A.state.sizes.vertical.height===768&&$('output-height').value==='768','点击撤销应恢复固定高度和控件回显');
       function choose(v){input('vertical-variant',v,'change');}
@@ -357,8 +357,8 @@
       });restore();
     });
     await test('共用导向标识调色板：收起/展开、城市联动、HEX焦点不跳、换乘色不回滚', function () {
-      restore();A.deselect();var picker=$('line-color-picker').querySelector('.color-picker'),details=picker.querySelector('details');
-      assert(picker&&details&&!details.open);picker.querySelector('.cp-current').click();assert(details.open);
+      restore();A.deselect();var picker=$('line-color-picker').querySelector('.color-picker'),palette=picker.querySelector('.cp-options');
+      assert(picker&&palette&&palette.hidden);picker.querySelector('.cp-current').click();assert(!palette.hidden);
       var city=picker.querySelector('.cp-city-select');city.value='chengdu';city.dispatchEvent(new w.Event('change',{bubbles:true}));assert(A.state.city==='chengdu');
       assert(Array.from(d.querySelectorAll('.cp-city-select')).every(function(el){return el.value==='chengdu';}),'所有色板城市联动');
       var hex=$('line-color-hex');input('line-color-hex','123456');assert(A.state.color==='#123456'&&hex.value==='123456'&&d.activeElement===hex,'HEX输入被重建或规整化');
@@ -401,8 +401,8 @@
 
     });
     await test('单轨全线默认5格、地铁默认3格，旧项目尺寸与底纹开关迁移', function () {
-      restore(); A.deselect(); input('hanging-height','256','change'); assert(A.state.sizes.route.width===1280 && $('hanging-length').value==='5'); assert(A.scene.output.height===256);
-      input('hanging-height','192','change'); assert(A.state.sizes.route.width===768 && $('hanging-length').value==='3');
+      restore(); A.deselect(); input('hanging-height','256'); assert(A.state.sizes.route.width===1280 && $('hanging-length').value==='5'); assert(A.scene.output.height===256);
+      input('hanging-height','192'); assert(A.state.sizes.route.width===768 && $('hanging-length').value==='3');
       var legacy=S.create(); legacy.version=2; legacy.sizes.route={width:768,height:256}; assert(S.deserialize(JSON.stringify(legacy)).sizes.route.width===1280);
       assert(!$('vertical-texture')); var scene=R.metrics(S.settings(A.state,{mode:'vertical',texture:true}),A.measure); assert(!scene.nodes.some(function(n){return n.attrs.opacity===.12;}));
     });
@@ -419,9 +419,9 @@
     });
     await test('吊板格数与地铁 / 单轨短边按像素直排，竖版尺寸独立', function () {
       restore(); A.deselect(); assert(A.scene.width === 768 && A.scene.height === 192); assert($('hanging-length').value === '3');
-      input('hanging-length', '4', 'change'); input('hanging-height', '256', 'change'); assert(A.state.sizes.route.width === 1024 && A.state.sizes.route.height === 256); assert(A.scene.frame.scale === 1 && A.scene.frame.y === 0);
+      input('hanging-length', '4'); input('hanging-height', '256'); assert(A.state.sizes.route.width === 1024 && A.state.sizes.route.height === 256); assert(A.scene.frame.scale === 1 && A.scene.frame.y === 0);
       d.querySelector('[data-mode="station"]').click(); assert(A.state.sizes.station.width === 512 && A.state.sizes.station.height === 256); assert($('hanging-length').value === '2'); assert(A.state.sizes.vertical.height === original.sizes.vertical.height);
-      input('hanging-height', '192', 'change'); assert(A.scene.output.height === 192);
+      input('hanging-height', '192'); assert(A.scene.output.height === 192);
     });
     await test('真实字体双语墨区留边与圆标数字居中，双线换乘沿斜线错开', function () {
       restore(); A.update(function (state) { return S.settings(state, { mode: 'station' }); });

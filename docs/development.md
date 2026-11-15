@@ -23,6 +23,6 @@
 | [platform-test.html](../platform-test.html) | 三种站台版式、首末站、换乘、底纹、选框、自动保存和导出 |
 | [test/editor-ui.html](../test/editor-ui.html) | 导向标识的属性面板、批量设置和窄屏操作 |
 | [test/platform-panel.html](../test/platform-panel.html) | 站台面板分组、现场编辑、单选、多选、返回和手机滚动 |
-| [test/editor-motion.html](../test/editor-motion.html) | 两页的切换入口、仓库链接、工具栏进出、返回动画和减少动态效果设置 |
+| [test/editor-motion.html](../test/editor-motion.html) | 两页的切换入口、黑白灰界面、工具栏进出、返回动画和减少动态效果设置 |
 
 请用测试地址或独立的浏览器窗口运行浏览器用例，测试会向同源的浏览器存储写入数据。

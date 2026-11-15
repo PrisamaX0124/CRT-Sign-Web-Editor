@@ -24,7 +24,7 @@
       var next = fn(App.state);
       if (JSON.stringify(next) === JSON.stringify(App.state)) return;
       var now = Date.now();
-      if (!(key && key === groupKey && now - groupTime < 800)) {
+      if (!(key && key === groupKey && ((options && options.continuous) || now - groupTime < 800))) {
         undo.push(snapshot()); if (undo.length > HISTORY_LIMIT) undo.shift();
       }
       groupKey = key || null; groupTime = now; redo = [];
@@ -357,22 +357,30 @@
   function syncSizeSettings(state, size) {
     var hanging = state.mode !== 'vertical';
     var widthInGrids = size.width / Core.SIGN_GRID_SIZE;
-    var length = Number.isInteger(widthInGrids) && widthInGrids >= 1 && widthInGrids <= 15 ? widthInGrids : 'custom';
-    var height = size.height === 192 || size.height === 256 ? size.height : 'custom';
+    var standardLength = Number.isInteger(widthInGrids) && widthInGrids >= 1 && widthInGrids <= 15;
+    var standardHeight = size.height === 192 || size.height === 256;
     if (layoutMode !== state.mode) {
-      $('advanced-layout').open = !hanging || length === 'custom' || height === 'custom';
-      $('size-summary').hidden = !hanging;
+      $('output-width-label').textContent = hanging ? '吊板长度' : '固定宽度';
+      $('output-height-label').textContent = hanging ? '吊板短边' : '高度';
+      ['hanging-length', 'hanging-height', 'hanging-length-labels', 'hanging-height-labels'].forEach(function (id) {
+        $(id).hidden = !hanging;
+      });
       $('travel-direction').options[0].textContent = hanging ? '前往列表首站 ←' : '前往列表首站 ↓';
       $('travel-direction').options[1].textContent = hanging ? '前往列表末站 →' : '前往列表末站 ↑';
       layoutMode = state.mode;
     }
-    $('hanging-size-controls').hidden = !hanging;
     $('output-width').readOnly = !hanging;
     $('vertical-layout-controls').hidden = hanging;
     $('swap-vertical-columns').hidden = state.verticalVariant !== 'double';
     $('travel-direction-label').textContent = !hanging && state.verticalVariant === 'double' ? '基准行车方向（与吊板共用）' : '列车行驶方向';
-    value('hanging-length', length);
-    value('hanging-height', height);
+    var lengthDescription = standardLength ? widthInGrids + ' 格' : '自定义';
+    var heightDescription = standardHeight ? (size.height === 192 ? '地铁' : '单轨') : '自定义';
+    $('hanging-length').value = Math.round(widthInGrids);
+    $('hanging-height').value = size.height;
+    $('hanging-length').setAttribute('aria-valuetext', lengthDescription + '，' + size.width + ' 像素');
+    $('hanging-height').setAttribute('aria-valuetext', heightDescription + '，' + size.height + ' 像素');
+    $('hanging-length-value').textContent = lengthDescription;
+    $('hanging-height-value').textContent = standardHeight ? '' : heightDescription;
     value('vertical-variant', state.verticalVariant);
     value('output-width', size.width);
     value('output-height', size.height);
@@ -473,8 +481,13 @@
   $('swap-vertical-columns').addEventListener('click',function(){App.update(S.swapVerticalColumns);});
   $('reverse-stations').addEventListener('click',function(){App.update(S.reverseStations);});
   $('font-scale').addEventListener('input', function (event) { set({ fontScale: Number(event.target.value) }, 'font-scale'); });
-  $('hanging-length').addEventListener('change', function (event) { if (event.target.value !== 'custom') App.update(function (state) { return S.setHangingLength(state, Number(event.target.value)); }); else { $('advanced-layout').open = true; $('output-width').focus(); } });
-  $('hanging-height').addEventListener('change', function (event) { if (event.target.value !== 'custom') App.update(function (state) { return S.setHangingHeight(state, Number(event.target.value)); }); else { $('advanced-layout').open = true; $('output-height').focus(); } });
+  [['hanging-length', S.setHangingLength], ['hanging-height', S.setHangingHeight]].forEach(function (setting) {
+    var slider = $(setting[0]);
+    slider.addEventListener('input', function () {
+      App.update(function (state) { return setting[1](state, slider.valueAsNumber); }, slider.id, { continuous: true });
+    });
+    slider.addEventListener('change', function () { groupKey = null; });
+  });
   document.querySelectorAll('[data-nudge-x]').forEach(function (button) {
     button.addEventListener('click', function () {
       var keys = selectedVisibleKeys();

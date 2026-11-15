@@ -738,6 +738,31 @@
       fixture.removeChild(picker);
     });
 
+    test('颜色选择器：同一行只有一个色块入口，加号在色板末尾', function () {
+      var applied;
+      var picker = SignPanel.buildColorPicker({
+        value: '#FFFFFF', onChange: function (color) { applied = color; },
+      });
+      fixture.appendChild(picker);
+      try {
+        var toggle = picker.querySelector('.cp-current');
+        var palette = picker.querySelector('.cp-options');
+        assert(palette.hidden && !picker.querySelector('summary'), '色板由当前色块展开');
+        assert(!picker.querySelector('.cp-row input[type="color"]'), '输入框右边应没有第二个色块');
+        toggle.click();
+        assert(!palette.hidden && toggle.getAttribute('aria-expanded') === 'true');
+        var plus = palette.querySelector('.cp-swatches').lastElementChild;
+        var customColor = plus.querySelector('input[type="color"]');
+        assert(customColor && plus.textContent.trim() === '+', '最后一项应是带加号的自定义颜色');
+        customColor.value = '#284563';
+        customColor.dispatchEvent(new Event('input', { bubbles: true }));
+        assertEqual(applied, '#284563', '自定义颜色可提交给标识牌');
+        assertEqual(picker.querySelector('.hex-input').value, '#284563', '色值同步回显');
+        toggle.click();
+        assert(palette.hidden && toggle.getAttribute('aria-expanded') === 'false');
+      } finally { picker.remove(); }
+    });
+
     test('颜色选择器：城市下拉按城市重建色板（潘通2935C蓝合并）', function () {
       var got = { v: null };
       var picker = SignPanel.buildColorPicker({
