@@ -17,6 +17,12 @@
 
 两个编辑页面均已适配移动端，并支持电脑端快捷键操作。中英文字体主要使用 MiSans，数字和线路号使用 Frutiger。
 
+
+<img width="1280" height="675" alt="image" src="https://github.com/user-attachments/assets/662173bf-2bb4-4377-b422-54499e59859e" />
+
+*（↑ 在 GrandMaster Craft 旧世界轨道交通 4/10号线 上云岭站中的实际使用效果）*
+
+
 ## 如何使用？
 
 1. 打开对应页面，添加元素或站点，选中后在右侧修改内容。站台页也可以批量填写站名和换乘信息。
