@@ -119,7 +119,7 @@ test('版式 A 双线路共用箭头，编号用导向标识的常规字重，�
   assert.equal(state.board(state.settings(single, { arrangement: '2' })).lines[1].name, '9');
 });
 
-test('版式 B 的双线路、单线路和两种三线路分组各有正确的文字、色带和箭头', () => {
+test('版式 B 的四种分组都把本组箭头和文字放在最后一条色带下方', () => {
   const separate = state.settings(initial, { mode: 'separate' });
   for (const [arrangement, labels, groups] of [
     ['1', ['1'], ['upper']],
@@ -137,28 +137,47 @@ test('版式 B 的双线路、单线路和两种三线路分组各有正确的�
     assert.equal(scene.elements.filter(element => element.kind === 'line').length, groups.length);
     assert.equal(scene.elements.filter(element => element.kind === 'label').length, labels.length);
     assert.deepEqual(Array.from(arrows, arrow => arrow.attributes['data-direction']), labels.length === 2 ? ['left', 'right'] : ['left']);
-    if (groups.length < 3) assert.ok(numbers[0].bounds.top + numbers[0].bounds.height < lines[0].y);
     assert.ok(arrows[0].bounds.left < numbers[0].bounds.left);
     if (labels.length === 2) {
-      const last = lines.at(-1);
-      assert.ok(numbers[1].bounds.top > last.y + last.height);
       assert.ok(arrows[1].bounds.left > numbers[1].bounds.left + numbers[1].bounds.width);
       assert.equal(numbers[0].attributes['font-size'], numbers[1].attributes['font-size']);
     }
-    if (groups.length === 3) {
-      const upperBands = lines.filter(line => line['data-group'] === 'upper');
-      const lowerBands = lines.filter(line => line['data-group'] === 'lower');
-      for (const [index, bands] of [upperBands, lowerBands].entries()) {
-        const last = bands.at(-1);
-        for (const item of [numbers[index], arrows[index]]) {
-          assert.ok(item.bounds.top > last.y + last.height, '箭头和文字应在本组色带下方');
-          const nextBand = index === 0 ? lowerBands[0].y : 1024;
-          assert.ok(item.bounds.top + item.bounds.height < nextBand, '箭头和文字不可伸进下一组');
-        }
-      }
+    const lowerBand = lines.find(line => line['data-group'] === 'lower');
+    for (const { kind, identifier, bounds } of scene.elements) {
+      if (kind === 'line') continue;
+      const lastBand = lines.filter(line => line['data-group'] === identifier).at(-1);
+      const bottom = identifier === 'upper' && lowerBand ? lowerBand.y : 1024;
+      assert.ok(bounds.top > lastBand.y + lastBand.height, arrangement + ' 的箭头和文字应在本组色带下方');
+      assert.ok(bounds.top + bounds.height < bottom, arrangement + ' 的箭头和文字应留在本组范围内');
+    }
+    if (labels.length === 2) {
       const reversed = state.changeDirection(state.changeDirection(project, 'upper', 'right'), 'lower', 'left');
       const moved = content(render.layout(reversed, measure), 'direction-arrow');
       assert.deepEqual(moved.map(node => node.bounds.left), arrows.map(node => node.bounds.left));
+    }
+  }
+});
+
+test('只在单独显示数字 1 时加宽它与号线说明的间距', () => {
+  for (const [mode, arrangement] of [
+    ['guidance', '1'], ['guidance', '2'], ['separate', '1'], ['separate', '1+1'], ['separate', '1+2'], ['separate', '2+1'],
+  ]) {
+    const project = state.settings(initial, { mode, arrangement });
+    for (const name of ['1', '2', '11']) {
+      const scene = render.layout(state.changeLine(project, 'first', { name }), measure);
+      for (const number of content(scene, 'line-number')) {
+        const words = scene.nodes.filter(node => node.element?.key === number.element.key);
+        const captions = words.filter(node => node.attributes['data-role'].startsWith('label-'));
+        const suffix = captions.filter(node => ['号线', 'Line'].includes(node.text));
+        const prefix = captions.filter(node => ['换乘', 'Transfer'].includes(node.text));
+        const prefixRight = Math.max(...prefix.map(node => node.bounds.left + node.bounds.width));
+        const suffixLeft = Math.min(...suffix.map(node => node.bounds.left));
+        const scale = number.attributes['font-size'] / 116;
+        const rightGap = suffixLeft - number.bounds.left - number.bounds.width;
+        assert.ok(Math.abs(number.bounds.left - prefixRight - 8 * scale) < 1e-8);
+        assert.ok(Math.abs(rightGap - (number.text === '1' ? 12 : 8) * scale) < 1e-8,
+          number.text + ' 右侧的间距不正确');
+      }
     }
   }
 });

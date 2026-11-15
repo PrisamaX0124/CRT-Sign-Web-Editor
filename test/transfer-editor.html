@@ -225,6 +225,24 @@
       assert(drawing('direction-arrow')[1].dataset.direction === 'right-down', '版式 A 的撤销影响了版式 B');
     });
 
+    await test('版式 B 的单线路和 1 + 1 中，箭头和文字选框都在对应色带下方', () => {
+      mode('separate');
+      for (const value of ['1', '1+1']) {
+        arrangement(value);
+        const bands = drawing('line-band');
+        assert(bands.length === (value === '1' ? 1 : 2), '色带数量不正确');
+        bands.forEach((band, index) => {
+          const bounds = band.getBBox();
+          const nextTop = bands[index + 1]?.getBBox().y ?? 1024;
+          for (const kind of ['arrow', 'label']) {
+            const selection = element('[data-transfer-element="' + kind + ':' + band.dataset.group + '"]').getBBox();
+            assert(selection.y > bounds.y + bounds.height && selection.y + selection.height < nextTop,
+              value + ' 的箭头和文字选框应位于本组色带下方，并留在本组范围内');
+          }
+        });
+      }
+    });
+
     await test('版式 B 的两种三线路分组都有两支箭头和三条独立色带', () => {
       for (const [value, texts, groups] of [
         ['1+2', '1,10/6', 'upper,lower,lower'],
@@ -458,9 +476,31 @@
       }
     });
 
+    await test('用实际字体核对数字 1 到「号线」的间距，其他编号沿用原间距', () => {
+      const measure = editor.App.measure;
+      function edges(node) {
+        const size = Number(node.getAttribute('font-size'));
+        const x = Number(node.getAttribute('x'));
+        const ink = measure.ink(node.textContent, node.getAttribute('font-family'), Number(node.getAttribute('font-weight')), size);
+        return { left: x - ink.abl, right: x + ink.abr };
+      }
+      for (const [name, value] of [
+        ['guidance', '1'], ['guidance', '2'], ['separate', '1'], ['separate', '1+1'], ['separate', '1+2'], ['separate', '2+1'],
+      ]) {
+        mode(name);
+        arrangement(value);
+        const suffixes = drawing('label-chinese').filter(node => node.textContent === '号线');
+        drawing('line-number').forEach((number, index) => {
+          const scale = Number(number.getAttribute('font-size')) / 116;
+          const gap = edges(suffixes[index]).left - edges(number).right;
+          assert(Math.abs(gap - (number.textContent === '1' ? 12 : 8) * scale) < 0.01, value + ' 中 ' + number.textContent + ' 右侧间距不正确');
+        });
+      }
+    });
+
     await test('用实际字体检查分组文字的墨区与色带、箭头和牌边的间距', () => {
       const measure = editor.App.measure;
-      for (const [name, value] of [['guidance', '2'], ['separate', '1+2'], ['separate', '2+1']]) {
+      for (const [name, value] of [['guidance', '2'], ['separate', '1'], ['separate', '1+1'], ['separate', '1+2'], ['separate', '2+1']]) {
         mode(name);
         arrangement(value);
         for (const lineName of ['环线', '108']) {

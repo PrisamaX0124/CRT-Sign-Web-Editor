@@ -34,11 +34,14 @@
     const englishAscent = Math.max(...pairs.map(pair => pair.english.ascent));
     const englishDescent = Math.max(...pairs.map(pair => pair.english.descent));
     const englishBaseline = Math.max(chineseHeight + 10 * scale + englishAscent, (name?.height || 0) - englishDescent);
-    const columns = pairs.map(({ chinese, english }) => ({
+    const columnGap = 8 * scale;
+    const suffixGap = columnGap + (names === '1' ? 4 * scale : 0);
+    const columns = pairs.map(({ chinese, english }, index) => ({
+      gapBefore: index === 0 ? 0 : suffixGap,
       width: Math.max(chinese.width, english.width),
       text: [{ ...chinese, top: 0 }, { ...english, top: englishBaseline - english.ascent }],
     }));
-    if (name) columns.splice(1, 0, { width: name.width, text: [{ ...name, top: 0 }] });
+    if (name) columns.splice(1, 0, { gapBefore: columnGap, width: name.width, text: [{ ...name, top: 0 }] });
     return { columns, height: englishBaseline + englishDescent };
   }
 
@@ -59,11 +62,10 @@
 
   function measureLabel(group, measure, scale, arrowBesideText) {
     const { columns, height: textHeight } = label(group.lines, measure, scale);
-    const gap = 8 * scale;
-    const width = columns.reduce((total, column) => total + column.width, 0) + gap * (columns.length - 1);
+    const width = columns.reduce((total, column) => total + column.gapBefore + column.width, 0);
     const arrowSize = arrowBesideText ? 78 * scale : 0;
     const arrowGap = arrowBesideText ? 14 * scale : 0;
-    return { columns, gap, width, textHeight, arrowSize, arrowGap };
+    return { columns, width, textHeight, arrowSize, arrowGap };
   }
 
   function fitLabel(group, measure, height, arrowBesideText) {
@@ -73,7 +75,7 @@
   }
 
   function addLabel(nodes, group, measure, center, scale, arrowBesideText = false) {
-    const { columns, gap, width, textHeight, arrowSize, arrowGap } = measureLabel(group, measure, scale, arrowBesideText);
+    const { columns, width, textHeight, arrowSize, arrowGap } = measureLabel(group, measure, scale, arrowBesideText);
     const arrowSpace = arrowSize + arrowGap;
     const arrowFirst = group.arrowPosition === 'left';
     const totalWidth = width + arrowSpace;
@@ -83,6 +85,7 @@
     let columnLeft = left + (arrowFirst ? arrowSpace : 0);
     const element = { key: 'label:' + group.identifier, kind: 'label', identifier: group.identifier };
     for (const column of columns) {
+      columnLeft += column.gapBefore;
       for (const item of column.text) {
         const textTop = center - textHeight / 2 + item.top;
         const textLeft = group.alignment === 'right' ? columnLeft + column.width - item.width : columnLeft;
@@ -98,7 +101,7 @@
           element,
         });
       }
-      columnLeft += column.width + gap;
+      columnLeft += column.width;
     }
     if (arrowSize) {
       const arrowLeft = arrowFirst ? left : left + width + arrowGap;
@@ -113,7 +116,6 @@
     const lineCount = groups.reduce((total, group) => total + group.lines.length, 0);
     const sharedBands = !separate && lineCount === 2;
     const threeLines = lineCount === 3;
-    const firstBandTop = threeLines ? 100 : sharedBands ? 336 : 400;
     const bandHeight = threeLines ? 110 : sharedBands ? 112 : 104;
     const lineGap = threeLines ? 26 : 32;
     const width = state.board(project).width;
@@ -121,9 +123,9 @@
     const nodes = [{ tag: 'rect', attributes: { x: 0, y: 0, width: designWidth, height: designHeight, fill: '#FFFFFF' } }];
     const linePatterns = [];
     const groupEnds = [];
-    let bandTop = firstBandTop;
+    let bandTop = groups.length === 2 ? 100 : sharedBands ? 336 : 400;
     for (const group of groups) {
-      if (threeLines && group.identifier === 'lower') bandTop = 636 - (group.lines.length - 1) * (bandHeight + lineGap);
+      if (group.identifier === 'lower') bandTop = 636 - (group.lines.length - 1) * (bandHeight + lineGap);
       for (const line of group.lines) {
         const attributes = {
           x: 0, y: bandTop, width: designWidth, height: bandHeight,
@@ -141,10 +143,9 @@
       const scales = groups.map(group => fitLabel(group, measure, 128, true));
       const ordinaryNumbers = groups.every(group => group.lines.every(line => /^[0-9]{1,3}$/.test(line.line)));
       const commonScale = ordinaryNumbers ? Math.min(...scales) : Infinity;
+      const labelOffset = threeLines ? 90 : 96;
       groups.forEach((group, index) => {
-        const upper = group.identifier === 'upper';
-        const center = !threeLines && upper ? firstBandTop - 96 : groupEnds[index] + (threeLines ? 90 : 96);
-        addLabel(nodes, group, measure, center, Math.min(scales[index], commonScale), true);
+        addLabel(nodes, group, measure, groupEnds[index] + labelOffset, Math.min(scales[index], commonScale), true);
       });
     } else {
       const group = groups[0];
