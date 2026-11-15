@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>站台标识生成器 · 吊板与线路图</title>
-  <link rel="stylesheet" href="style.css?v=742923db24d3">
-  <link rel="stylesheet" href="platform.css?v=f428e09db355">
+  <link rel="stylesheet" href="style.css?v=02d2bb340c73">
+  <link rel="stylesheet" href="platform.css?v=8fed901c11e0">
 </head>
 <body class="editor-page platform-page">
   <header class="editor-header platform-header">
     <nav class="editor-navigation" aria-label="切换编辑器">
       <a href="index.html">导向标识</a>
+      <a href="index.html?editor=transfer">换乘标识</a>
       <a href="platform.html" aria-current="page">站台标识</a>
     </nav>
     <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
@@ -105,46 +106,7 @@
             <div class="field color-field"><label for="background-color-hex">标识牌背景色</label><div id="background-color-picker"></div></div>
             <div class="field color-field"><label for="muted-color-hex">已驶过区段颜色</label><div id="muted-color-picker"></div></div>
           </section>
-          <section class="panel-section platform-section" id="line-pattern-section">
-            <div class="line-pattern-heading">
-              <h2 class="section-title">线路底纹</h2>
-              <button type="button" id="line-pattern-enabled" class="platform-switch" role="switch" aria-label="启用线路底纹" aria-checked="false" aria-controls="line-pattern-controls"><span aria-hidden="true"></span></button>
-            </div>
-            <div id="line-pattern-controls" hidden>
-              <div class="field">
-                <label for="line-pattern-source">纹样来源</label>
-                <select id="line-pattern-source" aria-describedby="line-pattern-status">
-                  <option value="automatic">按重庆线路匹配</option>
-                  <optgroup label="内置纹样" id="line-pattern-built-in"></optgroup>
-                  <option value="custom" id="line-pattern-custom" disabled>自定义图片</option>
-                </select>
-                <small id="line-pattern-status" role="status"></small>
-              </div>
-              <div id="line-pattern-values" hidden>
-                <div class="field">
-                  <label for="line-pattern-size">大小 <output id="line-pattern-size-value" for="line-pattern-size"></output></label>
-                  <div class="line-pattern-adjustment">
-                    <input id="line-pattern-size" type="range" min="50" max="200">
-                    <button type="button" class="icon-btn" id="line-pattern-reset-size" aria-label="重置底纹大小" title="重置底纹大小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
-                  </div>
-                </div>
-                <div class="field">
-                  <label for="line-pattern-opacity">深浅 <output id="line-pattern-opacity-value" for="line-pattern-opacity"></output></label>
-                  <div class="line-pattern-adjustment">
-                    <input id="line-pattern-opacity" type="range" min="0" max="100">
-                    <button type="button" class="icon-btn" id="line-pattern-reset-opacity" aria-label="重置底纹深浅" title="重置底纹深浅"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
-                  </div>
-                </div>
-              </div>
-              <div class="field-pair">
-                <button type="button" class="btn" id="line-pattern-import" aria-describedby="line-pattern-file-help">上传图片</button>
-                <button type="button" class="btn" id="line-pattern-clear" hidden>移除图片</button>
-              </div>
-              <input id="line-pattern-file" type="file" accept=".png,.svg,image/png,image/svg+xml" hidden>
-              <p class="field-help" id="line-pattern-file-help">支持 .png 和 .svg 图片。透明处显示线路底色。</p>
-              <p class="field-help" id="line-pattern-credit" hidden>内置纹样改编自 <a href="https://hachiiiiiiii.co/" target="_blank" rel="noopener">Hachi</a>，按<a href="https://creativecommons.org/licenses/by-nc/4.0/deed.zh-hans" target="_blank" rel="noopener">署名与非商业性使用许可</a>提供。</p>
-            </div>
-          </section>
+          <section class="panel-section platform-section" id="line-pattern-section"></section>
           <section class="panel-section platform-section">
             <h2 class="section-title">导出</h2>
             <div class="field"><label for="png-scale">PNG 图片尺寸</label><select id="png-scale"><option value="1">原尺寸（1 倍）</option><option value="2">2 倍尺寸</option><option value="4">4 倍尺寸</option></select></div>
@@ -228,8 +190,8 @@
   <script src="js/platform/render.js?v=public-1a8db166e6e2"></script>
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
   <script src="js/platform/clipboard.js?v=public-6cb6459bfe88"></script>
-  <script src="assets/platform-patterns.js?v=public-1d04b66c025a"></script>
-  <script src="js/platform/patterns.js?v=public-8030a731d7c1"></script>
-  <script src="js/platform/main.js?v=df534e7b9a61"></script>
+  <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
+  <script src="js/platform/patterns.js?v=05b46d9c241d"></script>
+  <script src="js/platform/main.js?v=46e1c0e85d05"></script>
 </body>
 </html>

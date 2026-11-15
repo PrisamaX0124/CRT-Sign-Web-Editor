@@ -181,11 +181,28 @@ input, select {
   outline: 2px solid var(--selection);
   outline-offset: 2px;
 }
+.editor-header .mode-tabs { grid-area: 1 / 2; }
+.mode-tabs { display: flex; padding: 3px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; gap: 3px; }
+.mode-tabs button { padding: 7px 12px; border-radius: 5px; color: var(--text-dim); white-space: nowrap; }
+.mode-tabs button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.mode-tabs[hidden], #app[hidden] { display: none; }
 input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
-@media (max-width: 768px) {
+@media (max-width: 860px) {
   .editor-header { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 7px 10px; }
   .editor-repository { grid-column: 2; }
   .editor-navigation a, .editor-repository { padding-inline: 9px; }
+  .editor-header .mode-tabs { grid-area: 2 / 1 / 3 / -1; justify-self: center; }
+}
+@media (max-width: 768px) {
+  .mode-tabs button { font-size: 12px; }
+}
+@media (max-width: 365px) {
+  .editor-navigation a { padding-inline: 5px; font-size: 12px; }
+  .editor-repository { padding-inline: 7px; }
+  .editor-navigation, .editor-header { gap: 4px; }
+}
+@media (max-width: 305px) {
+  .editor-repository span { display: none; }
 }
 
 /* ─── 三栏布局 ─── */
@@ -1284,29 +1301,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* ─── 属性面板：内容、排版、颜色分组 ─── */
 .guide-action-bar {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
   flex: none;
-  gap: 5px 12px;
   padding: 5px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--panel-bg);
 }
-.guide-action-bar .editor-navigation a { min-height: 29px; padding-inline: 9px; font-size: 12px; }
-.guide-action-bar .editor-repository { min-height: 37px; padding-inline: 8px; }
-.guide-action-bar .editor-repository svg { width: 16px; height: 16px; }
-#edit-actions { display: flex; grid-area: 1 / 2; align-items: center; flex-wrap: wrap; gap: 5px; }
-@container (max-width: 520px) {
-  .guide-action-bar { grid-template-columns: minmax(0, 1fr) auto; }
-  .guide-action-bar .editor-repository { grid-column: 2; }
-  #edit-actions { grid-area: 2 / 1 / 3 / -1; }
-}
-@container (max-width: 290px) {
-  .guide-action-bar { gap: 4px 5px; padding-inline: 6px; }
-  .guide-action-bar .editor-navigation a { padding-inline: 5px; }
-  .guide-action-bar .editor-repository { gap: 5px; padding-inline: 6px; }
-}
+#edit-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 #edit-actions button { padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--control-bg); font-size: 12px; }
 #edit-actions button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 #edit-actions button:disabled { opacity: .4; cursor: default; }

@@ -101,12 +101,11 @@
           await repaint(window);
           const navigation = document.querySelector('.editor-navigation');
           const current = navigation?.querySelector('[aria-current="page"]');
-          const other = navigation?.querySelector('a:not([aria-current])');
+          const other = navigation?.querySelector('a[href="' + editor.otherPath + '"]');
           const repository = document.querySelector('.editor-repository');
-          if (editor.path === 'index.html') {
-            assert(!document.querySelector('.editor-header') && navigation?.closest('#center-panel') && repository?.closest('#center-panel'),
-              '导向页入口应放在现有编辑区的工具栏内');
-          }
+          assert(navigation?.closest('.editor-header') && repository?.closest('.editor-header'),
+            '编辑器入口和仓库链接应放在页眉');
+          assert(navigation.querySelector('a[href="index.html?editor=transfer"]'), '页眉缺少换乘标识入口');
           assert(current?.getAttribute('href') === editor.path, '当前页应有明确标记');
           assert(other?.getAttribute('href') === editor.otherPath, '另一个编辑器应可直接打开');
           assert(repository?.host === 'github.com' && repository.pathname === '/PrisamaX0124/CRT-Sign-Web-Editor', '仓库链接不正确');

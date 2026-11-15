@@ -171,6 +171,7 @@
   }
 
   function boot() {
+    if (document.getElementById('app').hidden) return;
     showLoading('正在检查编辑器实例…');
 
     SignStorage.setupInstanceGuard().then(function (proceed) {

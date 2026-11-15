@@ -94,7 +94,8 @@ test('自动匹配重庆线路，未知线路留纯色，手动选择可跨城�
   assert.equal(sceneFor({ source: 'automatic' }, { line: '1', city: 'shanghai' }).patterns, undefined);
   const normal = sceneFor({ source: 'line-1' }, { city: 'shanghai' }).patterns;
   const alternate = sceneFor({ source: 'line-1-alternate' }, { city: 'shanghai' }).patterns;
-  assert.notEqual(normal.design.shapes, alternate.design.shapes);
+  assert.equal(normal.design.shapes, alternate.design.shapes);
+  assert.equal(change({ source: 'line-1-alternate' }).linePattern.source, 'line-1');
 });
 
 test('底纹跟随色带尺寸和方向，本站吊板终到时保持纯灰', () => {
@@ -126,13 +127,16 @@ test('底纹跟随色带尺寸和方向，本站吊板终到时保持纯灰', ()
   }
 });
 
-test('各线路的默认纹样大小和九、十号线色差符合调整值', () => {
+test('各线路使用新的默认底纹大小和深浅，仍可在此基础上调整', () => {
   const expected = {
-    'line-0': 1.35 * 575 / 1724, 'line-1': 128 / 647, 'line-1-alternate': 128 / 647,
+    'line-0': 1.35 * 575 / 1724, 'line-1': 256 / 647, 'line-1-alternate': 256 / 647,
     'line-2': 2.5 * 80.5 / 647, 'line-3': 2 * 128.6 / 647, 'line-4': 2 * 92.1 / 647,
-    'line-5': 161.5 / 647, 'line-6': 2.5 * 185.59 / 647, 'line-9': 3 * 146.5 / 647, 'line-10': 3 * 143 / 647,
+    'line-5': 161.5 / 647, 'line-6': 2.5 * 185.59 / 647, 'line-9': 3 * 146.5 / 647, 'line-10': 0.9 * 3 * 143 / 647,
   };
-  const color = { 'line-9': '#6f8398', 'line-10': '#425d78' };
+  const color = {
+    'line-1': '#7c8fa1', 'line-1-alternate': '#7c8fa1', 'line-5': '#7c8fa1',
+    'line-9': '#405c77', 'line-10': '#2a4967',
+  };
   for (const [source, ratio] of Object.entries(expected)) {
     const scene = sceneFor({ source }, { color: '#123456' });
     const thickness = scene.nodes.find(node => node.attrs['data-role'] === 'passed-line').attrs.height;
@@ -141,17 +145,21 @@ test('各线路的默认纹样大小和九、十号线色差符合调整值', ()
   }
   const lighter = sceneFor({ source: 'line-2', opacity: 40 }, { color: '#123456' });
   assert.equal(lighter.patterns.inkColor, '#33506e');
+  const adjusted = sceneFor({ source: 'automatic', size: 200, opacity: 50 }, { color: '#000000', city: 'chongqing', line: '10' });
+  assert.equal(adjusted.patterns.inkColor, '#0f0f0f');
+  const thickness = adjusted.nodes.find(node => node.attrs['data-role'] === 'passed-line').attrs.height;
+  assert.ok(Object.values(adjusted.patterns.sizes).every(height => Math.abs(height - thickness * expected['line-10'] * 2) < 1e-8));
 });
 
-test('一号线两种纹样的横纵重复间距和线宽一致，裁去图案周围多余空白', () => {
-  const normal = sceneFor({ source: 'line-1' }, {}).patterns.design;
-  const alternate = sceneFor({ source: 'line-1-alternate' }, {}).patterns.design;
-  assert.equal(normal.repeat, alternate.repeat);
-  assert.equal(normal.minimumStroke, alternate.minimumStroke);
-  assert.equal(normal.width, normal.height);
-  assert.equal(alternate.width, alternate.height);
-  assert.ok(normal.width < 100 && alternate.width < 85);
-  assert.ok(normal.left > 0 && alternate.left > 0);
+test('一号线只保留原另一版纹样，自动匹配及旧存档都使用两倍默认大小', () => {
+  const source = sceneFor({ source: 'line-1' }, {});
+  const automatic = sceneFor({ source: 'automatic' }, { city: 'chongqing', line: '1号线' });
+  assert.equal(source.patterns.design.width, 82);
+  assert.equal(source.patterns.design.height, 82);
+  assert.equal(automatic.patterns.design, source.patterns.design);
+  assert.equal(source.patterns.design.repeat, 256 / 647);
+  const half = sceneFor({ source: 'line-1-alternate', size: 50 }, {});
+  assert.equal(Object.values(half.patterns.sizes)[0] * 2, Object.values(source.patterns.sizes)[0]);
 });
 
 test('纵向三种版式的顶栏保持纯色，密集站点和换向时只在线路上铺底纹', () => {

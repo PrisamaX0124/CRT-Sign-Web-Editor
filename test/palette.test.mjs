@@ -66,7 +66,7 @@ function paletteHarness(mobile = false, presets = []) {
     },
     previews: [],
   };
-  ['core', 'state', 'panel'].forEach(name => runInNewContext(
+  ['core', 'state', 'icons', 'directions', 'panel'].forEach(name => runInNewContext(
     readFileSync(new URL('../js/' + name + '.js', import.meta.url), 'utf8'), context));
   context.SignPanel.buildPalette();
   return { root, context };

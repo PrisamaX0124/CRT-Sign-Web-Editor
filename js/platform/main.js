@@ -7,6 +7,7 @@
   var saveTimer, noticeTimer, listSignature = '', transferSignature = '', layoutMode = '', busy = false;
   var previousPanelSelection = '';
   var basePickers=[],transferPickers=[],paletteRevision=-1;
+  var syncLinePattern;
   var names = { route: '全线吊板', station: '本站吊板', vertical: '纵向线路图' };
   function $(id) { return document.getElementById(id); }
   function notice(message) {
@@ -402,7 +403,7 @@
     document.querySelectorAll('[data-mode]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); });
     $('preview-title').textContent = names[state.mode]; $('preview-dimensions').textContent = size.width + ' × ' + size.height + ' px';
     value('line-number', state.line); value('palette-city', state.city); value('travel-direction', state.direction);
-    if (global.PlatformPatterns) global.PlatformPatterns.sync(state);
+    if (syncLinePattern) syncLinePattern(state);
     value('station-code', s.code); value('station-zh', s.zh); value('station-en', s.en);
     value('station-transfers', S.formatTransfers(s.transfers));
     $('add-text-transfer').disabled=s.transfers.length>=6;
@@ -618,7 +619,17 @@
     if(!Core.isPalette(App.state.city))set({city:'chongqing'});else sync();
   });
   global.PlatformClipboard.init(App, notice);
-  if (global.PlatformPatterns) global.PlatformPatterns.init(App, notice);
+  if (global.PlatformPatterns) {
+    syncLinePattern = global.PlatformPatterns.init($('line-pattern-section'), {
+      read: function () { return App.state; },
+      update: function (changes, group) {
+        App.update(function (state) {
+          return S.settings(state, { linePattern: Object.assign({}, state.linePattern, changes) });
+        }, group);
+      },
+      notice: notice,
+    });
+  }
   render();
   App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message); });
 })(window);

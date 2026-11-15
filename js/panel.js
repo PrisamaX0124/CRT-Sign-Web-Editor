@@ -35,22 +35,7 @@
 
   // ─── 左栏：元素选择区 ──────────────────────────────────────
 
-  // 方向指示 = js/icons.js 的 12 种方向图标（替代旧几何箭头元素）；
-  // items 项为类型名（字符串）或 { type, icon, name }（预设属性的图标项）。
-  var DIRECTION_ICONS = [
-    { type: 'icon', icon: 'arrow_up', name: '向上' },
-    { type: 'icon', icon: 'arrow_down', name: '向下' },
-    { type: 'icon', icon: 'arrow_left', name: '向左' },
-    { type: 'icon', icon: 'arrow_right', name: '向右' },
-    { type: 'icon', icon: 'arrow_left_up', name: '左上' },
-    { type: 'icon', icon: 'arrow_right_up', name: '右上' },
-    { type: 'icon', icon: 'arrow_right_down', name: '右下' },
-    { type: 'icon', icon: 'arrow_left_down', name: '左下' },
-    { type: 'icon', icon: 'arrow_ahead_left', name: '前方向左' },
-    { type: 'icon', icon: 'arrow_ahead_right', name: '前方向右' },
-    { type: 'icon', icon: 'arrow_back_left', name: '左行向后' },
-    { type: 'icon', icon: 'arrow_back_right', name: '右行向后' },
-  ];
+  var DIRECTION_ICONS = global.SignDirections.items;
 
   var CATEGORIES = [
     { name: '方向指示', items: DIRECTION_ICONS },

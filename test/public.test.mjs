@@ -35,7 +35,7 @@ test('公开版可启用重庆底纹，纵向顶栏保持纯色', () => {
   const state = S.settings(initial, { mode: 'vertical', line: '10', linePattern: { enabled: true, source: 'automatic' } });
   const scene = R.metrics(state, measure);
   assert.equal(scene.patterns.design.name, '10号线');
-  assert.equal(scene.patterns.design.repeat, 3 * 143 / 647);
+  assert.equal(scene.patterns.design.repeat, 0.9 * 3 * 143 / 647);
   const header = scene.nodes.findIndex(node => node.attrs['data-role'] === 'vertical-header');
   assert.ok(header >= 0);
   assert.equal(header in scene.patterns.sizes, false);

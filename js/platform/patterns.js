@@ -29,7 +29,7 @@
 
   function settings(value) {
     value = value || {};
-    var source = value.source;
+    var source = value.source === 'line-1-alternate' ? 'line-1' : value.source;
     var image = imageSize(value.image) ? value.image : null;
     var validSource = source === 'automatic' || (source === 'custom' && image !== null) ||
       (typeof source === 'string' && Object.hasOwn(designs, source));
@@ -38,8 +38,7 @@
       opacity: limit(value.opacity, 0, 100, defaultOpacity), image: image };
   }
 
-  function chooseDesign(state) {
-    var source = state.linePattern.source;
+  function chooseDesign(state, source) {
     if (source === 'automatic') {
       if (state.city !== 'chongqing') return undefined;
       var line = state.line.normalize('NFKC').trim();
@@ -61,12 +60,9 @@
   function metrics(state, scene) {
     var pattern = state.linePattern;
     if (!pattern || !pattern.enabled || !pattern.opacity) return undefined;
-    var design = chooseDesign(state);
-    var image = pattern.source === 'custom' ? pattern.image : null;
-    if (!design && !image) return undefined;
     var horizontalBand = scene.nodes.find(function (node) { return node.attrs['data-role'] === 'passed-line'; });
     var verticalBand = scene.nodes.find(function (node) { return node.attrs['data-role'] === 'vertical-bar'; });
-    var sizes = {};
+    var thicknesses = {};
     scene.nodes.forEach(function (node, index) {
       var role = node.attrs['data-role'];
       var thickness;
@@ -77,17 +73,28 @@
       } else if (role === 'vertical-active-bar' || role === 'vertical-tail') {
         thickness = verticalBand.attrs.width;
       }
-      if (thickness) {
-        var repeatHeight = design ? thickness * design.repeat : Math.max(thickness * 0.85, 9 / scene.frame.scale);
-        sizes[index] = repeatHeight * pattern.size / 100;
-      }
+      if (thickness) thicknesses[index] = thickness;
+    });
+    return bandMetrics(state, pattern, thicknesses, scene.frame.scale);
+  }
+
+  function bandMetrics(line, pattern, thicknesses, scale) {
+    if (!pattern || !pattern.enabled || !pattern.opacity) return undefined;
+    var design = chooseDesign(line, pattern.source);
+    var image = pattern.source === 'custom' ? pattern.image : null;
+    if (!design && !image) return undefined;
+    var sizes = {};
+    Object.entries(thicknesses).forEach(function (entry) {
+      var index = entry[0], thickness = entry[1];
+      var repeatHeight = design ? thickness * design.repeat : Math.max(thickness * 0.85, 9 / scale);
+      sizes[index] = repeatHeight * pattern.size / 100;
     });
     if (!Object.keys(sizes).length) return undefined;
     var opacity = pattern.opacity / 100;
     // 多数参考图的纹线约加三成白，85% 深浅时沿用这一色差。
-    var color = design ? inkColor(state.color, opacity * (design.contrast || 0.35)) : null;
-    return { sizes: sizes, design: design, image: image, color: state.color, opacity: opacity,
-      inkColor: color, scale: scene.frame.scale };
+    var color = design ? inkColor(line.color, opacity * (design.contrast || 0.35)) : null;
+    return { sizes: sizes, design: design, image: image, color: line.color, opacity: opacity,
+      inkColor: color, scale: scale };
   }
 
   function shape(name, attributes) {
@@ -97,17 +104,17 @@
   }
 
   function draw(vectorImage, patterns) {
-    var definitions = shape('defs', {});
+    var definitions = vectorImage.querySelector('defs') || shape('defs', {});
     var names = new Map();
     var fills = {};
     var design = patterns.design;
     var bounds = design || imageSize(patterns.image);
-    if (design) {
+    if (design && !vectorImage.querySelector('desc')) {
       var description = shape('desc', {});
       description.textContent = credits + ' https://hachiiiiiiii.co/ https://creativecommons.org/licenses/by-nc/4.0/';
       vectorImage.appendChild(description);
     }
-    vectorImage.appendChild(definitions);
+    if (!definitions.parentNode) vectorImage.appendChild(definitions);
     Object.entries(patterns.sizes).forEach(function (entry) {
       var index = entry[0], height = entry[1];
       if (!names.has(height)) {
@@ -168,78 +175,119 @@
     }
   }
 
-  function sync(state) {
-    var pattern = state.linePattern;
-    var design = chooseDesign(state);
-    document.getElementById('line-pattern-enabled').setAttribute('aria-checked', String(pattern.enabled));
-    document.getElementById('line-pattern-controls').hidden = !pattern.enabled;
-    document.getElementById('line-pattern-source').value = pattern.source;
-    document.getElementById('line-pattern-size').value = pattern.size;
-    document.getElementById('line-pattern-opacity').value = pattern.opacity;
-    document.getElementById('line-pattern-size-value').textContent = pattern.size + '%';
-    document.getElementById('line-pattern-opacity-value').textContent = pattern.opacity + '%';
-    document.getElementById('line-pattern-values').hidden = !design && pattern.source !== 'custom';
-    document.getElementById('line-pattern-import').textContent = pattern.image ? '更换图片' : '上传图片';
-    document.getElementById('line-pattern-clear').hidden = !pattern.image;
-    document.getElementById('line-pattern-credit').hidden = !design;
-    document.getElementById('line-pattern-status').textContent = pattern.source === 'automatic'
-      ? (design ? '已匹配' + design.name : '当前线路没有可自动匹配的底纹')
-      : (pattern.source === 'custom' ? '正在使用自定义图片' : '');
-    document.getElementById('line-pattern-custom').disabled = !pattern.image;
-  }
-
-  function init(editor, notice) {
-    var source = document.getElementById('line-pattern-source');
-    var builtIn = document.getElementById('line-pattern-built-in');
+  function init(root, controls) {
+    root.innerHTML = `
+    <div class="line-pattern-heading">
+      <h2 class="section-title">线路底纹</h2>
+      <button type="button" id="line-pattern-enabled" class="platform-switch" role="switch" aria-label="启用线路底纹" aria-checked="false" aria-controls="line-pattern-controls"><span aria-hidden="true"></span></button>
+    </div>
+    <div id="line-pattern-controls" hidden>
+      <div class="field">
+        <label for="line-pattern-source">纹样来源</label>
+        <select id="line-pattern-source" aria-describedby="line-pattern-status">
+          <option value="automatic">按重庆线路匹配</option>
+          <optgroup label="内置纹样" id="line-pattern-built-in"></optgroup>
+          <option value="custom" id="line-pattern-custom" disabled>自定义图片</option>
+        </select>
+        <small id="line-pattern-status" role="status"></small>
+      </div>
+      <div id="line-pattern-values" hidden>
+        <div class="field">
+          <label for="line-pattern-size">大小 <output id="line-pattern-size-value" for="line-pattern-size"></output></label>
+          <div class="line-pattern-adjustment">
+            <input id="line-pattern-size" type="range" min="50" max="200">
+            <button type="button" class="icon-btn" id="line-pattern-reset-size" aria-label="重置底纹大小" title="重置底纹大小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="line-pattern-opacity">深浅 <output id="line-pattern-opacity-value" for="line-pattern-opacity"></output></label>
+          <div class="line-pattern-adjustment">
+            <input id="line-pattern-opacity" type="range" min="0" max="100">
+            <button type="button" class="icon-btn" id="line-pattern-reset-opacity" aria-label="重置底纹深浅" title="重置底纹深浅"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="field-pair">
+        <button type="button" class="btn" id="line-pattern-import" aria-describedby="line-pattern-file-help">上传图片</button>
+        <button type="button" class="btn" id="line-pattern-clear" hidden>移除图片</button>
+      </div>
+      <input id="line-pattern-file" type="file" accept=".png,.svg,image/png,image/svg+xml" hidden>
+      <p class="field-help" id="line-pattern-file-help">支持 .png 和 .svg 图片。透明处显示线路底色。</p>
+      <p class="field-help" id="line-pattern-credit" hidden>内置纹样改编自 <a href="https://hachiiiiiiii.co/" target="_blank" rel="noopener">Hachi</a>，按<a href="https://creativecommons.org/licenses/by-nc/4.0/deed.zh-hans" target="_blank" rel="noopener">署名与非商业性使用许可</a>提供。</p>
+    </div>`;
+    function field(name) { return root.querySelector('#line-pattern-' + name); }
+    var source = field('source');
+    var builtIn = field('built-in');
     Object.entries(designs).forEach(function (entry) { builtIn.appendChild(new Option(entry[1].name, entry[0])); });
-    function update(changes, group) {
-      editor.update(function (state) {
-        return global.PlatformState.settings(state, { linePattern: Object.assign({}, state.linePattern, changes) });
-      }, group);
-    }
-    var toggle = document.getElementById('line-pattern-enabled');
-    toggle.addEventListener('click', function () { update({ enabled: !editor.state.linePattern.enabled }); });
+    var update = controls.update;
+    var toggle = field('enabled');
+    toggle.addEventListener('click', function () {
+      var target = controls.read();
+      if (target) update({ enabled: !target.linePattern.enabled });
+    });
     source.addEventListener('change', function () { update({ source: source.value }); });
     [['size', defaultSize], ['opacity', defaultOpacity]].forEach(function (setting) {
       var name = setting[0], initialValue = setting[1];
-      var control = document.getElementById('line-pattern-' + name);
+      var control = field(name);
       control.addEventListener('input', function () { update({ [name]: control.valueAsNumber }, control.id); });
-      document.getElementById('line-pattern-reset-' + name).addEventListener('click', function () {
+      field('reset-' + name).addEventListener('click', function () {
         update({ [name]: initialValue });
       });
     });
-    var upload = document.getElementById('line-pattern-file');
-    document.getElementById('line-pattern-import').addEventListener('click', function () { upload.click(); });
-    document.getElementById('line-pattern-clear').addEventListener('click', function () {
-      if (editor.state.linePattern.source === 'custom') {
+    var upload = field('file');
+    field('import').addEventListener('click', function () { upload.click(); });
+    field('clear').addEventListener('click', function () {
+      var target = controls.read();
+      if (!target) return;
+      if (target.linePattern.source === 'custom') {
         update({ image: null, source: 'automatic', enabled: false });
         toggle.focus();
       } else {
         update({ image: null });
-        document.getElementById('line-pattern-import').focus();
+        field('import').focus();
       }
     });
     var latestUpload;
     upload.addEventListener('change', async function () {
       var file = upload.files[0];
       upload.value = '';
-      if (!file) return;
+      var startingState = controls.read();
+      if (!file || !startingState) return;
       latestUpload = file;
-      var startingState = editor.state;
       try {
         var image = await readImage(file);
         if (latestUpload !== file) return;
-        if (editor.state !== startingState) {
-          notice('标识牌已更改，请重新选择底纹图片');
+        if (controls.read() !== startingState) {
+          controls.notice('标识牌已更改，请重新选择底纹图片');
           return;
         }
         update({ enabled: true, source: 'custom', image: image });
-        notice('已应用自定义底纹');
+        controls.notice('已应用自定义底纹');
       } catch (error) {
-        if (latestUpload === file) notice('底纹导入失败：' + error.message);
+        if (latestUpload === file) controls.notice('底纹导入失败：' + error.message);
       }
     });
+    return function sync(line) {
+      var pattern = line.linePattern;
+      var design = chooseDesign(line, pattern.source);
+      toggle.setAttribute('aria-checked', String(pattern.enabled));
+      toggle.setAttribute('aria-label', pattern.enabled ? '关闭线路底纹' : '启用线路底纹');
+      field('controls').hidden = !pattern.enabled;
+      source.value = pattern.source;
+      field('size').value = pattern.size;
+      field('opacity').value = pattern.opacity;
+      field('size-value').textContent = pattern.size + '%';
+      field('opacity-value').textContent = pattern.opacity + '%';
+      field('values').hidden = !design && pattern.source !== 'custom';
+      field('import').textContent = pattern.image ? '更换图片' : '上传图片';
+      field('clear').hidden = !pattern.image;
+      field('credit').hidden = !design;
+      field('status').textContent = pattern.source === 'automatic'
+        ? (design ? '已匹配' + design.name : '当前线路没有可自动匹配的底纹')
+        : (pattern.source === 'custom' ? '正在使用自定义图片' : '');
+      field('custom').disabled = !pattern.image;
+    };
   }
 
-  global.PlatformPatterns = { settings: settings, metrics: metrics, draw: draw, sync: sync, init: init };
+  global.PlatformPatterns = { settings: settings, metrics: metrics, bandMetrics: bandMetrics, draw: draw, init: init };
 })(typeof window !== 'undefined' ? window : globalThis);

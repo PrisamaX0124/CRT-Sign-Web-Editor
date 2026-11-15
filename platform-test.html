@@ -641,10 +641,10 @@
       assert($('line-pattern-status').textContent.includes('没有') && !$('platform-svg').querySelector('pattern'));
       input('line-number', '1');
       assert($('line-pattern-status').textContent.includes('1号线'));
-      input('line-pattern-source', 'line-1-alternate', 'change');
+      input('line-pattern-source', 'line-1', 'change');
       input('line-pattern-size', '170');
       input('line-pattern-opacity', '44');
-      assert(A.state.linePattern.source === 'line-1-alternate');
+      assert(A.state.linePattern.source === 'line-1');
       assert($('line-pattern-size-value').textContent === '170%' && $('line-pattern-opacity-value').textContent === '44%');
       $('undo').click();
       assert($('line-pattern-opacity').value === '85' && $('line-pattern-size').value === '170');
@@ -652,13 +652,13 @@
       assert($('line-pattern-opacity').value === '44');
       toggle.click();
       assert(controls.hidden && !$('platform-svg').querySelector('pattern'));
-      assert(A.state.linePattern.source === 'line-1-alternate' && A.state.linePattern.opacity === 44);
+      assert(A.state.linePattern.source === 'line-1' && A.state.linePattern.opacity === 44);
       $('undo').click();
       assert(!controls.hidden && $('platform-svg').querySelector('pattern'));
       $('redo').click();
       assert(controls.hidden);
       toggle.click();
-      assert($('line-pattern-source').value === 'line-1-alternate' && $('line-pattern-size').value === '170');
+      assert($('line-pattern-source').value === 'line-1' && $('line-pattern-size').value === '170');
       var resetSize = $('line-pattern-reset-size'), resetOpacity = $('line-pattern-reset-opacity');
       assert(resetSize.getBoundingClientRect().left >= $('line-pattern-size').getBoundingClientRect().right);
       assert(resetOpacity.getBoundingClientRect().left >= $('line-pattern-opacity').getBoundingClientRect().right);
@@ -670,7 +670,7 @@
       assert($('line-pattern-size').value === '170' && $('line-pattern-opacity').value === '85');
       resetSize.click();
       assert($('line-pattern-size').value === '100' && $('line-pattern-opacity').value === '85');
-      assert(A.state.linePattern.enabled && A.state.linePattern.source === 'line-1-alternate');
+      assert(A.state.linePattern.enabled && A.state.linePattern.source === 'line-1');
       input('line-pattern-opacity', '0');
       assert(!$('platform-svg').querySelector('pattern'));
       restore();
@@ -690,7 +690,40 @@
       var field = $(inputId); field.files = files.files;
       field.dispatchEvent(new w.Event('change', { bubbles: true }));
     }
-    await test('纵向顶栏：十款内置底纹在左右单列和双列中均保留纯色顶栏，原尺寸导出像素一致', async function () {
+    await test('站台的底纹菜单只列一个 1 号线纹样，自动匹配使用放大后的默认大小', function () {
+      restore();
+      A.update(function (state) {
+        return S.settings(state, { mode: 'route', city: 'chongqing', line: '1', linePattern: { source: 'automatic' } });
+      });
+      var options = Array.from($('line-pattern-built-in').children).filter(function (option) {
+        return option.value === 'line-1' || option.value === 'line-1-alternate';
+      });
+      assert(options.length === 1 && options[0].textContent === '1号线');
+      var scene = R.metrics(A.state, A.measure);
+      var band = scene.nodes.find(function (node) { return node.attrs['data-role'] === 'passed-line'; });
+      var drawing = $('platform-svg').querySelector('pattern');
+      assert($('line-pattern-size').value === '100' && Math.abs(Number(drawing.getAttribute('height')) - band.attrs.height * 256 / 647) < 1e-7);
+      assert(drawing.getAttribute('viewBox') === '9.45 9.25 82 82');
+      restore();
+    });
+    await test('站台使用 1、5、9、10 号线调整后的默认底纹深浅和大小', function () {
+      restore();
+      for (var [line, color] of [['1', '#7c8fa1'], ['5', '#7c8fa1'], ['9', '#405c77'], ['10', '#2a4967']]) {
+        A.update(function (state) {
+          return S.settings(state, { mode: 'route', city: 'chongqing', line: line, color: '#123456',
+            linePattern: { source: 'automatic' } });
+        });
+        var pattern = $('platform-svg').querySelector('pattern');
+        assert(pattern.querySelector('[stroke="' + color + '"], [fill="' + color + '"]'), line + ' 号线的默认深浅不正确');
+        if (line === '10') {
+          var scene = R.metrics(A.state, A.measure);
+          var band = scene.nodes.find(function (node) { return node.attrs['data-role'] === 'passed-line'; });
+          assert(Math.abs(Number(pattern.getAttribute('height')) - band.attrs.height * 0.9 * 3 * 143 / 647) < 1e-7);
+        }
+      }
+      restore();
+    });
+    await test('纵向顶栏：所有内置底纹在左右单列和双列中均保留纯色顶栏，原尺寸导出像素一致', async function () {
       restore();
       var designs = Object.keys(w.PlatformPatternDesigns);
       for (var variant of ['left', 'right', 'double']) {

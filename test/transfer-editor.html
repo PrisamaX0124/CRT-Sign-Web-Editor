@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>换乘标识编辑器测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1280px; height: 850px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>换乘标识编辑器测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-transfer-sign-project-v1'];
+  const savedStorage = storageKeys.map(key => [key, localStorage.getItem(key)]);
+  let editor, page, guideArrows;
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  function navigate(action) {
+    return new Promise(resolve => {
+      frame.addEventListener('load', () => {
+        editor = frame.contentWindow;
+        page = editor.document;
+        resolve();
+      }, { once: true });
+      action();
+    });
+  }
+  async function waitFor(check) {
+    for (let remaining = 200; remaining > 0; remaining--) {
+      if (check()) return;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error('等候编辑器更新超时');
+  }
+  function element(selector) {
+    const control = page.querySelector(selector);
+    assert(control, '找不到控件 ' + selector);
+    return control;
+  }
+  function input(selector, value, type = 'input') {
+    const control = element(selector);
+    control.value = value;
+    control.dispatchEvent(new editor.Event(type, { bubbles: true }));
+    return control;
+  }
+  function drawing(role) {
+    return [...element('#transfer-sign').querySelectorAll('[data-role="' + role + '"]')];
+  }
+  function chooseFile(name, content, type) {
+    const selection = new editor.DataTransfer();
+    selection.items.add(new editor.File([content], name, { type }));
+    const file = element('#line-pattern-file');
+    file.files = selection.files;
+    file.dispatchEvent(new editor.Event('change', { bubbles: true }));
+  }
+  async function test(name, run) {
+    const result = document.createElement('li');
+    try {
+      await run();
+      result.className = 'pass';
+      result.textContent = name;
+    } catch (error) {
+      result.className = 'fail';
+      result.textContent = name + '。' + error.message;
+    }
+    results.append(result);
+  }
+
+  function click(selector) {
+    element(selector).dispatchEvent(new editor.MouseEvent('click', { bubbles: true }));
+  }
+  function select(key) { click('[data-transfer-element="' + key + '"]'); }
+  function mode(name) { click('[data-transfer-mode="' + name + '"]'); }
+  function returnToSettings() {
+    if (!element('#transfer-return').hidden) click('#transfer-return');
+  }
+  function arrangement(value) {
+    returnToSettings();
+    click('[data-transfer-arrangement="' + value + '"]');
+  }
+  function direction(group, value) {
+    select('arrow:' + group);
+    click('[data-transfer-direction="' + value + '"]');
+  }
+  function line(index, name) {
+    select('line:' + index);
+    if (name !== undefined) input('#transfer-line-name', name);
+  }
+  function numberLabels() { return drawing('line-number').map(node => node.textContent).join(','); }
+  function isVisible(selector) { return element(selector).getClientRects().length > 0; }
+
+  try {
+    storageKeys.forEach(key => localStorage.removeItem(key));
+    await test('从导向页切到同一个网页的换乘编辑器，显示版式 A 和版式 B', async () => {
+      await navigate(() => { frame.src = '../index.html'; });
+      await waitFor(() => editor.App?.measure);
+      guideArrows = Array.from(page.querySelectorAll('.direction-grid .direction-card'), card => card.querySelector('path').getAttribute('d'));
+      editor.App.update(current => editor.SignState.updateSignSettings(current, { backgroundColor: '#102030' }));
+      await navigate(() => element('header .editor-navigation a[href="index.html?editor=transfer"]').click());
+      await editor.App.ready;
+      assert(editor.location.pathname.endsWith('/index.html'), '换乘编辑器应使用同一个网页');
+      assert(element('.editor-navigation [aria-current="page"]').textContent === '换乘标识', '页眉没有标出当前编辑器');
+      assert(!element('#transfer-editor').hidden && element('#app').hidden, '只应显示换乘编辑器');
+      assert(element('[data-transfer-mode="guidance"]').textContent.trim() === '版式 A', '版式 A 标签有误');
+      assert(element('[data-transfer-mode="separate"]').textContent.trim() === '版式 B', '版式 B 标签有误');
+      assert(element('#transfer-preview-title').textContent === '版式 A', '预览标题没有跟随页眉');
+      assert(numberLabels() === '1/10', '版式 A 默认应同时显示两条线路');
+      const number = drawing('line-number')[0];
+      assert(number.getAttribute('font-family') === editor.SignCore.FONT_NUM && number.getAttribute('font-weight') === '400',
+        '线路数字未用导向标识的常规字重');
+    });
+
+    await test('点选色带、文字和箭头，选框、属性面板与浮动工具栏跟随选择', async () => {
+      select('line:first');
+      assert(element('[data-transfer-element="line:first"]').getAttribute('aria-pressed') === 'true', '色带没有选框');
+      assert(isVisible('#transfer-element-toolbar') && isVisible('#line-pattern-section'), '缺少浮动工具栏或独立底纹');
+      click('#transfer-tool-edit');
+      assert(page.activeElement === element('#transfer-line-name'), '浮动工具栏未将焦点移到线路名');
+      click('#transfer-tool-pattern');
+      assert(drawing('line-pattern').length === 1 && drawing('line-pattern')[0].dataset.line === 'first', '浮动开关改动了其他线路');
+      click('#transfer-tool-pattern');
+      select('label:upper');
+      assert(isVisible('#transfer-label-properties') && element('#transfer-label-lines').children.length === 2, '文字选择没有列出它包含的线路');
+      click('#transfer-label-lines [data-select-line="second"]');
+      assert(element('#transfer-line-name').value === '10', '点击文字列表未打开相应线路');
+      select('arrow:upper');
+      assert(isVisible('#transfer-arrow-properties') && element('#transfer-directions').children.length === 12, '未显示十二个方向图标');
+      click('#transfer-tool-turn');
+      assert(drawing('direction-arrow')[0].dataset.direction === 'right-up', '工具栏没有顺时针转向');
+      click('#transfer-return');
+      assert(isVisible('#transfer-settings') && page.activeElement === element('#transfer-heading'), '返回后没有显示设置或恢复焦点');
+      assert(element('#transfer-element-toolbar').hidden && element('#transfer-element-toolbar').inert, '清除选择后工具栏仍可操作');
+      await waitFor(() => !isVisible('#transfer-element-toolbar'));
+      const arrow = element('[data-transfer-element="arrow:upper"]');
+      arrow.focus();
+      arrow.dispatchEvent(new editor.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      assert(arrow.getAttribute('aria-pressed') === 'true', '键盘没有选中箭头');
+      click('#transfer-preview-scroll');
+      assert(element('#transfer-element-toolbar').hidden && arrow.getAttribute('aria-pressed') === 'false', '点击空白后仍选中元素');
+    });
+
+    await test('两种版式的预览标题跟随页眉，十二个方向图标与导向标识一致', () => {
+      for (const [current, title] of [['guidance', '版式 A'], ['separate', '版式 B']]) {
+        mode(current);
+        assert(element('#transfer-preview-title').textContent === title, '预览标题没有跟随页眉');
+        select('arrow:upper');
+        const cards = Array.from(element('#transfer-directions').children);
+        assert(cards.length === 12 && guideArrows.length === 12, '方向图标数量不一致');
+        for (const [index, card] of cards.entries()) {
+          click('[data-transfer-direction="' + card.dataset.transferDirection + '"]');
+          assert(card.getAttribute('aria-pressed') === 'true', '方向卡片未标记当前选择');
+          assert(card.querySelector('path').getAttribute('d') === guideArrows[index], '方向卡片图形与导向标识不同');
+          assert(drawing('direction-arrow')[0].querySelector('path').getAttribute('d') === guideArrows[index], '牌面箭头与导向标识不同');
+        }
+      }
+      direction('upper', 'left');
+      mode('guidance');
+      direction('upper', 'left-up');
+    });
+
+    await test('两个版式各自保存，撤销和重做只影响当前版式', () => {
+      line('second', '9');
+      input('#transfer-line-color', '#123456');
+      returnToSettings();
+      input('#transfer-width', '480', 'change');
+      arrangement('1');
+      assert(numberLabels() === '1' && drawing('line-band').length === 1, '改单线路后仍有第二条线路');
+      arrangement('2');
+      assert(numberLabels() === '1/9' && drawing('line-band')[1].getAttribute('fill') === '#123456', '恢复双线路丢失了原内容');
+      mode('separate');
+      assert(numberLabels() === '1,10' && element('#transfer-width').value === '768', '版式 A 的线路或尺寸进入了版式 B');
+      direction('lower', 'right-down');
+      click('#transfer-undo');
+      assert(drawing('direction-arrow')[1].dataset.direction === 'right', '撤销未恢复版式 B 的方向');
+      click('#transfer-redo');
+      assert(drawing('direction-arrow')[1].dataset.direction === 'right-down', '重做未恢复版式 B 的方向');
+      mode('guidance');
+      assert(numberLabels() === '1/9' && element('#transfer-width').value === '480' &&
+        drawing('direction-arrow')[0].dataset.direction === 'left-up', '返回版式 A 后丢失了自己的设置');
+      click('#transfer-undo');
+      assert(numberLabels() === '1', '版式 A 没有继续自己的撤销记录');
+      click('#transfer-redo');
+      mode('separate');
+      assert(drawing('direction-arrow')[1].dataset.direction === 'right-down', '版式 A 的撤销影响了版式 B');
+    });
+
+    await test('版式 B 的两种三线路分组都有两支箭头和三条独立色带', () => {
+      for (const [value, texts, groups] of [
+        ['1+2', '1,10/6', 'upper,lower,lower'],
+        ['2+1', '1/10,6', 'upper,upper,lower'],
+      ]) {
+        arrangement(value);
+        assert(numberLabels() === texts && drawing('direction-arrow').length === 2, '文字或箭头没有按两组绘制');
+        assert(drawing('line-band').map(node => node.dataset.group).join(',') === groups, '色带分组不正确');
+        assert(element('[data-transfer-arrangement="' + value + '"]').getAttribute('aria-pressed') === 'true', '没有显示当前分组');
+        const [upper, lower] = drawing('line-number');
+        assert(upper.getAttribute('font-size') === lower.getAttribute('font-size'), '上下两组常用数字字号不一致');
+        for (const group of ['upper', 'lower']) {
+          const lastBand = drawing('line-band').filter(node => node.dataset.group === group).at(-1);
+          const edge = Number(lastBand.getAttribute('y')) + Number(lastBand.getAttribute('height'));
+          for (const name of ['arrow', 'label']) {
+            assert(Number(element('[data-transfer-element="' + name + ':' + group + '"]').getAttribute('y')) > edge,
+              '箭头和文字应在本组色带下方');
+          }
+        }
+      }
+      line('third', '5');
+      const name = element('#transfer-line-name');
+      name.focus();
+      input('#transfer-line-name', '6');
+      assert(page.activeElement === name && element('#transfer-line-name') === name, '编辑线路名称时失去焦点');
+      arrangement('1+1');
+      assert(!page.querySelector('[data-transfer-element="line:third"]') && isVisible('#transfer-settings'), '隐藏的第三条线路仍可选中');
+      arrangement('1+2');
+      assert(numberLabels() === '1,10/6', '恢复分组后丢失第三条线路');
+    });
+
+    await test('两条色带分别设置底纹，1 号线只显示放大后的那一种纹样', () => {
+      line('first');
+      click('#line-pattern-enabled');
+      assert(element('#line-pattern-status').textContent.includes('1号线'), '未自动匹配 1 号线');
+      assert(element('#line-pattern-built-in').querySelectorAll('[value^="line-1"]:not([value="line-10"])').length === 1, '仍有两种 1 号线纹样');
+      const firstPattern = element('#transfer-sign pattern');
+      const firstBandHeight = Number(drawing('line-band')[0].getAttribute('height'));
+      assert(Math.abs(Number(firstPattern.getAttribute('height')) - firstBandHeight * 256 / 647) < 1e-7, '1 号线的默认纹样没放大');
+      assert(firstPattern.querySelector('[stroke="#f0728a"]'), '1 号线底纹没有用增强后的深浅');
+      line('second');
+      assert(element('#line-pattern-enabled').getAttribute('aria-checked') === 'false', '第二条线路跟随第一条启用了底纹');
+      click('#line-pattern-enabled');
+      const secondPattern = element('#transfer-sign').querySelectorAll('pattern')[1];
+      assert(Math.abs(Number(secondPattern.getAttribute('height')) - firstBandHeight * 0.9 * 3 * 143 / 647) < 1e-7 &&
+        secondPattern.querySelector('[stroke="#6f3aa9"], [fill="#6f3aa9"]'), '10 号线没有用缩小、减淡后的底纹');
+      input('#line-pattern-source', 'line-6', 'change');
+      input('#line-pattern-size', '160');
+      input('#line-pattern-opacity', '45');
+      assert(drawing('line-pattern').length === 2, '应有两条带底纹的色带');
+      assert(element('#line-pattern-size-value').textContent === '160%' && element('#line-pattern-opacity-value').textContent === '45%', '没有显示当前数值');
+      line('first');
+      assert(element('#line-pattern-source').value === 'automatic' && element('#line-pattern-size').value === '100', '改第二条覆盖了第一条');
+      line('second');
+      click('#line-pattern-enabled');
+      assert(drawing('line-pattern').length === 1, '关闭一条底纹影响了另一条');
+      click('#line-pattern-enabled');
+      assert(element('#line-pattern-size').value === '160', '打开后应恢复原调整值');
+      click('#line-pattern-reset-size');
+      click('#line-pattern-reset-opacity');
+      assert(element('#line-pattern-size').value === '100' && element('#line-pattern-opacity').value === '85', '没有恢复默认值');
+    });
+
+    await test('第三条线路可上传自己的底纹，损坏文件或切换选择时不会覆盖其他线路', async () => {
+      const artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="4" cy="4" r="3" fill="white"/></svg>';
+      line('third');
+      chooseFile('纹样.svg', artwork, 'image/svg+xml');
+      await waitFor(() => element('#line-pattern-source').value === 'custom');
+      assert(element('#transfer-sign').querySelectorAll('pattern image[href^="data:image/png"]').length === 1, '图片铺到了其他色带');
+      chooseFile('损坏.png', '无法打开的图片', 'image/png');
+      await waitFor(() => element('#transfer-status').textContent.includes('导入失败'));
+      assert(element('#line-pattern-source').value === 'custom', '上传失败改变了原底纹');
+      click('#line-pattern-clear');
+      assert(element('#line-pattern-custom').disabled && drawing('line-pattern').length === 2, '移除图片影响了其他底纹');
+      chooseFile('另一张.svg', artwork, 'image/svg+xml');
+      line('second');
+      await waitFor(() => element('#transfer-status').textContent.includes('已更改'));
+      assert(element('#line-pattern-source').value === 'line-6', '切换线路后上传图片覆盖了新选择');
+    });
+
+    await test('矢量图只保留牌面，图片导出包含三条色带和对应尺寸', async () => {
+      returnToSettings();
+      input('#transfer-width', '480', 'change');
+      direction('upper', 'ahead-right');
+      input('#transfer-tool-alignment select', 'right', 'change');
+      input('#transfer-tool-arrow-position select', 'right', 'change');
+      const expectedArrow = drawing('direction-arrow')[0].querySelector('path').getAttribute('d');
+      const expectedArrowPosition = drawing('direction-arrow')[0].getAttribute('x');
+      line('second');
+      const downloads = [];
+      const originalDownload = editor.SignStorage.download;
+      editor.SignStorage.download = (blob, name) => downloads.push({ blob, name });
+      try {
+        click('#transfer-export-vector');
+        await waitFor(() => downloads.length === 1);
+        const source = await downloads[0].blob.text();
+        const vector = new DOMParser().parseFromString(source, 'image/svg+xml');
+        assert(downloads[0].name.endsWith('.svg') && !vector.querySelector('parsererror'), '矢量图无法打开');
+        assert(vector.querySelectorAll('pattern').length === 2 && source.includes('@font-face'), '导出缺少底纹或字体');
+        assert(vector.documentElement.getAttribute('width') === '480' && !vector.querySelector('[data-transfer-element]'), '导出了选框或尺寸不正确');
+        const exportedArrow = Array.from(vector.querySelectorAll('path')).find(path => path.getAttribute('d') === expectedArrow);
+        assert(exportedArrow?.closest('svg').getAttribute('x') === expectedArrowPosition, '导出的箭头或对齐位置与预览不同');
+        click('#transfer-export-image');
+        await waitFor(() => downloads.length === 2);
+        const picture = await createImageBitmap(downloads[1].blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = picture.width;
+        canvas.height = picture.height;
+        const drawingContext = canvas.getContext('2d');
+        drawingContext.drawImage(picture, 0, 0);
+        assert(picture.width === 480 && picture.height === 640, '图片尺寸不正确');
+        const third = drawingContext.getImageData(240, 410, 1, 1).data;
+        assert(third[3] === 255 && third[0] > third[1] && third[0] > 200, '图片没有画出第三条色带');
+        picture.close();
+      } finally {
+        editor.SignStorage.download = originalDownload;
+      }
+    });
+
+    await test('回到导向页再打开换乘页，两个版式的设置都保存到本机', async () => {
+      select('arrow:upper');
+      input('#transfer-group-alignment select', 'right', 'change');
+      input('#transfer-group-arrow-position select', 'right', 'change');
+      await navigate(() => element('.editor-navigation a[href="index.html"]').click());
+      await waitFor(() => editor.App?.measure);
+      assert(editor.App.state.backgroundColor === '#102030', '切回后丢失了导向标识');
+      await navigate(() => element('.editor-navigation a[href="index.html?editor=transfer"]').click());
+      await editor.App.ready;
+      assert(numberLabels() === '1,10/6' && drawing('line-pattern').length === 2, '版式 B 的分组或底纹没有载入');
+      assert(drawing('direction-arrow')[1].dataset.direction === 'right-down', '没有载入下方箭头');
+      select('label:upper');
+      assert(element('#transfer-group-alignment select').value === 'right', '没有载入上组对齐设置');
+      assert(element('#transfer-group-arrow-position select').value === 'right', '没有载入上组箭头位置');
+      mode('guidance');
+      assert(numberLabels() === '1/9' && element('#transfer-width').value === '480', '版式 A 没有载入');
+    });
+
+    await test('每组的箭头可从工具栏和右侧栏移到文字左侧或右侧，位置可撤销重做', () => {
+      mode('separate');
+      const toolbarPosition = '#transfer-tool-arrow-position select';
+      const panelPosition = '#transfer-group-arrow-position select';
+      function bounds(kind, group) {
+        return element('[data-transfer-element="' + kind + ':' + group + '"]').getBBox();
+      }
+      for (const value of ['1+1', '1+2', '2+1']) {
+        arrangement(value);
+        const lowerBefore = bounds('arrow', 'lower').x;
+        const directions = drawing('direction-arrow').map(node => node.dataset.direction);
+        select('arrow:upper');
+        input(toolbarPosition, 'right', 'change');
+        const label = bounds('label', 'upper');
+        assert(bounds('arrow', 'upper').x >= label.x + label.width, '箭头没有移到文字右侧');
+        select('label:upper');
+        assert(element(panelPosition).value === 'right', '选中文字后右侧栏没有显示箭头位置');
+        input(panelPosition, 'left', 'change');
+        const arrow = bounds('arrow', 'upper');
+        assert(arrow.x + arrow.width <= bounds('label', 'upper').x, '箭头没有移到文字左侧');
+        assert(bounds('arrow', 'lower').x === lowerBefore && drawing('direction-arrow').every((node, index) => node.dataset.direction === directions[index]),
+          '移动箭头改动了下组位置或箭头方向');
+      }
+      click('#transfer-undo');
+      assert(element(toolbarPosition).value === 'right', '撤销没有恢复箭头位置');
+      click('#transfer-redo');
+      assert(element(panelPosition).value === 'left', '重做没有恢复箭头位置');
+    });
+
+    await test('整组右对齐时用实际字体核对两列中英文的墨区右沿', () => {
+      mode('separate');
+      arrangement('2+1');
+      select('label:upper');
+      input('#transfer-group-alignment select', 'right', 'change');
+      const right = node => Number(node.getAttribute('x')) +
+        editor.App.measure.ink(node.textContent, node.getAttribute('font-family'), Number(node.getAttribute('font-weight')),
+          Number(node.getAttribute('font-size'))).abr;
+      const chinese = drawing('label-chinese').slice(0, 2);
+      const english = drawing('label-english').slice(0, 2);
+      assert(chinese.every((node, index) => Math.abs(right(node) - right(english[index])) < 1), '两列双语文字的墨区右沿没有对齐');
+    });
+
+    await test('从工具栏或属性栏调整对齐，两组位置独立，支持撤销和重做', () => {
+      mode('separate');
+      const toolbarAlignment = '#transfer-tool-alignment select';
+      const panelAlignment = '#transfer-group-alignment select';
+      function edges(group) {
+        const boxes = ['arrow', 'label'].map(kind => element('[data-transfer-element="' + kind + ':' + group + '"]').getBBox());
+        return [Math.min(...boxes.map(box => box.x)) + 5, Math.max(...boxes.map(box => box.x + box.width)) - 5];
+      }
+      for (const value of ['1+1', '2+1', '1+2']) {
+        arrangement(value);
+        const lower = edges('lower');
+        select('arrow:upper');
+        input(toolbarAlignment, 'left', 'change');
+        assert(Math.abs(edges('upper')[0] - 52) < 0.01, '整组没有左对齐');
+        input(panelAlignment, 'center', 'change');
+        assert(element(toolbarAlignment).value === 'center' && Math.abs(edges('upper').reduce((sum, x) => sum + x, 0) / 2 - 384) < 0.01,
+          '整组没有居中，或工具栏没有同步');
+        assert(edges('lower').every((edge, index) => edge === lower[index]), '更改上组带动了下组');
+        select('label:lower');
+        input(toolbarAlignment, 'right', 'change');
+        assert(Math.abs(edges('lower')[1] - 716) < 0.01, '从文字工具栏操作后整组没有右对齐');
+      }
+      input(panelAlignment, 'left', 'change');
+      click('#transfer-undo');
+      assert(element(toolbarAlignment).value === 'right', '撤销后没有恢复原对齐');
+      click('#transfer-redo');
+      assert(element(panelAlignment).value === 'left', '重做后没有恢复新对齐');
+    });
+
+    await test('用实际字体核对汉字与数字墨区顶部和中英文行距', () => {
+      const measure = editor.App.measure;
+      for (const [name, value] of [['guidance', '2'], ['separate', '1+1'], ['separate', '1+2'], ['separate', '2+1']]) {
+        mode(name);
+        arrangement(value);
+        const chinese = drawing('label-chinese');
+        const english = drawing('label-english');
+        drawing('line-number').forEach((number, index) => {
+          function ink(node) {
+            const family = node.getAttribute('font-family');
+            const weight = Number(node.getAttribute('font-weight'));
+            const size = Number(node.getAttribute('font-size'));
+            const baseline = Number(node.getAttribute('y'));
+            return { top: baseline - measure.ascent(node.textContent, family, weight, size),
+              bottom: baseline + measure.descent(node.textContent, family, weight, size), size };
+          }
+          const digitTop = ink(number).top;
+          const captions = chinese.slice(index * 2, index * 2 + 2).map(ink);
+          assert(captions.every(caption => Math.abs(caption.top - digitTop) < 1), '汉字与数字墨区上沿没有对齐');
+          const englishTop = Math.min(...english.slice(index * 2, index * 2 + 2).map(node => ink(node).top));
+          assert(englishTop - Math.max(...captions.map(caption => caption.bottom)) >= captions[0].size * 0.18, '中英文行距仍过紧');
+        });
+      }
+    });
+
+    await test('用实际字体检查分组文字的墨区与色带、箭头和牌边的间距', () => {
+      const measure = editor.App.measure;
+      for (const [name, value] of [['guidance', '2'], ['separate', '1+2'], ['separate', '2+1']]) {
+        mode(name);
+        arrangement(value);
+        for (const lineName of ['环线', '108']) {
+          line('first', lineName);
+          const sign = element('#transfer-sign');
+          const arrows = Array.from(sign.querySelectorAll('[data-transfer-element^="arrow:"]'));
+          const obstacles = [...drawing('line-band'), ...arrows].map(node => node.getBBox());
+          for (const node of sign.querySelectorAll('text')) {
+            const family = node.getAttribute('font-family');
+            const weight = Number(node.getAttribute('font-weight'));
+            const size = Number(node.getAttribute('font-size'));
+            const text = node.textContent;
+            const ink = measure.ink(text, family, weight, size);
+            const left = Number(node.getAttribute('x')) - ink.abl;
+            const right = Number(node.getAttribute('x')) + ink.abr;
+            const top = Number(node.getAttribute('y')) - measure.ascent(text, family, weight, size);
+            const bottom = Number(node.getAttribute('y')) + measure.descent(text, family, weight, size);
+            assert(left >= 0 && right <= 768 && top >= 0 && bottom <= 1024, '文字超出了牌边');
+            assert(obstacles.every(box => right < box.x || left > box.x + box.width ||
+              bottom < box.y || top > box.y + box.height), '文字叠到了色带或箭头上');
+          }
+        }
+      }
+    });
+
+    await test('窄屏页眉、选框、浮动工具栏和导出可正常使用', async () => {
+      const workspace = element('#transfer-editor');
+      select('arrow:lower');
+      for (const width of [1280, 861, 769, 390, 320]) {
+        frame.style.width = width + 'px';
+        await new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
+        const navigation = element('.editor-navigation').getBoundingClientRect();
+        const repository = element('.editor-repository').getBoundingClientRect();
+        const modes = element('#transfer-modes').getBoundingClientRect();
+        const toolbar = element('#transfer-element-toolbar').getBoundingClientRect();
+        assert(navigation.right < repository.left && repository.right <= width, '页眉超出窗口或入口重叠');
+        assert(modes.top >= navigation.bottom || (modes.left >= navigation.right && modes.right <= repository.left), '版式按钮和入口重叠');
+        assert(toolbar.left >= 0 && toolbar.right <= width, '浮动工具栏横向溢出');
+        assert(page.documentElement.scrollWidth <= width && workspace.scrollWidth <= width, '工作区横向溢出');
+      }
+      select('line:first');
+      click('#line-pattern-enabled');
+      assert(workspace.scrollHeight > workspace.clientHeight, '设置区域无法随页面滚动');
+      element('#transfer-export-image').scrollIntoView();
+      assert(element('#transfer-export-image').getBoundingClientRect().bottom <= editor.innerHeight, '滚动后仍无法看到导出按钮');
+    });
+
+    await test('从含第三条线路的文字属性切到版式 A，再切回时可正常选中', () => {
+      mode('separate');
+      arrangement('2+1');
+      select('label:lower');
+      assert(element('#transfer-label-lines [data-select-line="third"]'), '下组文字未列出第三条线路');
+      mode('guidance');
+      assert(element('#transfer-label-lines').children.length === 0 &&
+        element('#transfer-preview-title').textContent === '版式 A', '切换后留下了旧分组的线路列表');
+      mode('separate');
+      select('label:lower');
+      assert(isVisible('#transfer-group-alignment') && element('#transfer-label-lines [data-select-line="third"]'),
+        '切回时未还原文字属性');
+    });
+  } finally {
+    await navigate(() => { frame.src = 'about:blank'; });
+    savedStorage.forEach(([key, value]) => value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value));
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = (results.children.length - failed) + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = summary;
+    document.title = (failed ? '✖ ' : '✔ ') + summary + ' 换乘标识编辑器测试';
+  }
+})();
+</script>
+</html>
