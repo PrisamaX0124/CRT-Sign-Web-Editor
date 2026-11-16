@@ -161,22 +161,42 @@ input, select {
   text-decoration: none;
   white-space: nowrap;
 }
-.editor-navigation a:hover, .editor-repository:hover { background: var(--accent-soft); }
+.editor-navigation a:hover { background: var(--accent-soft); }
 .editor-navigation [aria-current="page"] { background: var(--accent); color: var(--accent-text); }
 .editor-navigation [aria-current="page"]:hover { background: var(--accent-hover); }
 .editor-repository {
   grid-area: 1 / 3;
   justify-self: end;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   min-height: 42px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: 9px;
   font-size: 12px;
-  background: var(--surface-soft);
+  color: var(--accent-text);
+  background: var(--accent);
   box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+.editor-repository::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 25%, #fff 50%, transparent 75%);
+  opacity: .12;
+  transform: translateX(-100%);
+  animation: repository-shine 9s ease-in-out infinite;
+}
+.editor-repository > * { position: relative; z-index: 1; }
+@keyframes repository-shine {
+  0%, 20% { transform: translateX(-100%); }
+  65%, 100% { transform: translateX(100%); }
 }
 .editor-repository svg { width: 19px; height: 19px; flex: none; }
 .repository-arrow { transition: translate var(--motion-control-duration) var(--motion-enter); }
-.editor-repository:is(:hover, :focus-visible) { border-color: var(--text-dim); }
+.editor-repository:is(:hover, :focus-visible) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .editor-repository:is(:hover, :focus-visible) .repository-arrow { translate: 2px 0; }
 .editor-navigation a:focus-visible, .editor-repository:focus-visible {
   outline: 2px solid var(--selection);
@@ -1248,6 +1268,7 @@ dialog[open]::backdrop { opacity: 1; }
     --motion-panel-duration: 0ms;
   }
   button:enabled:active { translate: none; }
+  .editor-repository::before { content: none; animation: none; }
   .editor-repository:is(:hover, :focus-visible) .repository-arrow { translate: none; }
   .cp-swatch:hover { transform: none; }
   .loading-spinner { animation: none; }

@@ -197,7 +197,7 @@
       deselect();
       await repaint(window);
 
-      await test(editor.name + '：页眉保留编辑器入口，并轻微突出「前往仓库」', async function () {
+      await test(editor.name + '：仓库按钮显示求 Star 文案和强调色，页眉入口完整显示', async function () {
         for (const width of [1280, 1100]) {
           frame.style.width = width + 'px';
           await repaint(window);
@@ -211,8 +211,15 @@
           assert(current?.getAttribute('href') === editor.path, '当前页应有明确标记');
           assert(other?.getAttribute('href') === editor.otherPath, '另一个编辑器应可直接打开');
           assert(repository?.host === 'github.com' && repository.pathname === '/PrisamaX0124/CRT-Sign-Web-Editor', '仓库链接不正确');
-          assert(repository.querySelector('svg') && repository.textContent.replace(/\s+/g, ' ').trim() === '前往仓库 >' &&
-            window.getComputedStyle(repository).boxShadow !== 'none', '仓库入口应显示新文案并有轻微强调');
+          assert(repository.querySelector('svg') && repository.textContent.replace(/\s+/g, ' ').trim() === '有帮助？求 Star！ >',
+            '仓库按钮应显示「有帮助？求 Star！ >」');
+          assert(repository.getAttribute('aria-label') === '有帮助？求 Star！（前往仓库，在新标签页打开）' &&
+            repository.target === '_blank' && repository.relList.contains('noopener'), '读屏名称应包含按钮文字，并说明在新标签页打开仓库');
+          await finishAnimations(animations(current));
+          const appearance = window.getComputedStyle(repository);
+          const selected = window.getComputedStyle(current);
+          assert(appearance.backgroundColor === selected.backgroundColor && appearance.color === selected.color &&
+            appearance.borderTopColor === selected.backgroundColor, '仓库按钮应与当前编辑器入口使用相同的强调色和文字颜色');
           const left = navigation.getBoundingClientRect();
           const right = repository.getBoundingClientRect();
           assert(left.left >= 0 && left.right < right.left && right.right <= width + 1, '两组入口应在页眉左右且完整显示');
@@ -220,6 +227,43 @@
         }
         frame.style.width = '1280px';
         await repaint(window);
+      });
+
+      await test(editor.name + '：仓库按钮缓慢扫光，光带微弱且不影响布局和点击，减少动态效果时关闭', async function () {
+        const repository = document.querySelector('.editor-repository');
+        const shine = window.getComputedStyle(repository, '::before');
+        const playing = animations(repository, true).filter(animation => animation instanceof window.CSSAnimation);
+        if (reduced) {
+          assert(playing.length === 0 && shine.animationName === 'none' && shine.content === 'none', '减少动态效果时应移除扫光');
+          return;
+        }
+        assert(playing.length === 1, '仓库按钮应有一条扫光动画');
+        assert(shine.pointerEvents === 'none' && parseFloat(shine.opacity) > 0 && parseFloat(shine.opacity) <= .15,
+          '光带应足够微弱，并允许点击穿过');
+        assert(window.getComputedStyle(repository).overflow === 'hidden', '光带应限制在按钮范围内');
+        const animation = playing[0];
+        const timing = animation.effect.getTiming();
+        assert(timing.duration >= 8000 && timing.iterations === Infinity, '扫光应至少每八秒重复一次');
+        const before = repository.getBoundingClientRect();
+        const positions = [];
+        animation.pause();
+        try {
+          for (const progress of [.2, .425, .65, .85]) {
+            animation.currentTime = timing.duration * progress;
+            await repaint(window);
+            positions.push(new window.DOMMatrixReadOnly(window.getComputedStyle(repository, '::before').transform).m41);
+            assert(repository.contains(document.elementFromPoint(before.x + before.width / 2, before.y + before.height / 2)),
+              '扫光期间按钮应能点击');
+          }
+          assert(positions[0] < -before.width * .9 && Math.abs(positions[1]) < before.width * .1 &&
+            positions[2] > before.width * .9 && Math.abs(positions[2] - positions[3]) < 1,
+            '光带应缓慢经过按钮，并在两次扫光之间停留在按钮外');
+          const after = repository.getBoundingClientRect();
+          assert(before.x === after.x && before.y === after.y && before.width === after.width && before.height === after.height,
+            '扫光不应改变按钮的位置和尺寸');
+        } finally {
+          animation.play();
+        }
       });
 
       await test(editor.name + '：底部的快捷键提示以圆角按键和操作说明显示', function () {
