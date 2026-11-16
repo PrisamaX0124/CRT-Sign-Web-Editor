@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>导向标识生成器</title>
-  <link rel="stylesheet" href="style.css?v=f6b8f70485a6">
+  <link rel="stylesheet" href="style.css?v=edfbfd95ff07">
   <link rel="stylesheet" href="platform.css?v=2c460a9842b1">
   <link rel="stylesheet" href="transfer.css?v=e8bfd1a0d050">
 </head>
@@ -142,7 +142,8 @@
         <span id="transfer-toolbar-title"></span>
         <button type="button" id="transfer-tool-edit">编辑</button>
         <button type="button" id="transfer-tool-pattern">启用底纹</button>
-        <button type="button" id="transfer-tool-turn">顺时针转向</button>
+        <button type="button" id="transfer-tool-turn-counterclockwise" data-turn-step="-1" data-control-icon="turn-counterclockwise" title="逆时针转向 45°" aria-label="逆时针转向 45°" hidden></button>
+        <button type="button" id="transfer-tool-turn" data-turn-step="1" data-control-icon="turn-clockwise" title="顺时针转向 45°" aria-label="顺时针转向 45°" hidden></button>
         <div id="transfer-tool-alignment" hidden></div>
         <div id="transfer-tool-arrow-position" hidden></div>
       </div>
@@ -226,9 +227,9 @@
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
   <script src="js/palette-manager.js?v=public-939b5399500f"></script>
   <script src="js/icons.js?v=public-8e9eb9f48086"></script>
-  <script src="js/directions.js?v=e236a676ed91"></script>
+  <script src="js/directions.js?v=ef2c097f48e6"></script>
   <script src="js/state.js?v=public-821e25ad8636"></script>
-  <script src="js/render.js?v=public-02d87d9bea0d"></script>
+  <script src="js/render.js?v=public-a2367ad9e85e"></script>
   <script src="js/editor-motion.js?v=ca1eb0979930"></script>
   <script src="js/ui.js?v=public-84ac1cb95055"></script>
   <script src="js/clipboard.js?v=public-1c7f4d30022d"></script>
@@ -236,8 +237,8 @@
   <script src="js/storage.js?v=public-85ae228675bd"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
-  <script src="js/panel.js?v=486ec6a33b73"></script>
-  <script src="js/interact.js?v=31b7f284bd4c"></script>
+  <script src="js/panel.js?v=5cf0be3dd902"></script>
+  <script src="js/interact.js?v=6fa383399ada"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = '换乘标识生成器';
@@ -254,6 +255,6 @@
   <script src="js/platform/patterns.js?v=3b04442c85b2"></script>
   <script src="js/transfer/state.js?v=619cd2b42adb"></script>
   <script src="js/transfer/render.js?v=386aa4d750d4"></script>
-  <script src="js/transfer/main.js?v=16deb04575a3"></script>
+  <script src="js/transfer/main.js?v=8d6a042f4967"></script>
 </body>
 </html>

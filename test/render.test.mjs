@@ -76,24 +76,22 @@ test('arrowGeometry up 方向坐标', () => {
   assert.ok(Math.abs(geo.shaft[2][1] - s) < 1e-9);
 });
 
-test('arrowGeometry 斜向：箭尖落在盒角、几何不越界', () => {
-  const tips = {
-    'left-up': [0, 0],
-    'right-up': [60, 0],
-    'right-down': [60, 60],
-    'left-down': [0, 60],
-  };
-  Object.keys(tips).forEach((d) => {
-    const geo = R.arrowGeometry(60, 15, d);
-    const tip = geo.head1[0];
-    assert.ok(Math.abs(tip[0] - tips[d][0]) < 1e-9 && Math.abs(tip[1] - tips[d][1]) < 1e-9,
-      d + ' 箭尖应为盒角，实际 ' + tip);
-    const all = geo.head1.concat(geo.head2, geo.shaft);
-    const xs = all.map((p) => p[0]);
-    const ys = all.map((p) => p[1]);
-    assert.ok(Math.min(...xs) >= -1e-9 && Math.max(...xs) <= 60 + 1e-9, d + ' x 越界');
-    assert.ok(Math.min(...ys) >= -1e-9 && Math.max(...ys) <= 60 + 1e-9, d + ' y 越界');
-  });
+test('旧存档的斜向箭头在各种粗细下四边留白相等，箭尖方向正确', () => {
+  const size = 60;
+  const directions = { 'left-up': [0, 0], 'right-up': [1, 0], 'right-down': [1, 1], 'left-down': [0, 1] };
+  for (const [direction, corner] of Object.entries(directions)) {
+    for (const thickness of [3, 15, 27, 57]) {
+      const { head1, head2, shaft } = R.arrowGeometry(size, thickness, direction);
+      const points = [...head1, ...head2, ...shaft];
+      for (const [axis, side] of corner.entries()) {
+        const coordinates = points.map(point => point[axis]);
+        const start = Math.min(...coordinates), end = Math.max(...coordinates);
+        assert.ok(start > size * 0.06 && size - end > size * 0.06, direction + ' 留白太小');
+        assert.ok(Math.abs(start + end - size) < 1e-9, direction + ' 两侧留白不同');
+        assert.ok(Math.abs(head1[0][axis] - (side ? end : start)) < 1e-9, direction + ' 箭尖方向有误');
+      }
+    }
+  }
 });
 
 test('八个方向元素宽度一致', () => {

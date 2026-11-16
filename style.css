@@ -1261,6 +1261,7 @@ dialog[open]::backdrop { opacity: 1; }
   display: flex; gap: 2px; padding: 2px;
   border-radius: 8px; background: var(--surface-soft);
 }
+.toolbar-group[hidden] { display: none; }
 #element-toolbar button {
   display: flex; align-items: center; justify-content: center;
   width: 32px; height: 34px; flex: none; border-radius: 6px;
@@ -1461,6 +1462,10 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
 [data-control-icon="history"] {
   --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11a8 8 0 1 1 1 5M4 5v6h6m2-4v5l3 2'/%3E%3C/svg%3E");
 }
+[data-control-icon="turn-clockwise"], [data-control-icon="turn-counterclockwise"] {
+  --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a9 9 0 1 1-2.26-6.26L21 8m0-5v5h-5'/%3E%3C/svg%3E");
+}
+[data-control-icon="turn-counterclockwise"]::before { transform: scaleX(-1); }
 button[data-control-icon="delete"] {
   --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 10v7m4-7v7'/%3E%3C/svg%3E");
   --control-ink: var(--delete-red);

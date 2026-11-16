@@ -323,14 +323,14 @@
       assert(element('#line-pattern-source').value === 'line-6', '切换线路后上传图片覆盖了新选择');
     });
 
-    await test('矢量图只保留牌面，图片导出包含三条色带和对应尺寸', async () => {
+    await test('矢量图的斜向箭头与预览一致，图片导出包含三条色带和对应尺寸', async () => {
       returnToSettings();
       input('#transfer-width', '480', 'change');
-      direction('upper', 'ahead-right');
+      direction('upper', 'right-up');
       input('#transfer-tool-alignment select', 'right', 'change');
       input('#transfer-tool-arrow-position select', 'right', 'change');
-      const expectedArrow = drawing('direction-arrow')[0].querySelector('path').getAttribute('d');
-      const expectedArrowPosition = drawing('direction-arrow')[0].getAttribute('x');
+      const previewArrow = drawing('direction-arrow')[0];
+      const expectedArrow = previewArrow.querySelector('path').getAttribute('d');
       line('second');
       const downloads = [];
       const originalDownload = editor.SignStorage.download;
@@ -344,7 +344,8 @@
         assert(vector.querySelectorAll('pattern').length === 2 && source.includes('@font-face'), '导出缺少底纹或字体');
         assert(vector.documentElement.getAttribute('width') === '480' && !vector.querySelector('[data-transfer-element]'), '导出了选框或尺寸不正确');
         const exportedArrow = Array.from(vector.querySelectorAll('path')).find(path => path.getAttribute('d') === expectedArrow);
-        assert(exportedArrow?.closest('svg').getAttribute('x') === expectedArrowPosition, '导出的箭头或对齐位置与预览不同');
+        assert(exportedArrow?.closest('svg').getAttribute('x') === previewArrow.getAttribute('x'), '导出的箭头或对齐位置与预览不同');
+        assert(exportedArrow.closest('svg').getAttribute('viewBox') === previewArrow.getAttribute('viewBox'), '导出的箭头留白与预览不同');
         click('#transfer-export-image');
         await waitFor(() => downloads.length === 2);
         const picture = await createImageBitmap(downloads[1].blob);
@@ -578,6 +579,46 @@
       select('label:lower');
       assert(isVisible('#transfer-group-alignment') && element('#transfer-label-lines [data-select-line="third"]'),
         '切回时未还原文字属性');
+    });
+
+    await test('换乘两个版式的四个斜向箭头在牌面与方向选项中均匀留白', () => {
+      for (const current of ['guidance', 'separate']) {
+        mode(current);
+        for (const value of ['left-up', 'right-up', 'right-down', 'left-down']) {
+          direction('upper', value);
+          const arrow = drawing('direction-arrow')[0];
+          const picker = element('[data-transfer-direction="' + value + '"] svg');
+          const frame = arrow.viewBox.baseVal, bounds = arrow.querySelector('path').getBBox();
+          const left = bounds.x - frame.x, right = frame.x + frame.width - bounds.x - bounds.width;
+          const top = bounds.y - frame.y, bottom = frame.y + frame.height - bounds.y - bounds.height;
+          assert(Math.min(left, right, top, bottom) > frame.width * 0.06, value + ' 过于靠边');
+          assert(Math.abs(left - right) < 0.01 && Math.abs(top - bottom) < 0.01, value + ' 两侧留白不同');
+          assert(picker.getAttribute('viewBox') === arrow.getAttribute('viewBox'), '预览与方向选项的留白不同');
+        }
+      }
+    });
+
+    await test('换乘浮动栏用两个图标顺逆转向，支持撤销且只改变选中的箭头', () => {
+      mode('separate');
+      direction('upper', 'left');
+      direction('lower', 'up');
+      for (const [selector, label] of [['#transfer-tool-turn', '顺时针'], ['#transfer-tool-turn-counterclockwise', '逆时针']]) {
+        const button = element(selector);
+        assert(isVisible(selector) && button.title.includes(label) && button.getAttribute('aria-label').includes(label), '缺少' + label + '按钮或操作名称');
+        assert(editor.getComputedStyle(button, '::before').maskImage !== 'none' && !button.textContent.trim(), '转向按钮应显示图标');
+      }
+      element('#transfer-tool-turn-counterclockwise').focus();
+      click('#transfer-tool-turn-counterclockwise');
+      assert(drawing('direction-arrow').map(arrow => arrow.dataset.direction).join(',') === 'left,left-up', '逆时针转向有误或影响其他箭头');
+      assert(page.activeElement === element('#transfer-tool-turn-counterclockwise'), '转向后焦点离开按钮');
+      click('#transfer-tool-turn');
+      assert(drawing('direction-arrow')[1].dataset.direction === 'up', '顺时针转向没有恢复方向');
+      click('#transfer-undo');
+      assert(drawing('direction-arrow')[1].dataset.direction === 'left-up', '撤销没有恢复方向');
+      direction('lower', 'ahead-left');
+      assert(!isVisible('#transfer-tool-turn') && !isVisible('#transfer-tool-turn-counterclockwise'), '折向箭头仍显示转向按钮');
+      select('line:first');
+      assert(!isVisible('#transfer-tool-turn') && !isVisible('#transfer-tool-turn-counterclockwise'), '线路仍显示转向按钮');
     });
   } finally {
     await navigate(() => { frame.src = 'about:blank'; });

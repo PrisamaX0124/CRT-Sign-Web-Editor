@@ -1530,7 +1530,8 @@
       });
       w.App.select(a.id);
       var bar = $('#element-toolbar');
-      ok('S47 选中即显示7个快捷操作及2个自定义边距入口', !!bar && !bar.hidden && bar.querySelectorAll('button').length === 9);
+      ok('S47 选中即显示7个快捷操作及2个自定义边距入口', !!bar && !bar.hidden &&
+        $$('#element-toolbar button').filter(function (button) { return button.getClientRects().length; }).length === 9);
       if (!bar) return;
       var stable = bar;
       bar.querySelector('[data-action="move-right"]').click();
@@ -1573,7 +1574,7 @@
       ok('S48 四个边距操作使用独立SVG图标及明确名称', paddingButtons.length === 4 && paddingButtons.every(function (b) {
         return !!b.querySelector('svg') && !b.textContent.trim() && !!b.getAttribute('aria-label');
       }));
-      ok('S48 浮动栏按移动、左右边距和管理操作分组', bar.querySelectorAll('.toolbar-group').length === 4);
+      ok('S48 浮动栏按移动、左右边距和管理操作分组', bar.querySelectorAll('.toolbar-group:not([hidden])').length === 4);
       var elementSelect = bar.querySelector('[data-align="elementAlign"] select');
       var textSelect = bar.querySelector('[data-align="align"] select');
       ok('S48 元素对齐与文字对齐均为三个选项的下拉框', !!elementSelect && !!textSelect && elementSelect.options.length === 3 && textSelect.options.length === 3);
@@ -1627,7 +1628,8 @@
         return S.addElement(st, st.rows[0].id, b);
       });
       w.App.select(a.id);
-      ok('S49 浮动栏通过页面空白取消选择，包含7个操作与2个自定义边距入口', !$('#element-toolbar [data-action="deselect"]') && $$('#element-toolbar button').length === 9);
+      ok('S49 浮动栏通过页面空白取消选择，包含7个操作与2个自定义边距入口', !$('#element-toolbar [data-action="deselect"]') &&
+        $$('#element-toolbar button').filter(function (button) { return button.getClientRects().length; }).length === 9);
       ['#canvas-scroll', '#canvas-area', '#left-panel .panel-body', '#right-panel-body'].forEach(function (selector) {
         w.App.select(a.id);
         $(selector).click();

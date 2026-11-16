@@ -14,6 +14,7 @@
 
   var Core = global.SignCore;
   var State = global.SignState;
+  var Directions = global.SignDirections;
   var UI = global.SignUI;
   var App = global.App;
   var h = UI.h;
@@ -21,6 +22,7 @@
   var overlay, svg, elIndicator, rowIndicator, canvasScroll, elementToolbar;
   var toolbarAlignments = [];
   var toolbarPaddingControls = [];
+  var toolbarTurnControls;
   var suppressClick = false;
   var pagePointer = null;
   var selectionControls = 'button, input, select, textarea, label, a, summary, [contenteditable], [role="button"], [role="tab"], .palette-card, .preset-card, .row-handle, .field, .panel-section, .padding-editor, .panel-header, #element-toolbar, .modal-mask, .toast';
@@ -201,6 +203,38 @@
     return group;
   }
 
+  function arrowDirection(element) {
+    if (element.type === 'arrow') return element.props.direction;
+    if (element.type === 'icon') {
+      return Directions.items.find(function (item) { return item.icon === element.props.icon; })?.direction;
+    }
+  }
+
+  function buildToolbarTurnControls() {
+    var group = h('div', { class: 'toolbar-group', role: 'group', 'aria-label': '箭头转向', hidden: '' });
+    [
+      { step: -1, icon: 'turn-counterclockwise', label: '逆时针转向 45°' },
+      { step: 1, icon: 'turn-clockwise', label: '顺时针转向 45°' },
+    ].forEach(function (control) {
+      var button = h('button', { type: 'button', 'data-control-icon': control.icon, title: control.label, 'aria-label': control.label });
+      button.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var identifier = App.selection.elementId;
+        if (!identifier || App.selectedIds().length !== 1) return;
+        App.update(function (state) {
+          var found = State.findElement(state, identifier);
+          if (!found) return state;
+          var direction = Directions.turn(arrowDirection(found.element), control.step);
+          if (!direction) return state;
+          var patch = found.element.type === 'arrow' ? { direction: direction } : { icon: Directions.identifier(direction) };
+          return State.updateElementProps(state, identifier, patch);
+        });
+      });
+      group.appendChild(button);
+    });
+    return group;
+  }
+
   function buildElementToolbar() {
     var actions = [
       { key: 'move-left', group: '移动元素', label: '向左移动元素', path: 'M19 12H5m6-6-6 6 6 6' },
@@ -214,6 +248,8 @@
       if (action.key === 'delete') {
         actionRow.appendChild(buildToolbarPadding('left'));
         actionRow.appendChild(buildToolbarPadding('right'));
+        toolbarTurnControls = buildToolbarTurnControls();
+        actionRow.appendChild(toolbarTurnControls);
       }
       if (!groups[action.group]) {
         groups[action.group] = h('div', { class: 'toolbar-group', role: 'group', 'aria-label': action.group });
@@ -270,6 +306,7 @@
     document.getElementById('center-panel').classList.toggle('has-element-selection', !!found);
     global.EditorMotion.setToolbarVisible(elementToolbar, !!found);
     if (!found) return;
+    toolbarTurnControls.hidden = App.selectedIds().length !== 1 || !Directions.canTurn(arrowDirection(found.element));
     toolbarPaddingControls.forEach(function (sync) { sync(found); });
     toolbarAlignments.forEach(function (item) {
       item.control.node.hidden = item.config.types

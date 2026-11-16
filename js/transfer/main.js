@@ -15,6 +15,7 @@
   const preview = element('transfer-preview');
   const previewScroll = element('transfer-preview-scroll');
   const toolbar = element('transfer-element-toolbar');
+  const turnButtons = toolbar.querySelectorAll('[data-turn-step]');
   const propertyScroll = element('transfer-property-scroll');
   const heading = element('transfer-heading');
   const settingsPanel = element('transfer-settings');
@@ -39,7 +40,6 @@
     label: element('transfer-label-properties'),
   };
   const descriptions = { guidance: '贴柱式换乘引导标识', separate: '贴柱式换乘标识' };
-  const clockwise = ['up', 'right-up', 'right', 'right-down', 'down', 'left-down', 'left', 'left-up'];
   const history = {
     guidance: { undo: [], redo: [] },
     separate: { undo: [], redo: [] },
@@ -322,10 +322,10 @@
 
     const edit = element('transfer-tool-edit');
     const pattern = element('transfer-tool-pattern');
-    const turn = element('transfer-tool-turn');
+    const direction = selected.kind === 'arrow' ? state.board(App.state).directions[selected.identifier] : undefined;
     element('transfer-toolbar-title').textContent = title;
     pattern.hidden = selected.kind !== 'line';
-    turn.hidden = true;
+    for (const button of turnButtons) button.hidden = !global.SignDirections.canTurn(direction);
     edit.textContent = selected.kind === 'arrow' ? '选方向' : '编辑线路';
     if (selected.kind === 'line') {
       const line = selectedLine();
@@ -335,8 +335,6 @@
       pattern.textContent = line.linePattern.enabled ? '关闭底纹' : '启用底纹';
       pattern.setAttribute('aria-pressed', String(line.linePattern.enabled));
     } else if (selected.kind === 'arrow') {
-      const direction = state.board(App.state).directions[selected.identifier];
-      turn.hidden = !clockwise.includes(direction);
       for (const button of directionPicker.children) {
         button.setAttribute('aria-pressed', String(button.dataset.transferDirection === direction));
       }
@@ -458,12 +456,14 @@
     const line = selectedLine();
     if (line) changePattern({ enabled: !line.linePattern.enabled });
   });
-  element('transfer-tool-turn').addEventListener('click', () => {
-    if (selected?.kind !== 'arrow') return;
-    const direction = state.board(App.state).directions[selected.identifier];
-    const index = clockwise.indexOf(direction);
-    if (index >= 0) setDirection(clockwise[(index + 1) % clockwise.length]);
-  });
+  for (const button of turnButtons) {
+    button.addEventListener('click', () => {
+      if (selected?.kind !== 'arrow') return;
+      const direction = state.board(App.state).directions[selected.identifier];
+      const nextDirection = global.SignDirections.turn(direction, Number(button.dataset.turnStep));
+      if (nextDirection) setDirection(nextDirection);
+    });
+  }
   lineName.addEventListener('input', () => changeLine({ name: lineName.value }, 'line-name'));
   propertyScroll.addEventListener('focusout', () => { previousGroup = undefined; });
   palette.addEventListener('change', () => changeSettings({ city: palette.value }));

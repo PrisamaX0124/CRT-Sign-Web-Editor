@@ -1123,7 +1123,7 @@
     var grid = h('div', { class: 'icon-grid' });
     var btns = [];
     Object.keys(lib.ALL).forEach(function (id) {
-      var icon = lib.ALL[id];
+      var icon = global.SignDirections.iconForIdentifier(id);
       if (icon.cat !== curCat) return;
       var svg = document.createElementNS(Core.SVG_NS, 'svg');
       svg.setAttribute('viewBox', icon.vb);

@@ -25,6 +25,44 @@ const content = (scene, role) => scene.nodes.filter(node => node.attributes['dat
 const values = nodes => Array.from(nodes, node => node.text);
 const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
 
+test('八向箭头可以顺转、逆转和绕回，折向箭头保留原方向', () => {
+  const { canTurn, turn } = context.SignDirections;
+  const directions = ['up', 'right-up', 'right', 'right-down', 'down', 'left-down', 'left', 'left-up'];
+  directions.forEach((direction, index) => {
+    assert.equal(canTurn(direction), true);
+    assert.equal(turn(direction, 1), directions[(index + 1) % directions.length]);
+    assert.equal(turn(direction, -1), directions[(index + directions.length - 1) % directions.length]);
+  });
+  for (const direction of ['ahead-left', 'ahead-right', 'back-left', 'back-right', undefined]) {
+    assert.equal(canTurn(direction), false);
+    assert.equal(turn(direction, 1), undefined);
+    assert.equal(turn(direction, -1), undefined);
+  }
+});
+
+test('斜向图标保留图形和原有尺寸，水平与垂直方向各有相等留白', () => {
+  const directions = context.SignDirections;
+  for (const { icon, direction } of directions.items) {
+    const source = context.SignIcons.get(icon);
+    const framed = directions.icon(direction);
+    assert.equal(framed.body, source.body);
+    if (!['left-up', 'right-up', 'left-down', 'right-down'].includes(direction)) {
+      assert.equal(framed, source);
+      continue;
+    }
+    const [left, top, width, height] = framed.vb.split(' ').map(Number);
+    assert.deepEqual([width, height], [56, 56]);
+    const coordinates = framed.body.match(/d="([^"]+)"/)[1].match(/-?[\d.]+/g).map(Number);
+    for (const [axis, start, size] of [[0, left, width], [1, top, height]]) {
+      const points = coordinates.filter((_, index) => index % 2 === axis);
+      const before = Math.min(...points) - start;
+      const after = start + size - Math.max(...points);
+      assert.ok(before > size * 0.06 && after > size * 0.06, direction + ' 留白太小');
+      assert.ok(Math.abs(before - after) < 0.01, direction + ' 两侧留白不同');
+    }
+  }
+});
+
 test('两种版式各自保留线路、箭头、分组、颜色、尺寸和底纹', () => {
   const guidance = state.changeLine(initial, 'first', { name: '12', color: '#123', linePattern: { source: 'line-6' } });
   const changed = state.changeDirection(state.settings(guidance, { city: 'beijing', width: 480 }), 'upper', 'right-up');
@@ -299,7 +337,7 @@ test('导向标识的十二种箭头与较长的线路名称在两种版式内�
       const scene = render.layout(edited, measure);
       const arrow = content(scene, 'direction-arrow')[0];
       assert.equal(arrow.attributes['data-direction'], direction);
-      assert.equal(arrow.attributes.viewBox, icon.vb);
+      assert.equal(arrow.attributes.viewBox, context.SignDirections.icon(direction).vb);
       assert.equal(arrow.markup.match(/d="([^"]+)"/)[1], icon.body.match(/d="([^"]+)"/)[1]);
       assert.equal(content(scene, 'line-name').length, 1);
       for (const { bounds } of scene.elements) {

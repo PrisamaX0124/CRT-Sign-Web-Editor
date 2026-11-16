@@ -90,8 +90,6 @@
     return { head1: head1, head2: head2, shaft: shaft };
   }
 
-  // 斜向 = 轴对齐基底（左/右）在虚拟盒（长 √2s − t）内构建后旋转 ±45°，
-  // 箭尖精确锚在内容盒角上；头部远角恰好触及盒缘，几何不越界。
   var DIAGONAL_ARROW = {
     'left-up': { base: 'left', phi: 45, corner: [0, 0] },
     'right-up': { base: 'right', phi: -45, corner: [1, 0] },
@@ -100,29 +98,33 @@
   };
 
   function arrowGeometry(size, thickness, direction) {
-    var diag = DIAGONAL_ARROW[direction];
-    if (!diag) return axisArrowGeometry(size, thickness, direction);
-    var L = size * Math.SQRT2 - thickness;
-    var g = axisArrowGeometry(L, thickness, diag.base);
-    var phi = diag.phi * Math.PI / 180;
-    var cos = Math.cos(phi), sin = Math.sin(phi);
-    var cl = L / 2;
-    var tip = diag.base === 'left' ? [0, cl] : [L, cl];
-    function rel(p) {
-      var dx = p[0] - cl, dy = p[1] - cl;
-      return [dx * cos - dy * sin, dx * sin + dy * cos];
+    var diagonal = DIAGONAL_ARROW[direction];
+    if (!diagonal) return axisArrowGeometry(size, thickness, direction);
+    // 旧存档里的斜向箭头也需要留出与方向图标相近的边距。
+    var scale = 0.85;
+    var innerSize = size * scale;
+    var inset = (size - innerSize) / 2;
+    var length = innerSize * Math.SQRT2 - thickness * scale;
+    var geometry = axisArrowGeometry(length, thickness * scale, diagonal.base);
+    var angle = diagonal.phi * Math.PI / 180;
+    var cosine = Math.cos(angle), sine = Math.sin(angle);
+    var center = length / 2;
+    var tip = diagonal.base === 'left' ? [0, center] : [length, center];
+    function rotateFromCenter(point) {
+      var horizontal = point[0] - center, vertical = point[1] - center;
+      return [horizontal * cosine - vertical * sine, horizontal * sine + vertical * cosine];
     }
-    var tipRot = rel(tip);
-    var ox = diag.corner[0] * size - tipRot[0];
-    var oy = diag.corner[1] * size - tipRot[1];
-    function rot(p) {
-      var q = rel(p);
-      return [q[0] + ox, q[1] + oy];
+    var rotatedTip = rotateFromCenter(tip);
+    var left = inset + diagonal.corner[0] * innerSize - rotatedTip[0];
+    var top = inset + diagonal.corner[1] * innerSize - rotatedTip[1];
+    function placePoint(point) {
+      var rotated = rotateFromCenter(point);
+      return [rotated[0] + left, rotated[1] + top];
     }
     return {
-      head1: g.head1.map(rot),
-      head2: g.head2.map(rot),
-      shaft: g.shaft.map(rot),
+      head1: geometry.head1.map(placePoint),
+      head2: geometry.head2.map(placePoint),
+      shaft: geometry.shaft.map(placePoint),
     };
   }
 
@@ -776,9 +778,8 @@
   function drawSpace() { /* 空白占位，无可见内容 */ }
 
   function drawIcon(g, el, mt) {
-    var lib = global.SignIcons;
-    if (!HAS_DOM || !lib) return;
-    var icon = lib.get(el.props.icon);
+    if (!HAS_DOM || !global.SignDirections) return;
+    var icon = global.SignDirections.iconForIdentifier(el.props.icon);
     var color = el.props.color || '#000000';
     // 旋转功能只作用于服务设施；方向图标已有固定方向，不受该属性影响。
     var rotation = icon.cat === 'service' ? Number(el.props.rotation) : 0;
