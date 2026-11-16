@@ -257,7 +257,7 @@
           await repaint(window);
         });
 
-        await test(editor.name + '：删除按钮使用白底红色垃圾桶，清空使用红底白色扫帚', async function () {
+        await test(editor.name + (editor.path === 'index.html' ? '：删除用红色垃圾桶，清空用白色圆形叉号' : '：删除按钮使用白底红色垃圾桶'), async function () {
           const guide = editor.path === 'index.html';
           select();
           const remove = document.querySelector(guide ? '#right-panel-body [data-control-icon="delete"]' : '#station-delete');
@@ -269,12 +269,25 @@
           if (!guide) return;
           const clear = document.querySelector('#right-panel-body [data-control-icon="clear"]');
           assert(clear && window.getComputedStyle(clear).backgroundColor === 'rgb(233, 21, 45)', '清空按钮应为红底');
-          const broom = window.getComputedStyle(clear, '::before');
-          assert(broom.backgroundColor === 'rgb(255, 255, 255)' && broom.maskImage !== 'none' && broom.maskImage !== trashIcon,
+          const clearStyle = window.getComputedStyle(clear, '::before');
+          const clearIcon = clearStyle.maskImage;
+          assert(clearStyle.backgroundColor === 'rgb(255, 255, 255)' && clearIcon !== 'none' && clearIcon !== trashIcon,
             '清空应使用独立的白色图标');
+          const image = new window.Image();
+          image.src = clearIcon.slice(5, -2);
+          await image.decode();
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 32;
+          const drawing = canvas.getContext('2d');
+          drawing.drawImage(image, 0, 0, 32, 32);
+          const opacity = (horizontal, vertical) => drawing.getImageData(horizontal, vertical, 1, 1).data[3];
+          assert(opacity(16, 3) === 255 && opacity(3, 16) === 255 && opacity(16, 28) === 255 && opacity(28, 16) === 255 &&
+            opacity(2, 2) === 0 && opacity(16, 16) === 0 && opacity(12, 12) === 0 && opacity(20, 12) === 0 &&
+            opacity(16, 11) === 255, '清空图标应为圆形，中间镂空叉号');
           clear.click();
           const dialog = document.querySelector('.modal-mask');
-          assert(dialog.querySelector('[data-act="ok"][data-control-icon="clear"]'), '清空确认按钮也应显示清空图标');
+          const confirm = dialog.querySelector('[data-act="ok"][data-control-icon="clear"]');
+          assert(confirm && window.getComputedStyle(confirm, '::before').maskImage === clearIcon, '清空确认按钮应显示相同图标');
           dialog.querySelector('[data-act="cancel"]').click();
           await finishAnimations(animations(dialog, true));
         });
