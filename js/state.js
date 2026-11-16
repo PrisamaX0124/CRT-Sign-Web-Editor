@@ -96,8 +96,8 @@
     'exit': {
       code: '1',
       color: '#000000',
-      align: 'left',                // 内容对齐（left|right）：右对齐时编号移至「出口」右侧
-      backgroundColor: Core.EXIT_COLOR, // 出口背景色固定出口黄
+      align: 'left',
+      backgroundColor: null,
       elementAlign: 'left',
       padding: { top: 0.2, right: 0.2, bottom: 0.2, left: 0.2 },
     },
@@ -608,10 +608,11 @@
     props.padding = sanitizePadding(props.padding);
     props.paddingAuto = el.type === 'space' ? false : savedAuto;
     if (props.color !== undefined) props.color = sanitizeColor(props.color, '#000000');
-    if (props.backgroundColor !== undefined && props.backgroundColor !== null) {
+    if (el.type === 'exit') {
+      props.backgroundColor = null;
+    } else if (props.backgroundColor !== undefined && props.backgroundColor !== null) {
       props.backgroundColor = sanitizeColor(props.backgroundColor, null);
     }
-    if (el.type === 'exit') props.backgroundColor = Core.EXIT_COLOR;
     if (props.elementAlign !== 'center' && props.elementAlign !== 'right') props.elementAlign = 'left';
     // 内容对齐仅这三类元素支持，且只有 left|right 两档；双语文本的 align（left|center|right）不受影响
     if (CONTENT_ALIGN_TYPES.indexOf(el.type) !== -1 && props.align !== 'right') props.align = 'left';

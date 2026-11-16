@@ -29,7 +29,7 @@ test('批量背景色覆盖所有可设色类型，跳过出口并保留未选�
   assert.equal(application.backgroundColorValue(), null);
   application.setBackgroundColor('#123456');
   editableTypes.forEach((type, index) => assert.equal(state.findElement(application.state, elements[index].id).element.props.backgroundColor, '#123456', type));
-  assert.equal(state.findElement(application.state, elements[9].id).element.props.backgroundColor, '#F7D917');
+  assert.equal(state.findElement(application.state, elements[9].id).element.props.backgroundColor, null);
   assert.equal(state.findElement(application.state, elements[10].id).element.props.backgroundColor, null);
   assert.equal(application.backgroundColorValue(), '#123456');
   assert.equal(application.state.backgroundColor, '#FFFFFF');
@@ -39,7 +39,7 @@ test('批量背景色覆盖所有可设色类型，跳过出口并保留未选�
   application.redo();
   application.setBackgroundColor(null);
   assert.equal(application.backgroundColorValue(), null);
-  assert.equal(state.findElement(application.state, elements[9].id).element.props.backgroundColor, '#F7D917');
+  assert.equal(state.findElement(application.state, elements[9].id).element.props.backgroundColor, null);
   application.selectMany([elements[9].id]);
   const fixed = application.state;
   application.setBackgroundColor('#ABCDEF');

@@ -118,6 +118,10 @@
         '线路数字未用导向标识的常规字重');
     });
 
+    await test('换乘标识使用统一的浏览器标签页标题', () => {
+      assert(page.title === 'CRT标识编辑器 - 换乘标识', '换乘标识网页标题有误');
+    });
+
     await test('从左栏点选线路和箭头，右栏显示对应属性，左栏仍可切换分组', () => {
       assert(element('#transfer-content').contains(element('#transfer-arrangements')) &&
         element('#transfer-content').contains(element('#transfer-groups')), '分组和牌面元素应放在左栏');

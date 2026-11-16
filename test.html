@@ -527,20 +527,20 @@
       assertEqual(svg.querySelector('.sign-frame').getAttribute('fill'), '#808080', '旧项目灰框保持旧色');
     });
 
-    test('Entrance/Exit 渲染：编号 + 双语标签；Exit 有出口黄背景', function () {
-      var en = SignState.createElement('entrance', { code: 'C' });
-      var r1 = SignRender.renderElement(en, 256, measure);
-      var texts1 = r1.node.querySelectorAll('text');
-      assertEqual(texts1[0].textContent, 'C');
-      assertEqual(texts1[1].textContent, '出入口');
+    test('出入口和出口绘制编号与双语文字，出口底色透明', function () {
+      var entrance = SignState.createElement('entrance', { code: 'C' });
+      var entrancePreview = SignRender.renderElement(entrance, 256, measure).node;
+      var entranceTexts = entrancePreview.querySelectorAll('text');
+      assertEqual(entranceTexts[0].textContent, 'C');
+      assertEqual(entranceTexts[1].textContent, '出入口');
 
-      var ex = SignState.createElement('exit', { code: '1' });
-      var r2 = SignRender.renderElement(ex, 256, measure);
-      var bg = r2.node.querySelector('rect');
-      assertEqual(bg.getAttribute('fill'), '#F7D917', '出口黄背景');
-      var texts2 = r2.node.querySelectorAll('text');
-      assertEqual(texts2[1].textContent, '出口');
-      assertEqual(texts2[2].textContent, 'Exit');
+      var exit = SignState.createElement('exit', { code: '1' });
+      var exitPreview = SignRender.renderElement(exit, 256, measure).node;
+      assert(!exitPreview.querySelector('rect:not(.hitbox)'), '出口应透出所在行的底色');
+      var exitTexts = exitPreview.querySelectorAll('text');
+      assertEqual(exitTexts[0].textContent, '1');
+      assertEqual(exitTexts[1].textContent, '出口');
+      assertEqual(exitTexts[2].textContent, 'Exit');
     });
 
     test('Space：无可见内容但占宽', function () {

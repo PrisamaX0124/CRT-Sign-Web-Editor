@@ -800,9 +800,6 @@
         isMixed: function () { return App.backgroundColorValue() === undefined; },
         onChange: App.setBackgroundColor,
       })));
-      if (App.backgroundColorTargets().length < App.selectedIds().length) {
-        colors.appendChild(h('div', { class: 'hint-text', text: '出口保持固定黄色。' }));
-      }
       root.appendChild(colors);
     }
     var del = h('button', { class: 'btn', text: '删除选中元素', 'data-control-icon': 'delete' });
@@ -843,7 +840,7 @@
       case 'icon': buildIconFields(fields, el, live); break;
     }
     Array.prototype.slice.call(fields.children).forEach(function (node) {
-      if (node.classList.contains('color-field') || node.classList.contains('fixed-color-hint')) colors.appendChild(node);
+      if (node.classList.contains('color-field')) colors.appendChild(node);
       else if (node.querySelector('.seg-group, .format-btn, .alignment-buttons, input[type="range"]')) layout.appendChild(node);
       else content.appendChild(node);
     });
@@ -1090,7 +1087,7 @@
     bindSync(c, function () { return live().props.code; });
     root.appendChild(field('编号', c));
     if (el.type === 'exit') {
-      root.appendChild(contentAlignGroup(el, live)); // 仅出口支持内容对齐（编号移至「出口」右侧）
+      root.appendChild(contentAlignGroup(el, live));
     }
     root.appendChild(field('文字颜色', buildColorPicker({
       value: el.props.color,
@@ -1098,9 +1095,6 @@
       getValue: function () { return live().props.color; },
       onChange: function (v) { patchProps(el.id, { color: v }); },
     })));
-    if (el.type === 'exit') {
-      root.appendChild(h('div', { class: 'hint-text fixed-color-hint', text: '出口背景固定为黄色' }));
-    }
   }
 
   function buildSpaceFields(root, el, live) {
@@ -1161,7 +1155,6 @@
       getValue: function () { return live().props.color; },
       onChange: function (v) { patchProps(el.id, { color: v }); },
     })));
-    // 元素背景色由通用分发器统一追加（buildFields 末尾，space/exit 除外）
   }
 
   function buildBackgroundPicker(el, live) {

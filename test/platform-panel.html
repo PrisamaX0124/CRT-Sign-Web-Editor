@@ -54,6 +54,10 @@
     project = state.replaceStations(state.create(), state.parseStations('01|起点站|First Station\n02|中途站|Middle Station|1,市郊线~Suburban Line:#0057B8\n03|终点站|Last Station', 'chongqing'));
     project = state.settings(project, { currentId: project.stations[1].id });
 
+    await test('站台标识使用统一的浏览器标签页标题', function () {
+      assert(editor.title === 'CRT标识编辑器 - 站台标识', '站台标识网页标题有误');
+    });
+
     await test('整牌设置按尺寸、线路、牌面颜色、底纹、导出和项目排列，共用一处滚动区', function () {
       const sections = Array.from(element('property-settings').children, section => section.querySelector('h2').textContent);
       assert(sections.join('、') === '尺寸与排版、线路与行车方向、牌面颜色、线路底纹、导出、项目', '整牌设置的分组或顺序有误');

@@ -5,10 +5,15 @@
  */
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { runInNewContext, runInThisContext } from 'node:vm';
 import assert from 'node:assert/strict';
 
-// 以间接 eval 在全局作用域加载浏览器风格脚本
-const load = (p) => (0, eval)(readFileSync(new URL(p, import.meta.url), 'utf8'));
+// 保留脚本路径，覆盖率报告才能列出被测文件。
+const load = (path) => {
+  const filename = fileURLToPath(new URL(path, import.meta.url));
+  runInThisContext(readFileSync(filename, 'utf8'), { filename });
+};
 load('../js/core.js');
 load('../js/state.js');
 
@@ -184,9 +189,6 @@ test('createElement 各类型默认值齐全，padding 深合并', () => {
 
   const nl = S.createElement('number-line');
   assert.deepEqual(nl.props.lines, [{ number: '1', color: '#E4002B' }]); // 默认重庆 1 号线红
-
-  const ex = S.createElement('exit');
-  assert.equal(ex.props.backgroundColor, '#F7D917');
 
   const sp = S.createElement('space');
   assert.equal(sp.props.widthRatio, 0.5);
@@ -481,11 +483,57 @@ test('deserialize 宽容修补：未知元素剔除、缺失 props 补默认、�
   assert.equal(el.props.thicknessRatio, 0.25); // 缺失补默认
 });
 
-test('deserialize 强制出口背景色为出口黄', () => {
-  const s = S.deserializeSign({
-    sign: { rows: [{ id: 'r', elements: [{ id: 'e', type: 'exit', props: { backgroundColor: '#FF0000' } }] }] },
+test('新建出口时背景透明', () => {
+  const exit = S.createElement('exit');
+  assert.equal(exit.props.backgroundColor, null);
+});
+
+test('打开旧项目时清除出口底色，保留出口文字和其他元素颜色', () => {
+  const project = S.deserializeSign({
+    rows: [{ id: 'row', elements: [
+      { id: 'exit', type: 'exit', props: { code: 'C', align: 'right', color: '#222222', backgroundColor: '#F7D917' } },
+      { id: 'entrance', type: 'entrance', props: { backgroundColor: '#F7D917' } },
+    ] }],
   });
-  assert.equal(s.rows[0].elements[0].props.backgroundColor, '#F7D917');
+  const [exit, entrance] = project.rows[0].elements;
+  assert.equal(exit.props.backgroundColor, null);
+  assert.equal(exit.props.code, 'C');
+  assert.equal(exit.props.align, 'right');
+  assert.equal(exit.props.color, '#222222');
+  assert.equal(entrance.props.backgroundColor, '#F7D917');
+  assert.deepEqual(S.deserializeSign(S.serializeSign(project)), project);
+});
+
+test('粘贴旧版出口时清除底色并保留编号', () => {
+  const project = S.createSign();
+  const clipboard = JSON.stringify({
+    kind: 'jr-sign-elements', version: 1,
+    rows: [{ offset: 0, elements: [
+      { id: 'exit', type: 'exit', props: { code: 'D', backgroundColor: '#F7D917' } },
+    ] }],
+  });
+  const pasted = S.pasteElements(project, clipboard, project.rows[0].id);
+  const [exit] = pasted.rows[0].elements;
+  assert.equal(exit.props.backgroundColor, null);
+  assert.equal(exit.props.code, 'D');
+  assert.equal(project.rows[0].elements.length, 0);
+});
+
+test('读取旧预设时只清除出口底色，应用时保留其他元素颜色', () => {
+  const stored = JSON.stringify([{
+    id: 'older-preset', name: '旧预设', elements: [
+      { id: 'exit', type: 'exit', props: { code: 'E', backgroundColor: '#F7D917' } },
+      { id: 'entrance', type: 'entrance', props: { backgroundColor: '#F7D917' } },
+    ],
+  }]);
+  const filename = fileURLToPath(new URL('../js/presets.js', import.meta.url));
+  const browser = { SignCore: Core, SignState: S, localStorage: { getItem: () => stored } };
+  runInNewContext(readFileSync(filename, 'utf8'), browser, { filename });
+  const [exit, entrance] = browser.SignPresets.materialize('older-preset');
+  assert.equal(exit.props.backgroundColor, null);
+  assert.equal(exit.props.code, 'E');
+  assert.notEqual(exit.id, 'exit');
+  assert.equal(entrance.props.backgroundColor, '#F7D917');
 });
 
 test('padding：左右可 >1（≤8），上下仍 ≤1', () => {
