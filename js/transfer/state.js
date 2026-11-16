@@ -38,14 +38,20 @@
     return typeof value === 'string' && Object.hasOwn(options, value) ? value : fallback;
   }
 
+  function cleanLineText(value, maximumLength, fallback = '') {
+    return typeof value === 'string'
+      ? Array.from(value.replace(/[\u0000-\u001f]/g, '')).slice(0, maximumLength).join('')
+      : fallback;
+  }
+
   function cleanLine(value, fallback, city) {
     const saved = value || {};
-    const name = typeof saved.name === 'string'
-      ? Array.from(saved.name.replace(/[\u0000-\u001f]/g, '')).slice(0, 40).join('')
-      : fallback.name;
+    const name = cleanLineText(saved.name, 40, fallback.name);
     return {
       identifier: fallback.identifier,
       name,
+      englishName: cleanLineText(saved.englishName, 80),
+      largeName: saved.largeName === true,
       color: core.normalizeHex(saved.color) || core.lineColorFor(lineName(name), city)?.bg || '#424A52',
       linePattern: patterns.settings(saved.linePattern),
     };
@@ -169,7 +175,9 @@
   }
 
   function displayLine(project, line) {
-    return { ...line, line: lineName(line.name), city: board(project).city };
+    const name = lineName(line.name);
+    return { ...line, line: name, number: /^[0-9]+$/.test(name) ? name : null,
+      englishName: line.englishName.trim(), city: board(project).city };
   }
 
   function groups(project) {

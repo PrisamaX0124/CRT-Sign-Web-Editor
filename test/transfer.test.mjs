@@ -93,6 +93,38 @@ test('线路名可匹配城市配色，改色后继续编辑名称可重新按�
   assert.equal(state.board(renamed).city, 'chongqing');
 });
 
+test('文字线路保存英文名和放大设置，切换版式和改回数字时各自保留', () => {
+  const named = state.changeLine(initial, 'first', {
+    name: '环线', englishName: '  Loop\n Line  ', largeName: true,
+  });
+  const namedLine = state.board(named).lines[0];
+  assert.equal(namedLine.englishName, '  Loop Line  ');
+  assert.equal(namedLine.largeName, true);
+  assert.equal(namedLine.color, context.SignCore.lineColorFor('环线', 'chongqing').bg);
+  const numeric = state.changeLine(named, 'first', { name: ' ２号线 ' });
+  const separate = state.settings(numeric, { mode: 'separate' });
+  const restored = state.deserialize(state.serialize(separate));
+  assert.equal(restored.boards.guidance.lines[0].englishName, namedLine.englishName);
+  assert.equal(restored.boards.guidance.lines[0].largeName, true);
+  assert.equal(restored.boards.separate.lines[0].englishName, '');
+  assert.equal(restored.boards.separate.lines[0].largeName, false);
+  assert.equal(initial.boards.guidance.lines[0].name, '1');
+});
+
+test('旧档中的线路名称可直接使用，非法英文名和放大设置恢复默认值', () => {
+  const old = { kind: 'transfer-sign', version: 2, boards: { guidance: { lines: [
+    { name: '机场快线', color: '#123456', englishName: 42, largeName: 'true' },
+    { name: '环线', englishName: 'A'.repeat(85) },
+  ] } } };
+  const project = state.deserialize(JSON.stringify(old));
+  const [first, second] = state.board(project).lines;
+  assert.equal(first.name, '机场快线');
+  assert.equal(first.color, '#123456');
+  assert.equal(first.englishName, '');
+  assert.equal(first.largeName, false);
+  assert.equal(second.englishName.length, 80);
+});
+
 test('新版存档往返保留两个版式，异常尺寸、分组、箭头和底纹恢复可用值', () => {
   let changed = state.settings(initial, { mode: 'separate', arrangement: '1+2', width: 99999 });
   changed = state.changeLine(changed, 'third', { linePattern: { source: 'line-2', size: 215, opacity: -5 } });
@@ -366,7 +398,52 @@ test('清空线路名称时保留换乘提示，名称与编号混用时补全�
   assert.equal(content(single, 'line-name').length, 0);
   assert.equal(single.usedFonts.num400, false);
   const named = render.layout(state.changeLine(initial, 'first', { name: '环线' }), measure);
-  assert.deepEqual(values(content(named, 'line-name')), ['环线 / 10号线']);
+  assert.deepEqual(values(content(named, 'line-name')), ['环线']);
+  assert.deepEqual(values(content(named, 'line-number')), ['10']);
+  assert.deepEqual(values(content(named, 'label-chinese')), ['换乘', '号线']);
+  assert.deepEqual(values(content(named, 'line-separator')), ['/']);
+});
+
+test('同组文字线路各自显示中英文，英文缺省时保留中文，纯英文名称也可显示', () => {
+  const named = state.changeLine(initial, 'first', { name: '环线', englishName: ' Loop Line ' });
+  const project = state.changeLine(named, 'second', { name: '机场快线', englishName: 'Airport Express' });
+  const scene = render.layout(project, measure);
+  const names = content(scene, 'line-name');
+  const translations = content(scene, 'line-english-name');
+  assert.deepEqual(values(names), ['环线', '机场快线']);
+  assert.deepEqual(values(translations), ['Loop Line', 'Airport Express']);
+  assert.equal(scene.usedFonts.num400, false);
+  for (const [index, name] of names.entries()) {
+    assert.equal(name.bounds.left, translations[index].bounds.left);
+    assert.ok(name.bounds.top + name.bounds.height < translations[index].bounds.top);
+  }
+  const partial = state.changeLine(state.changeLine(project, 'first', { englishName: '   ' }), 'second', { name: '' });
+  const partialScene = render.layout(partial, measure);
+  assert.deepEqual(values(content(partialScene, 'line-name')), ['环线']);
+  assert.deepEqual(values(content(partialScene, 'line-english-name')), ['Airport Express']);
+});
+
+test('放大中文名时只拆开已有的线字，英文和线字同列，数字线路不受文字设置影响', () => {
+  let project = state.settings(initial, { mode: 'separate', arrangement: '2+1' });
+  project = state.changeLine(project, 'first', { name: '环线', englishName: 'Loop Line', largeName: true });
+  project = state.changeLine(project, 'second', { name: '机场快车', englishName: 'Airport Express', largeName: true });
+  project = state.changeLine(project, 'third', { name: '６号线', englishName: 'Old Line Name', largeName: true });
+  project = state.changeAlignment(project, 'upper', 'right');
+  const scene = render.layout(project, measure);
+  const [loop, express] = content(scene, 'line-name');
+  const [suffix] = content(scene, 'line-name-suffix');
+  const [loopEnglish, expressEnglish] = content(scene, 'line-english-name');
+  assert.equal(loop.text, '环');
+  assert.equal(suffix.text, '线');
+  assert.equal(express.text, '机场快车');
+  assert.ok(loop.attributes['font-size'] > suffix.attributes['font-size']);
+  assert.equal(loop.bounds.top, suffix.bounds.top);
+  const right = node => node.bounds.left + node.bounds.width;
+  assert.ok(Math.abs(right(suffix) - right(loopEnglish)) < 1e-8);
+  assert.ok(Math.abs(right(express) - right(expressEnglish)) < 1e-8);
+  assert.deepEqual(values(content(scene, 'line-english-name')), ['Loop Line', 'Airport Express']);
+  assert.deepEqual(values(content(scene, 'line-number')), ['6']);
+  assert.equal(scene.usedFonts.num400, true);
 });
 
 test('三条色带能同时使用自动纹样、手动纹样和自定义图片，隐藏后保留各自设置', () => {

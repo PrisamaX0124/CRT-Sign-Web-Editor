@@ -27,6 +27,8 @@
   const labelLines = element('transfer-label-lines');
   const directionPicker = element('transfer-directions');
   const lineName = element('transfer-line-name');
+  const lineEnglishName = element('transfer-line-english-name');
+  const lineLargeName = element('transfer-line-large-name');
   const palette = element('transfer-palette');
   const width = element('transfer-width');
   const undoButton = element('transfer-undo');
@@ -211,8 +213,7 @@
   }
 
   function lineTitle(line) {
-    if (!line.line) return '未填写线路';
-    return /^[0-9]+$/.test(line.line) ? line.line + '号线' : line.line;
+    return line.number ? line.number + '号线' : line.line || line.englishName || '未填写线路';
   }
 
   function targetTitle(target) {
@@ -329,9 +330,14 @@
     edit.textContent = selected.kind === 'arrow' ? '选方向' : '编辑线路';
     if (selected.kind === 'line') {
       const line = selectedLine();
+      const display = state.displayLine(App.state, line);
       if (lineName.value !== line.name) lineName.value = line.name;
+      if (lineEnglishName.value !== line.englishName) lineEnglishName.value = line.englishName;
+      lineEnglishName.parentElement.hidden = !!display.number;
+      lineLargeName.parentElement.hidden = !!display.number || !display.line;
+      lineLargeName.checked = line.largeName;
       colorPicker.sync();
-      syncPattern(state.displayLine(App.state, line));
+      syncPattern(display);
       pattern.textContent = line.linePattern.enabled ? '关闭底纹' : '启用底纹';
       pattern.setAttribute('aria-pressed', String(line.linePattern.enabled));
     } else if (selected.kind === 'arrow') {
@@ -465,6 +471,8 @@
     });
   }
   lineName.addEventListener('input', () => changeLine({ name: lineName.value }, 'line-name'));
+  lineEnglishName.addEventListener('input', () => changeLine({ englishName: lineEnglishName.value }, 'line-english-name'));
+  lineLargeName.addEventListener('change', () => changeLine({ largeName: lineLargeName.checked }));
   propertyScroll.addEventListener('focusout', () => { previousGroup = undefined; });
   palette.addEventListener('change', () => changeSettings({ city: palette.value }));
   width.min = state.minimumWidth;

@@ -7,7 +7,8 @@
   const designHeight = 1024;
   const inkColor = '#161616';
 
-  function box(text, role, family, weight, size, measure) {
+  function box(text, role, family, size, measure) {
+    const weight = 400;
     const ink = measure.ink(text, family, weight, size);
     const ascent = measure.ascent(text, family, weight, size);
     const descent = measure.descent(text, family, weight, size);
@@ -17,32 +18,63 @@
     };
   }
 
+  function captionColumn(chinese, english, gapBefore, measure, scale) {
+    return {
+      gapBefore,
+      main: box(chinese, 'label-chinese', core.FONT_ZH, 51 * scale, measure),
+      english: box(english, 'label-english', core.FONT_EN, 29 * scale, measure),
+    };
+  }
+
+  function numberColumns(number, measure, scale) {
+    return [
+      { gapBefore: 8 * scale, main: box(number, 'line-number', core.FONT_NUM, 116 * scale, measure) },
+      captionColumn('号线', 'Line', (number === '1' ? 12 : 8) * scale, measure, scale),
+    ];
+  }
+
+  function namedColumns(line, measure, scale) {
+    const gapBefore = 8 * scale;
+    const name = line.line;
+    const splitSuffix = line.largeName && name.length > 1 && name.endsWith('线');
+    const english = line.englishName
+      ? box(line.englishName, 'line-english-name', core.FONT_EN, 29 * scale, measure) : null;
+    const main = name
+      ? box(splitSuffix ? name.slice(0, -1) : name, 'line-name', core.FONT_ZH, (line.largeName ? 116 : 57) * scale, measure)
+      : null;
+    if (!splitSuffix) return [{ gapBefore, main, english }];
+    return [
+      { gapBefore, main },
+      { gapBefore, main: box('线', 'line-name-suffix', core.FONT_ZH, 51 * scale, measure), english },
+    ];
+  }
+
   function label(lines, measure, scale) {
-    const allNumbers = lines.every(line => /^[0-9]+$/.test(line.line));
-    const names = allNumbers
-      ? lines.map(line => line.line).join('/')
-      : lines.map(line => /^[0-9]+$/.test(line.line) ? line.line + '号线' : line.line).filter(Boolean).join(' / ');
-    const captions = allNumbers ? [['换乘', 'Transfer'], ['号线', 'Line']] : [['换乘', 'Transfer']];
-    const pairs = captions.map(([chinese, english]) => ({
-      chinese: box(chinese, 'label-chinese', core.FONT_ZH, 400, 51 * scale, measure),
-      english: box(english, 'label-english', core.FONT_EN, 400, 29 * scale, measure),
-    }));
-    const name = !names ? null : allNumbers
-      ? box(names, 'line-number', core.FONT_NUM, 400, 116 * scale, measure)
-      : box(names, 'line-name', core.FONT_ZH, 400, 57 * scale, measure);
-    const chineseHeight = Math.max(...pairs.map(pair => pair.chinese.height));
-    const englishAscent = Math.max(...pairs.map(pair => pair.english.ascent));
-    const englishDescent = Math.max(...pairs.map(pair => pair.english.descent));
-    const englishBaseline = Math.max(chineseHeight + 10 * scale + englishAscent, (name?.height || 0) - englishDescent);
-    const columnGap = 8 * scale;
-    const suffixGap = columnGap + (names === '1' ? 4 * scale : 0);
-    const columns = pairs.map(({ chinese, english }, index) => ({
-      gapBefore: index === 0 ? 0 : suffixGap,
-      width: Math.max(chinese.width, english.width),
-      text: [{ ...chinese, top: 0 }, { ...english, top: englishBaseline - english.ascent }],
-    }));
-    if (name) columns.splice(1, 0, { gapBefore: columnGap, width: name.width, text: [{ ...name, top: 0 }] });
-    return { columns, height: englishBaseline + englishDescent };
+    const columns = [captionColumn('换乘', 'Transfer', 0, measure, scale)];
+    const visibleLines = lines.filter(line => line.line || line.englishName);
+    if (visibleLines.length && visibleLines.every(line => line.number)) {
+      columns.push(...numberColumns(visibleLines.map(line => line.number).join('/'), measure, scale));
+    } else {
+      visibleLines.forEach((line, index) => {
+        if (index) columns.push({ gapBefore: 8 * scale, main: box('/', 'line-separator', core.FONT_ZH, 51 * scale, measure) });
+        columns.push(...(line.number ? numberColumns(line.number, measure, scale) : namedColumns(line, measure, scale)));
+      });
+    }
+
+    const pairs = columns.filter(column => column.english);
+    const pairedHeight = Math.max(...pairs.map(column => column.main?.height || 0));
+    const tallestText = Math.max(...columns.map(column => column.main?.height || 0));
+    const englishAscent = Math.max(...pairs.map(column => column.english.ascent));
+    const englishDescent = Math.max(...pairs.map(column => column.english.descent));
+    const englishBaseline = Math.max(pairedHeight + 10 * scale + englishAscent, tallestText - englishDescent);
+    return {
+      columns: columns.map(({ gapBefore, main, english }) => ({
+        gapBefore,
+        width: Math.max(main?.width || 0, english?.width || 0),
+        text: [main && { ...main, top: 0 }, english && { ...english, top: englishBaseline - english.ascent }].filter(Boolean),
+      })),
+      height: englishBaseline + englishDescent,
+    };
   }
 
   function makeArrow(group, left, top, size) {
@@ -141,7 +173,7 @@
     }
     if (separate) {
       const scales = groups.map(group => fitLabel(group, measure, 128, true));
-      const ordinaryNumbers = groups.every(group => group.lines.every(line => /^[0-9]{1,3}$/.test(line.line)));
+      const ordinaryNumbers = groups.every(group => group.lines.every(line => line.number && line.number.length <= 3));
       const commonScale = ordinaryNumbers ? Math.min(...scales) : Infinity;
       const labelOffset = threeLines ? 90 : 96;
       groups.forEach((group, index) => {

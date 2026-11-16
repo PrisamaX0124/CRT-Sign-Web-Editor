@@ -624,6 +624,116 @@
       select('line:first');
       assert(!isVisible('#transfer-tool-turn') && !isVisible('#transfer-tool-turn-counterclockwise'), '线路仍显示转向按钮');
     });
+
+    await test('线路名自动区分文字和数字，可填写英文名、放大中文名并撤销重做', () => {
+      mode('guidance');
+      arrangement('2');
+      line('first', '1号线');
+      line('second', '10');
+      line('first');
+      assert(!isVisible('#transfer-line-english-name'), '数字线路不应显示英文名称输入框');
+      const name = element('#transfer-line-name');
+      name.focus();
+      input('#transfer-line-name', '环线');
+      assert(page.activeElement === name && element('#transfer-line-name') === name, '输入中文名时焦点离开了原输入框');
+      const english = element('#transfer-line-english-name');
+      english.focus();
+      input('#transfer-line-english-name', 'Loop Line');
+      assert(page.activeElement === english && element('#transfer-line-english-name') === english, '输入英文名时焦点离开了原输入框');
+      assert(numberLabels() === '10' && drawing('line-name')[0]?.textContent === '环线', '数字线路和文字线路没有同时显示');
+      assert(drawing('line-band')[0].getAttribute('fill') === editor.SignCore.lineColorFor('环线', 'chongqing').bg, '文字线路没有匹配城市配色');
+      const larger = element('#transfer-line-large-name');
+      larger.click();
+      assert(larger.checked && drawing('line-name')[0]?.textContent === '环' && drawing('line-name-suffix')[0]?.textContent === '线');
+      click('#transfer-undo');
+      assert(!larger.checked && drawing('line-name')[0]?.textContent === '环线', '撤销没有恢复中文名的大小');
+      click('#transfer-redo');
+      assert(larger.checked && drawing('line-english-name')[0]?.textContent === 'Loop Line', '重做没有恢复文字线路');
+      line('first', '２号线');
+      assert(!isVisible('#transfer-line-english-name') && numberLabels() === '2/10' && !drawing('line-english-name').length);
+      line('first', '环线');
+      assert(english.value === 'Loop Line' && larger.checked, '改回文字线路后丢失英文或放大设置');
+    });
+
+    await test('版式 B 重新打开后按线路恢复中文、英文、放大设置和分组', async () => {
+      mode('separate');
+      arrangement('1+2');
+      line('first', '1');
+      line('second', '机场快线');
+      input('#transfer-line-english-name', 'Airport Express');
+      line('third', '环线');
+      input('#transfer-line-english-name', 'Loop Line');
+      click('#transfer-line-large-name');
+      await navigate(() => editor.location.reload());
+      await editor.App.ready;
+      assert(numberLabels() === '1', '上方一组的数字线路有误');
+      assert(drawing('line-name').map(node => node.textContent).join(',') === '机场快线,环');
+      assert(drawing('line-english-name').map(node => node.textContent).join(',') === 'Airport Express,Loop Line');
+      select('label:lower');
+      click('#transfer-label-lines [data-select-line="third"]');
+      assert(element('#transfer-line-english-name').value === 'Loop Line' && element('#transfer-line-large-name').checked);
+      mode('guidance');
+      assert(drawing('line-english-name').map(node => node.textContent).join(',') === 'Loop Line', '两个版式没有各自恢复线路内容');
+    });
+
+    await test('长文字线路与数字同组时，预览和两种导出都保留双语线路名称', async () => {
+      mode('separate');
+      arrangement('2+1');
+      line('first', '机场东部综合交通枢纽快线');
+      input('#transfer-line-english-name', 'Airport Eastern Transport Hub Express Service');
+      if (element('#transfer-line-large-name').checked) click('#transfer-line-large-name');
+      line('second', '10');
+      line('third', '6');
+      select('label:upper');
+      input('#transfer-group-alignment select', 'right', 'change');
+      input('#transfer-group-arrow-position select', 'right', 'change');
+      const translation = drawing('line-english-name')[0];
+      const name = drawing('line-name')[0];
+      const selection = element('[data-transfer-element="label:upper"]').getBBox();
+      const arrowLeft = Number(drawing('direction-arrow')[0].getAttribute('x'));
+      const bounds = translation.getBBox();
+      assert(bounds.x >= 0 && selection.x + selection.width - 5 <= arrowLeft, '长线路文字超出了牌面或与箭头重叠');
+      const measure = editor.App.measure;
+      const inkRight = node => Number(node.getAttribute('x')) + measure.ink(node.textContent, node.getAttribute('font-family'),
+        400, Number(node.getAttribute('font-size'))).abr;
+      assert(Math.abs(inkRight(name) - inkRight(translation)) < 0.01, '线路中英文的墨区右沿没有对齐');
+      const downloads = [];
+      const originalDownload = editor.SignStorage.download;
+      editor.SignStorage.download = (blob, name) => downloads.push({ blob, name });
+      try {
+        click('#transfer-export-vector');
+        await waitFor(() => downloads.length === 1);
+        const source = await downloads[0].blob.text();
+        const exported = new DOMParser().parseFromString(source, 'image/svg+xml');
+        const exportedTranslation = [...exported.querySelectorAll('text')].find(node => node.textContent === translation.textContent);
+        assert(exportedTranslation?.getAttribute('x') === translation.getAttribute('x'), '导出的英文名与预览不同');
+        assert([...exported.querySelectorAll('text')].some(node => node.textContent === name.textContent) &&
+          source.includes("font-family:'MiSans'") && source.includes('font-family:Frutiger'), '矢量图缺少线路名或字体');
+        click('#transfer-export-image');
+        await waitFor(() => downloads.length === 2);
+        const picture = await createImageBitmap(downloads[1].blob);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = picture.width;
+          canvas.height = picture.height;
+          const drawingContext = canvas.getContext('2d');
+          drawingContext.drawImage(picture, 0, 0);
+          const ratio = picture.width / 768;
+          const size = Number(translation.getAttribute('font-size'));
+          const family = translation.getAttribute('font-family');
+          const baseline = Number(translation.getAttribute('y'));
+          const top = baseline - measure.ascent(translation.textContent, family, 400, size);
+          const bottom = baseline + measure.descent(translation.textContent, family, 400, size);
+          const pixels = drawingContext.getImageData(Math.floor(bounds.x * ratio), Math.floor(top * ratio),
+            Math.ceil(bounds.width * ratio), Math.ceil((bottom - top) * ratio)).data;
+          assert(pixels.some((channel, index) => index % 4 === 0 && channel < 150), '图片未画出英文线路名');
+        } finally {
+          picture.close();
+        }
+      } finally {
+        editor.SignStorage.download = originalDownload;
+      }
+    });
   } finally {
     await navigate(() => { frame.src = 'about:blank'; });
     savedStorage.forEach(([key, value]) => value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value));
