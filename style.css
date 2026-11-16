@@ -171,12 +171,11 @@ input, select {
   isolation: isolate;
   overflow: hidden;
   min-height: 42px;
-  border: 1px solid var(--accent);
+  border: 1px solid color-mix(in srgb, var(--selection) 30%, transparent);
   border-radius: 9px;
   font-size: 12px;
-  color: var(--accent-text);
-  background: var(--accent);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+  color: color-mix(in srgb, var(--selection) 70%, var(--text-dim));
+  background: transparent;
 }
 .editor-repository::before {
   content: '';
@@ -184,8 +183,8 @@ input, select {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(110deg, transparent 25%, #fff 50%, transparent 75%);
-  opacity: .12;
+  background: linear-gradient(110deg, transparent 33%, var(--selection) 50%, transparent 67%);
+  opacity: .07;
   transform: translateX(-100%);
   animation: repository-shine 9s ease-in-out infinite;
 }
@@ -196,7 +195,10 @@ input, select {
 }
 .editor-repository svg { width: 19px; height: 19px; flex: none; }
 .repository-arrow { transition: translate var(--motion-control-duration) var(--motion-enter); }
-.editor-repository:is(:hover, :focus-visible) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.editor-repository:is(:hover, :focus-visible) {
+  color: var(--selection);
+  border-color: color-mix(in srgb, var(--selection) 55%, transparent);
+}
 .editor-repository:is(:hover, :focus-visible) .repository-arrow { translate: 2px 0; }
 .editor-navigation a:focus-visible, .editor-repository:focus-visible {
   outline: 2px solid var(--selection);

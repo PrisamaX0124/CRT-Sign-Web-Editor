@@ -197,7 +197,16 @@
       deselect();
       await repaint(window);
 
-      await test(editor.name + '：仓库按钮显示求 Star 文案和强调色，页眉入口完整显示', async function () {
+      await test(editor.name + '：仓库按钮无底色、有浅色描边，文案和页眉入口完整显示', async function () {
+        const sample = document.createElement('canvas');
+        sample.width = sample.height = 1;
+        const brush = sample.getContext('2d', { willReadFrequently: true });
+        function colorChannels(color) {
+          brush.clearRect(0, 0, 1, 1);
+          brush.fillStyle = color;
+          brush.fillRect(0, 0, 1, 1);
+          return brush.getImageData(0, 0, 1, 1).data;
+        }
         for (const width of [1280, 1100]) {
           frame.style.width = width + 'px';
           await repaint(window);
@@ -215,11 +224,13 @@
             '仓库按钮应显示「有帮助？求 Star！ >」');
           assert(repository.getAttribute('aria-label') === '有帮助？求 Star！（前往仓库，在新标签页打开）' &&
             repository.target === '_blank' && repository.relList.contains('noopener'), '读屏名称应包含按钮文字，并说明在新标签页打开仓库');
-          await finishAnimations(animations(current));
           const appearance = window.getComputedStyle(repository);
-          const selected = window.getComputedStyle(current);
-          assert(appearance.backgroundColor === selected.backgroundColor && appearance.color === selected.color &&
-            appearance.borderTopColor === selected.backgroundColor, '仓库按钮应与当前编辑器入口使用相同的强调色和文字颜色');
+          assert(colorChannels(appearance.backgroundColor)[3] === 0 && appearance.boxShadow === 'none', '仓库按钮应无底色和阴影');
+          const border = colorChannels(appearance.borderTopColor);
+          const text = colorChannels(appearance.color);
+          assert(appearance.borderTopStyle === 'solid' && parseFloat(appearance.borderTopWidth) > 0 &&
+            border[3] >= 40 && border[3] <= 100 && border[2] > border[0], '仓库按钮应有淡蓝灰色描边');
+          assert(text[3] === 255 && text[2] > text[0] && text[2] < 150, '文字应略带蓝灰色并保持清楚');
           const left = navigation.getBoundingClientRect();
           const right = repository.getBoundingClientRect();
           assert(left.left >= 0 && left.right < right.left && right.right <= width + 1, '两组入口应在页眉左右且完整显示');
@@ -238,7 +249,7 @@
           return;
         }
         assert(playing.length === 1, '仓库按钮应有一条扫光动画');
-        assert(shine.pointerEvents === 'none' && parseFloat(shine.opacity) > 0 && parseFloat(shine.opacity) <= .15,
+        assert(shine.pointerEvents === 'none' && parseFloat(shine.opacity) > 0 && parseFloat(shine.opacity) <= .08,
           '光带应足够微弱，并允许点击穿过');
         assert(window.getComputedStyle(repository).overflow === 'hidden', '光带应限制在按钮范围内');
         const animation = playing[0];
