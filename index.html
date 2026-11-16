@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>导向标识生成器</title>
-  <link rel="stylesheet" href="style.css?v=804d499ab69d">
-  <link rel="stylesheet" href="platform.css?v=2bbd43e16f77">
+  <link rel="stylesheet" href="style.css?v=f6b8f70485a6">
+  <link rel="stylesheet" href="platform.css?v=2c460a9842b1">
   <link rel="stylesheet" href="transfer.css?v=e8bfd1a0d050">
 </head>
 <body class="editor-page">
@@ -24,9 +24,9 @@
         <a href="index.html?editor=transfer">换乘标识</a>
         <a href="platform.html">站台标识</a>
       </nav>
-      <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="打开 GitHub 仓库，给项目加星（新标签页）" title="打开 GitHub 仓库">
+      <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="前往仓库（新标签页）">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
-        <span>给项目加星</span>
+        <span>前往仓库</span> <span class="repository-arrow" aria-hidden="true">&gt;</span>
       </a>
       <nav class="mode-tabs" id="transfer-modes" aria-label="换乘标识版式" hidden>
         <button type="button" data-transfer-mode="guidance" aria-pressed="true">版式 A</button>
@@ -51,15 +51,6 @@
 
     <!-- ══ 中栏：SVG 编辑区 ══ -->
     <main id="center-panel" class="editor-center">
-      <div class="guide-action-bar">
-        <div id="edit-actions" role="toolbar" aria-label="选择与剪贴板">
-          <button type="button" data-edit-action="select-all" title="全选元素（Ctrl+A）">全选</button>
-          <button type="button" data-edit-action="copy" title="复制选中元素（Ctrl+C）" disabled>复制</button>
-          <button type="button" data-edit-action="cut" title="剪切选中元素（Ctrl+X）" disabled>剪切</button>
-          <button type="button" data-edit-action="paste" title="粘贴元素（Ctrl+V）">粘贴</button>
-          <span id="selection-status" aria-live="polite">Ctrl 单击加选 · Shift 单击范围选择</span>
-        </div>
-      </div>
       <div id="canvas-scroll">
         <div id="canvas-area">
           <div id="canvas-wrap">
@@ -74,6 +65,30 @@
       </div>
 
       <div id="element-toolbar" class="floating-toolbar" role="toolbar" aria-label="元素快捷操作" hidden inert></div>
+      <footer class="editor-footer">
+        <div id="edit-actions" class="clipboard-tools" role="toolbar" aria-label="选择与剪贴板">
+          <button type="button" data-edit-action="select-all" data-control-icon="select-all" aria-label="全选元素" aria-keyshortcuts="Control+A Meta+A">
+            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>A</kbd><span>全选</span></span>
+          </button>
+          <button type="button" data-edit-action="copy" data-control-icon="copy" aria-label="复制选中元素" aria-keyshortcuts="Control+C Meta+C" disabled>
+            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>C</kbd><span>复制</span></span>
+          </button>
+          <button type="button" data-edit-action="cut" data-control-icon="cut" aria-label="剪切选中元素" aria-keyshortcuts="Control+X Meta+X" disabled>
+            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>X</kbd><span>剪切</span></span>
+          </button>
+          <button type="button" data-edit-action="paste" data-control-icon="paste" aria-label="粘贴元素" aria-keyshortcuts="Control+V Meta+V">
+            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>V</kbd><span>粘贴</span></span>
+          </button>
+        </div>
+        <div class="editor-footer-guidance">
+          <div class="shortcut-hints" aria-label="选择快捷键">
+            <span class="shortcut-hint"><kbd>Ctrl / ⌘</kbd><span class="shortcut-description">单击加选</span></span>
+            <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">单击范围选择</span></span>
+            <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
+          </div>
+          <span id="selection-status" class="selection-status" role="status"></span>
+        </div>
+      </footer>
     </main>
 
     <!-- ══ 右栏：属性 / 导出 ══ -->
@@ -131,7 +146,14 @@
         <div id="transfer-tool-alignment" hidden></div>
         <div id="transfer-tool-arrow-position" hidden></div>
       </div>
-      <div class="preview-footer"><div id="transfer-status" role="status">本地自动保存</div></div>
+      <footer class="editor-footer">
+        <div class="editor-footer-guidance">
+          <span id="transfer-status" role="status">本地自动保存</span>
+          <div class="shortcut-hints" aria-label="选择快捷键">
+            <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
+          </div>
+        </div>
+      </footer>
     </main>
     <aside class="platform-properties editor-right" id="transfer-properties" aria-labelledby="transfer-heading">
       <header class="panel-header">
@@ -202,19 +224,20 @@
 
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
-  <script src="js/palette-manager.js?v=public-71d85de854d0"></script>
+  <script src="js/palette-manager.js?v=public-939b5399500f"></script>
   <script src="js/icons.js?v=public-8e9eb9f48086"></script>
   <script src="js/directions.js?v=e236a676ed91"></script>
   <script src="js/state.js?v=public-821e25ad8636"></script>
   <script src="js/render.js?v=public-02d87d9bea0d"></script>
-  <script src="js/ui.js?v=public-bc12f3ec68d5"></script>
-  <script src="js/clipboard.js?v=public-d58c305be636"></script>
+  <script src="js/editor-motion.js?v=ca1eb0979930"></script>
+  <script src="js/ui.js?v=public-84ac1cb95055"></script>
+  <script src="js/clipboard.js?v=public-1c7f4d30022d"></script>
   <script src="js/presets.js?v=public-e3eeae2acdc5"></script>
   <script src="js/storage.js?v=public-85ae228675bd"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
-  <script src="js/color-picker.js?v=01972a3cfee5"></script>
-  <script src="js/panel.js?v=f39f97d708ec"></script>
-  <script src="js/interact.js?v=b442a0d55219"></script>
+  <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
+  <script src="js/panel.js?v=486ec6a33b73"></script>
+  <script src="js/interact.js?v=31b7f284bd4c"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = '换乘标识生成器';
@@ -226,11 +249,11 @@
       document.querySelector('.editor-navigation a[href="index.html?editor=transfer"]').setAttribute('aria-current', 'page');
     }
   </script>
-  <script src="js/main.js?v=9a2ef38c901c"></script>
+  <script src="js/main.js?v=9158f42c0c7a"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
-  <script src="js/platform/patterns.js?v=05b46d9c241d"></script>
+  <script src="js/platform/patterns.js?v=3b04442c85b2"></script>
   <script src="js/transfer/state.js?v=619cd2b42adb"></script>
   <script src="js/transfer/render.js?v=386aa4d750d4"></script>
-  <script src="js/transfer/main.js?v=42593b13fd60"></script>
+  <script src="js/transfer/main.js?v=16deb04575a3"></script>
 </body>
 </html>

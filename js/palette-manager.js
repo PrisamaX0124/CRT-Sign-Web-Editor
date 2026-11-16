@@ -22,6 +22,7 @@
       if(!draft.id||!global.confirm('删除“'+draft.name+'”？已应用到标识牌的颜色会保留。'))return;
       try{P.remove(draft.id);newDraft();message('色板已删除');}catch(e){message('保存失败：'+e.message,true);}
     });
+    remove.dataset.controlIcon = 'delete';
     function canSwitch(){return !dirty||global.confirm('当前修改尚未保存，放弃修改？');}
     function preview(p){return h('div',{class:'pm-preview'},p.entries.slice(0,7).map(function(c){return h('span',{style:'background:'+c.color});}));}
     function renderList(){
@@ -42,7 +43,7 @@
         hex.addEventListener('blur',function(){var valid=Core.normalizeHex(c.color);if(valid){c.color=valid;hex.value=valid;}});
         var up=button('↑','pm-row-btn',function(){var item=draft.entries.splice(i,1)[0];draft.entries.splice(i-1,0,item);dirty=true;renderRows();},'上移颜色 '+(i+1));up.disabled=i===0;
         var down=button('↓','pm-row-btn',function(){var item=draft.entries.splice(i,1)[0];draft.entries.splice(i+1,0,item);dirty=true;renderRows();},'下移颜色 '+(i+1));down.disabled=i===draft.entries.length-1;
-        var del=button('×','pm-row-btn pm-row-delete',function(){draft.entries.splice(i,1);dirty=true;renderRows();},'删除颜色 '+(i+1));del.disabled=draft.entries.length===1;
+        var del=button('','pm-row-btn',function(){draft.entries.splice(i,1);dirty=true;renderRows();},'删除颜色 '+(i+1));del.dataset.controlIcon='delete';del.disabled=draft.entries.length===1;
         rows.appendChild(h('div',{class:'pm-row'},[color,h('div',{class:'pm-name-field'},[h('label',{for:prefix+'-name',text:'颜色名称'}),label]),h('div',{class:'pm-hex-field'},[h('label',{for:prefix+'-hex',text:'HEX'}),hex]),h('div',{class:'pm-row-actions'},[up,down,del])]));
       });
       add.disabled=draft.entries.length>=64;

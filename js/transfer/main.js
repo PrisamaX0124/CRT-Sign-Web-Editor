@@ -18,6 +18,7 @@
   const propertyScroll = element('transfer-property-scroll');
   const heading = element('transfer-heading');
   const settingsPanel = element('transfer-settings');
+  const groupPlacement = element('transfer-group-placement');
   const backButton = element('transfer-return');
   const modeButtons = Array.from(document.querySelectorAll('[data-transfer-mode]'));
   const arrangementPicker = element('transfer-arrangements');
@@ -52,9 +53,13 @@
   let scene;
   let currentGroups;
   let selected;
+  let previousPanelSelection;
 
   function notice(message) {
-    status.textContent = message;
+    if (status.textContent !== message) {
+      status.textContent = message;
+      global.EditorMotion.reveal(status);
+    }
   }
 
   function loadProject() {
@@ -278,8 +283,9 @@
     const toolbarHeight = toolbar.offsetHeight;
     const centered = bounds.left - frame.left + (bounds.width - toolbarWidth) / 2;
     const above = bounds.top - frame.top - toolbarHeight - 8;
-    toolbar.style.left = Math.max(8, Math.min(centered, frame.width - toolbarWidth - 8)) + 'px';
-    toolbar.style.top = (above >= canvas.top - frame.top ? above : bounds.bottom - frame.top + 8) + 'px';
+    const left = Math.max(8, Math.min(centered, frame.width - toolbarWidth - 8));
+    const top = above >= canvas.top - frame.top ? above : bounds.bottom - frame.top + 8;
+    global.EditorMotion.placeToolbar(toolbar, left, top, selected.key);
   }
 
   function syncSelection() {
@@ -291,10 +297,9 @@
     for (const target of vector.querySelectorAll('[data-transfer-element]')) {
       target.setAttribute('aria-pressed', String(target.dataset.transferElement === selected?.key));
     }
-    toolbar.hidden = !selected;
-    toolbar.inert = !selected;
+    global.EditorMotion.setToolbarVisible(toolbar, !!selected);
     const group = selectedEditableGroup();
-    element('transfer-group-placement').hidden = !group;
+    groupPlacement.hidden = !group;
     for (const { host, control } of alignmentControls) {
       host.hidden = !group;
       if (group) control.sync();
@@ -303,6 +308,13 @@
       host.hidden = !group;
       if (group) select.value = group.arrowPosition;
     }
+    const panelSelection = selected?.key || '';
+    if (previousPanelSelection !== undefined && panelSelection !== previousPanelSelection) {
+      const direction = !selected ? -1 : previousPanelSelection ? 0 : 1;
+      global.EditorMotion.reveal(selected ? panels[selected.kind] : settingsPanel, direction);
+      if (group) global.EditorMotion.reveal(groupPlacement, direction);
+    }
+    previousPanelSelection = panelSelection;
     if (!selected) {
       syncLineButtons();
       return;

@@ -26,8 +26,10 @@
       'aria-label': '管理自定义色板' });
     var swatches = h('div', { id: opts.swatchesId, class: 'cp-swatches', role: 'group',
       'aria-label': scope + '色板' });
-    var palette = h('div', { class: 'cp-options', id: paletteId, hidden: '' }, [
-      h('div', { class: 'color-palette-settings' }, [citySelect, manage]), swatches,
+    var palette = h('div', { class: 'cp-options collapsible-panel', id: paletteId, hidden: '' }, [
+      h('div', { class: 'collapsible-content' }, [
+        h('div', { class: 'color-palette-settings' }, [citySelect, manage]), swatches,
+      ]),
     ]);
     var row = h('div', { class: 'cp-row' }, [current, hex, clear]);
     var root = h('div', { class: 'color-picker' + (opts.mini ? ' mini' : ''), 'data-scope': scope }, [row, palette]);
@@ -84,7 +86,9 @@
       paint();
     }
     function setPaletteOpen(open) {
+      if (!open && palette.contains(document.activeElement)) current.focus({ preventScroll: true });
       palette.hidden = !open;
+      palette.inert = !open;
       current.title = scope + (open ? '：收起色板' : '：展开色板');
       current.setAttribute('aria-label', current.title);
       current.setAttribute('aria-expanded', String(open));

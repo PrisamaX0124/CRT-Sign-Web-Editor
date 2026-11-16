@@ -181,43 +181,46 @@
       <h2 class="section-title">线路底纹</h2>
       <button type="button" id="line-pattern-enabled" class="platform-switch" role="switch" aria-label="启用线路底纹" aria-checked="false" aria-controls="line-pattern-controls"><span aria-hidden="true"></span></button>
     </div>
-    <div id="line-pattern-controls" hidden>
-      <div class="field">
-        <label for="line-pattern-source">纹样来源</label>
-        <select id="line-pattern-source" aria-describedby="line-pattern-status">
-          <option value="automatic">按重庆线路匹配</option>
-          <optgroup label="内置纹样" id="line-pattern-built-in"></optgroup>
-          <option value="custom" id="line-pattern-custom" disabled>自定义图片</option>
-        </select>
-        <small id="line-pattern-status" role="status"></small>
-      </div>
-      <div id="line-pattern-values" hidden>
+    <div id="line-pattern-controls" class="collapsible-panel" hidden inert>
+      <div class="collapsible-content">
         <div class="field">
-          <label for="line-pattern-size">大小 <output id="line-pattern-size-value" for="line-pattern-size"></output></label>
-          <div class="line-pattern-adjustment">
-            <input id="line-pattern-size" type="range" min="50" max="200">
-            <button type="button" class="icon-btn" id="line-pattern-reset-size" aria-label="重置底纹大小" title="重置底纹大小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
+          <label for="line-pattern-source">纹样来源</label>
+          <select id="line-pattern-source" aria-describedby="line-pattern-status">
+            <option value="automatic">按重庆线路匹配</option>
+            <optgroup label="内置纹样" id="line-pattern-built-in"></optgroup>
+            <option value="custom" id="line-pattern-custom" disabled>自定义图片</option>
+          </select>
+          <small id="line-pattern-status" role="status"></small>
+        </div>
+        <div id="line-pattern-values" hidden>
+          <div class="field">
+            <label for="line-pattern-size">大小 <output id="line-pattern-size-value" for="line-pattern-size"></output></label>
+            <div class="line-pattern-adjustment">
+              <input id="line-pattern-size" type="range" min="50" max="200">
+              <button type="button" class="icon-btn" id="line-pattern-reset-size" aria-label="重置底纹大小" title="重置底纹大小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="line-pattern-opacity">深浅 <output id="line-pattern-opacity-value" for="line-pattern-opacity"></output></label>
+            <div class="line-pattern-adjustment">
+              <input id="line-pattern-opacity" type="range" min="0" max="100">
+              <button type="button" class="icon-btn" id="line-pattern-reset-opacity" aria-label="重置底纹深浅" title="重置底纹深浅"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
+            </div>
           </div>
         </div>
-        <div class="field">
-          <label for="line-pattern-opacity">深浅 <output id="line-pattern-opacity-value" for="line-pattern-opacity"></output></label>
-          <div class="line-pattern-adjustment">
-            <input id="line-pattern-opacity" type="range" min="0" max="100">
-            <button type="button" class="icon-btn" id="line-pattern-reset-opacity" aria-label="重置底纹深浅" title="重置底纹深浅"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button>
-          </div>
+        <div class="field-pair">
+          <button type="button" class="btn" id="line-pattern-import" aria-describedby="line-pattern-file-help">上传图片</button>
+          <button type="button" class="btn" id="line-pattern-clear" data-control-icon="delete" hidden>移除图片</button>
         </div>
+        <input id="line-pattern-file" type="file" accept=".png,.svg,image/png,image/svg+xml" hidden>
+        <p class="field-help" id="line-pattern-file-help">支持 .png 和 .svg 图片。透明处显示线路底色。</p>
+        <p class="field-help" id="line-pattern-credit" hidden>内置纹样改编自 <a href="https://hachiiiiiiii.co/" target="_blank" rel="noopener">Hachi</a>，按<a href="https://creativecommons.org/licenses/by-nc/4.0/deed.zh-hans" target="_blank" rel="noopener">署名与非商业性使用许可</a>提供。</p>
       </div>
-      <div class="field-pair">
-        <button type="button" class="btn" id="line-pattern-import" aria-describedby="line-pattern-file-help">上传图片</button>
-        <button type="button" class="btn" id="line-pattern-clear" hidden>移除图片</button>
-      </div>
-      <input id="line-pattern-file" type="file" accept=".png,.svg,image/png,image/svg+xml" hidden>
-      <p class="field-help" id="line-pattern-file-help">支持 .png 和 .svg 图片。透明处显示线路底色。</p>
-      <p class="field-help" id="line-pattern-credit" hidden>内置纹样改编自 <a href="https://hachiiiiiiii.co/" target="_blank" rel="noopener">Hachi</a>，按<a href="https://creativecommons.org/licenses/by-nc/4.0/deed.zh-hans" target="_blank" rel="noopener">署名与非商业性使用许可</a>提供。</p>
     </div>`;
     function field(name) { return root.querySelector('#line-pattern-' + name); }
     var source = field('source');
     var builtIn = field('built-in');
+    var options = field('controls');
     Object.entries(designs).forEach(function (entry) { builtIn.appendChild(new Option(entry[1].name, entry[0])); });
     var update = controls.update;
     var toggle = field('enabled');
@@ -272,7 +275,8 @@
       var design = chooseDesign(line, pattern.source);
       toggle.setAttribute('aria-checked', String(pattern.enabled));
       toggle.setAttribute('aria-label', pattern.enabled ? '关闭线路底纹' : '启用线路底纹');
-      field('controls').hidden = !pattern.enabled;
+      if (!pattern.enabled && options.contains(document.activeElement)) toggle.focus({ preventScroll: true });
+      options.hidden = options.inert = !pattern.enabled;
       source.value = pattern.source;
       field('size').value = pattern.size;
       field('opacity').value = pattern.opacity;

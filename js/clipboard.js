@@ -99,7 +99,7 @@
     var count = App.selectedIds().length;
     bar.querySelector('[data-edit-action="select-all"]').disabled = !App.state.rows.some(function (row) { return row.elements.length; });
     ['copy', 'cut'].forEach(function (action) { bar.querySelector('[data-edit-action="' + action + '"]').disabled = !count; });
-    document.getElementById('selection-status').textContent = count ? '已选择 ' + count + ' 个元素' : 'Ctrl 单击加选 · Shift 单击范围选择';
+    document.getElementById('selection-status').textContent = count ? '已选择 ' + count + ' 个元素' : '';
   }
 
   function init() {

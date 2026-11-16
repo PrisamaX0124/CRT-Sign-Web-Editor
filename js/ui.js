@@ -89,14 +89,14 @@
         selectedElementId: App.selection.elementId,
         selectedElementIds: App.selectedIds(),
       });
-      App.fitSignDisplay();
+      App.fitSignDisplay(false);
       if (global.SignInteract) SignInteract.renderOverlay(App.layout, App.state);
       if (global.SignPanel) SignPanel.syncRightPanel();
       if (global.SignClipboard) SignClipboard.sync();
     },
 
     // 放大窄牌会使行高过大。覆盖层比牌面宽时，拖放指示线会偏移。
-    fitSignDisplay: function () {
+    fitSignDisplay: function (positionToolbar = true) {
       if (!App.layout) return;
       var svg = document.getElementById('sign-svg');
       var wrap = document.getElementById('canvas-wrap');
@@ -111,7 +111,7 @@
           overlay.style.width = svg.style.width;
           overlay.style.height = svg.getBoundingClientRect().height + 'px';
         }
-        if (global.SignInteract) SignInteract.positionElementToolbar();
+        if (positionToolbar && global.SignInteract) SignInteract.positionElementToolbar();
       }
     },
 
@@ -394,18 +394,29 @@
     document.getElementById('toasts').appendChild(el);
     setTimeout(function () {
       el.classList.add('leaving');
-      setTimeout(function () { el.remove(); }, 300);
+      global.EditorMotion.afterMotion(el, function () { el.remove(); });
     }, type === 'error' ? 4200 : 2400);
   }
 
   // ─── 模态对话框 ────────────────────────────────────────────
 
+  function dismissDialog(mask, previousFocus) {
+    if (mask.inert) return false;
+    mask.inert = true;
+    mask.dataset.modalClosing = '';
+    mask.classList.remove('modal-mask');
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    global.EditorMotion.afterMotion(mask, function () { mask.remove(); });
+    return true;
+  }
+
   /**
    * 确认对话框 → Promise<boolean>
    * confirmDialog('确定要删除此行吗？', '删除行')
    */
-  function confirmDialog(message, title, confirmText) {
+  function confirmDialog(message, title, confirmText, actionIcon) {
     return new Promise(function (resolve) {
+      var previousFocus = document.activeElement;
       var mask = h('div', { class: 'modal-mask' });
       var modal = h('div', { class: 'modal' }, [
         h('h3', { text: title || '确认操作' }),
@@ -413,15 +424,17 @@
         h('div', { class: 'modal-actions' }, [
           h('button', { class: 'btn', text: '取消', 'data-act': 'cancel' }),
           h('button', {
-            class: 'btn btn-danger', text: confirmText || '确定', 'data-act': 'ok',
+            class: actionIcon ? 'btn' : 'btn btn-primary', text: confirmText || '确定', 'data-act': 'ok', 'data-control-icon': actionIcon,
           }),
         ]),
       ]);
       mask.appendChild(modal);
       mask.addEventListener('click', function (ev) {
         var act = ev.target.getAttribute && ev.target.getAttribute('data-act');
-        if (act === 'ok') { mask.remove(); resolve(true); }
-        else if (act === 'cancel' || ev.target === mask) { mask.remove(); resolve(false); }
+        if (act === 'ok' || act === 'cancel' || ev.target === mask) {
+          ev.stopPropagation();
+          if (dismissDialog(mask, previousFocus)) resolve(act === 'ok');
+        }
       });
       document.getElementById('modal-root').appendChild(mask);
       modal.querySelector('[data-act="ok"]').focus();
@@ -434,6 +447,7 @@
    */
   function promptDialog(message, title, defaultValue, placeholder) {
     return new Promise(function (resolve) {
+      var previousFocus = document.activeElement;
       var input = h('input', {
         class: 'modal-input', type: 'text', value: defaultValue || '', placeholder: placeholder || '',
       });
@@ -448,11 +462,13 @@
         ]),
       ]);
       mask.appendChild(modal);
-      function done(val) { mask.remove(); resolve(val); }
+      function done(value) { if (dismissDialog(mask, previousFocus)) resolve(value); }
       mask.addEventListener('click', function (ev) {
         var act = ev.target.getAttribute && ev.target.getAttribute('data-act');
-        if (act === 'ok') done(input.value.trim() || null);
-        else if (act === 'cancel' || ev.target === mask) done(null);
+        if (act === 'ok' || act === 'cancel' || ev.target === mask) {
+          ev.stopPropagation();
+          done(act === 'ok' ? input.value.trim() || null : null);
+        }
       });
       input.addEventListener('keydown', function (ev) {
         if (ev.key === 'Enter') done(input.value.trim() || null);

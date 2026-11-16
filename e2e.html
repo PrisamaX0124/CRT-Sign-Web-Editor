@@ -74,7 +74,15 @@
         pointer('pointermove', W().document, x, y);
       }
       pointer('pointermove', W().document, toPoint.x, toPoint.y);
+      if (options.beforeRelease) options.beforeRelease();
       pointer('pointerup', W().document, toPoint.x, toPoint.y);
+    }
+
+    function showsTransparentDropOutline(rowIndex) {
+      var row = $('.row-band[data-row-index="' + rowIndex + '"]');
+      var appearance = W().getComputedStyle(row);
+      return row.classList.contains('drop-ok') && appearance.outlineStyle === 'dashed' &&
+        appearance.backgroundColor === 'rgba(0, 0, 0, 0)' && appearance.backgroundImage === 'none';
     }
 
     /**
@@ -201,7 +209,11 @@
       var g = $('g.element[data-element-id="' + spaceId + '"]');
       var row2g = $$('g.element[data-row-id="' + w.App.state.rows[1].id + '"]');
       var target = row2g[row2g.length - 1].getBoundingClientRect();
-      drag(g, { x: target.right - 4, y: target.top + target.height / 2 });
+      drag(g, { x: target.right - 4, y: target.top + target.height / 2 }, {
+        beforeRelease: function () {
+          ok('S03 跨行拖动时目标行显示虚线，已有标识可见', showsTransparentDropOutline(1));
+        },
+      });
       var moved = w.SignState.findElement(w.App.state, spaceId);
       ok('S03 跨行拖动：space 移到第 2 行', moved.rowId === w.App.state.rows[1].id, 'rowId=' + moved.rowId);
       ok('S03 第 1 行剩 2 个元素', w.App.state.rows[0].elements.length === 2);
@@ -283,6 +295,7 @@
       var ev1 = new w.DragEvent('dragover', { dataTransfer: dataTransfer, clientX: br.left + 100, clientY: br.top + br.height / 2, bubbles: true, cancelable: true });
       wrap.dispatchEvent(ev1);
       ok('S07 空行显示可放置高亮', band.classList.contains('drop-ok'));
+      ok('S07 拖入预设时，空行保留原来的背景色', showsTransparentDropOutline(emptyRowIndex));
       var ev2 = new w.DragEvent('drop', { dataTransfer: dataTransfer, clientX: br.left + 100, clientY: br.top + br.height / 2, bubbles: true, cancelable: true });
       wrap.dispatchEvent(ev2);
       var target = w.App.state.rows[emptyRowIndex];
@@ -311,6 +324,8 @@
       var band = $('.row-band[data-row-index="0"]');
       var br = band.getBoundingClientRect();
       wrap.dispatchEvent(new w.DragEvent('dragover', { dataTransfer: dataTransfer, clientX: br.left + 400, clientY: br.top + br.height / 2, bubbles: true, cancelable: true }));
+      ok('S08 从左栏拖入新元素时，目标行保留原色并显示插入线', showsTransparentDropOutline(0) &&
+        w.getComputedStyle($('#element-drop-indicator')).display !== 'none');
       wrap.dispatchEvent(new w.DragEvent('drop', { dataTransfer: dataTransfer, clientX: br.left + 400, clientY: br.top + br.height / 2, bubbles: true, cancelable: true }));
       var row0 = w.App.state.rows[0];
       ok('S08 拖放新元素到指定行', row0.elements[row0.elements.length - 1].type === 'big-number');
@@ -1315,7 +1330,7 @@
           editor.App.update(function (sign) { return state.updateSignSettings(sign, { widthMode: mode }); });
           properties.scrollTop = properties.scrollHeight;
           var panelBounds = panel.getBoundingClientRect();
-          var deleteBounds = properties.querySelector('.btn-danger').getBoundingClientRect();
+          var deleteBounds = properties.querySelector('[data-control-icon="delete"]').getBoundingClientRect();
           ok('S39 多行牌面下右栏仍从窗口顶部延伸到底部，宽度模式为 ' + mode,
             panelBounds.top === 0 && panelBounds.bottom <= editor.innerHeight && panelBounds.right <= editor.innerWidth + 1);
           ok('S39 右栏滚动后可到达删除按钮，宽度模式为 ' + mode, deleteBounds.bottom <= panelBounds.bottom + 1);
@@ -2118,6 +2133,39 @@
       await resizeEditor(1280);
     }
 
+    function s60_singleRowDragKeepsSignVisible() {
+      var editor = W();
+      var state = editor.SignState;
+      var saved = editor.App.state;
+      var arrow = state.createElement('arrow', { direction: 'down' });
+      var text = state.createElement('bilingual-text', { textZh: '测试站', textEn: 'Test Station' });
+      try {
+        editor.App.update(function () {
+          var sign = state.updateSignSettings(state.createSign(), { width: 1024, backgroundColor: '#DDEEFF' });
+          var row = sign.rows[0].id;
+          return state.addElement(state.addElement(sign, row, arrow), row, text);
+        });
+        editor.App.select(arrow.id);
+        var handle = $('#sign-svg [data-element-id="' + arrow.id + '"] .hitbox');
+        var bounds = handle.getBoundingClientRect();
+        var signBounds = $('#sign-svg').getBoundingClientRect();
+        var y = bounds.top + bounds.height / 2;
+        var target = signBounds.left + signBounds.width * 0.75;
+        pointer('pointerdown', handle, bounds.left + bounds.width / 2, y);
+        pointer('pointermove', editor.document, target, y);
+        ok('S60 单行牌面拖动现有元素时，原色和站名仍可见，插入线仍显示', editor.App.state.rows.length === 1 &&
+          showsTransparentDropOutline(0) && $('#sign-svg .sign-bg').getAttribute('fill') === '#DDEEFF' &&
+          editor.getComputedStyle($('#sign-svg [data-element-id="' + text.id + '"]')).opacity === '1' &&
+          editor.getComputedStyle($('#element-drop-indicator')).display !== 'none');
+        pointer('pointercancel', editor.document, target, y);
+        ok('S60 取消拖动后清除虚线和插入线，元素仍在原位置', !$('.row-band.drop-ok') &&
+          editor.getComputedStyle($('#element-drop-indicator')).display === 'none' && editor.App.state.rows[0].elements[0].id === arrow.id);
+      } finally {
+        editor.App.update(function () { return saved; });
+        editor.App.select(null);
+      }
+    }
+
     function start() {
       runWhenReady(async function () {
         if (new URLSearchParams(location.search).get('scenario') === 'multi') {
@@ -2211,6 +2259,7 @@
         await s57_multiSelectionAndAlignment();
         await s58_elementClipboard();
         await s59_multiDragAndPadding();
+        s60_singleRowDragKeepsSignVisible();
       }).then(function () {
         var passed = results.filter(function (r) { return r.pass; }).length;
         var total = results.length;

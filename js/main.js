@@ -40,26 +40,22 @@
   }
 
   function wireStaticButtons() {
-    var left = document.getElementById('left-panel');
-    var right = document.getElementById('right-panel');
-    var leftExp = document.getElementById('left-expander');
-    var rightExp = document.getElementById('right-expander');
-
-    document.getElementById('left-collapse').addEventListener('click', function () {
-      left.classList.add('collapsed');
-      leftExp.hidden = false;
-    });
-    leftExp.addEventListener('click', function () {
-      left.classList.remove('collapsed');
-      leftExp.hidden = true;
-    });
-    document.getElementById('right-collapse').addEventListener('click', function () {
-      right.classList.add('collapsed');
-      rightExp.hidden = false;
-    });
-    rightExp.addEventListener('click', function () {
-      right.classList.remove('collapsed');
-      rightExp.hidden = true;
+    ['left', 'right'].forEach(function (side) {
+      var panel = document.getElementById(side + '-panel');
+      var collapse = document.getElementById(side + '-collapse');
+      var expand = document.getElementById(side + '-expander');
+      collapse.addEventListener('click', function () {
+        panel.classList.add('collapsed');
+        expand.hidden = false;
+        expand.focus({ preventScroll: true });
+        panel.inert = true;
+      });
+      expand.addEventListener('click', function () {
+        panel.classList.remove('collapsed');
+        panel.inert = false;
+        collapse.focus({ preventScroll: true });
+        expand.hidden = true;
+      });
     });
 
     document.getElementById('close-element-btn').addEventListener('click', function () {

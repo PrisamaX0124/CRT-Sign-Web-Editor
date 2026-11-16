@@ -162,7 +162,7 @@
     var anchor = $('element-selection-outline').getBoundingClientRect();
     var viewport = $('platform-preview-scroll').getBoundingClientRect();
     var visible = item && anchor.bottom >= viewport.top && anchor.top <= viewport.bottom && anchor.right >= viewport.left && anchor.left <= viewport.right;
-    toolbar.hidden = toolbar.inert = !visible;
+    global.EditorMotion.setToolbarVisible(toolbar, !!visible);
     if (!visible) return;
     $('toolbar-element-label').textContent = keys.length > 1 ? '已选 ' + keys.length + ' 个元素' : item.label;
     var stationIds = App.selectedStationIds(), hasStation = !!stationIds.length, singleStation = hasStation && keys.length === 1, index = App.state.stations.findIndex(function (s) { return s.id === item.stationId; });
@@ -173,7 +173,7 @@
     var left = Math.max(8, Math.min(anchor.left - area.left, area.width - toolbar.offsetWidth - 8));
     var top = anchor.bottom - area.top + 8;
     if (top + toolbar.offsetHeight > viewport.bottom - area.top) top = anchor.top - area.top - toolbar.offsetHeight - 8;
-    toolbar.style.left = left + 'px'; toolbar.style.top = Math.max(viewport.top - area.top + 4, top) + 'px';
+    global.EditorMotion.placeToolbar(toolbar, left, Math.max(viewport.top - area.top + 4, top), App.selectedKey);
   }
   function syncList() {
     var signature = App.state.stations.map(function (s) { return s.id; }).join('|');
@@ -300,7 +300,7 @@
             field.append(name, input);
             fields.append(field);
           });
-          var remove=document.createElement('button');remove.className='btn transfer-remove';remove.textContent='删除这条换乘线路';
+          var remove=document.createElement('button');remove.className='btn transfer-remove';remove.dataset.controlIcon='delete';remove.textContent='删除这条换乘线路';
           remove.addEventListener('click',function(){var station=live();patchStation({transfers:station.transfers.filter(function(_,i){return i!==index;})});});
           label.append(fields, picker, remove);
         } else {
@@ -329,9 +329,8 @@
     var selectionName = multiple ? '已选中 ' + keys.length + ' 项' : selectedElement ? selectedElement.label : '';
 
     var settings = $('property-settings'), selection = $('property-selection');
-    if (settings.hidden !== hasSelection) {
-      if (hasSelection) selection.dataset.panelMotion = 'forward';
-      else settings.dataset.panelMotion = 'back';
+    var switchedSection = settings.hidden !== hasSelection;
+    if (switchedSection) {
       settings.hidden = hasSelection;
       selection.hidden = !hasSelection;
     }
@@ -353,6 +352,10 @@
     if (panelSelection !== previousPanelSelection) {
       $('property-scroll').scrollTop = 0;
       $('station-transfers').setCustomValidity('');
+      if (previousPanelSelection) {
+        var direction = switchedSection ? (hasSelection ? 1 : -1) : 0;
+        global.EditorMotion.reveal(hasSelection ? selection : settings, direction);
+      }
       previousPanelSelection = panelSelection;
     }
   }
@@ -545,10 +548,12 @@
     catch (err) { notice('导入失败：' + err.message); }
   });
   function selectLibrary(name) {
+    var changed = library !== name;
     library = name;
     document.querySelectorAll('[data-library]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.library === name)); });
     $('station-library').hidden = name !== 'stations'; $('preset-library').hidden = name !== 'presets';
     if (name === 'presets') syncPresets();
+    if (changed) global.EditorMotion.reveal($(name === 'presets' ? 'preset-library' : 'station-library'), name === 'presets' ? 1 : -1);
   }
   function persistPresets(next) {
     try { localStorage.setItem(PRESET_KEY, P.serialize(next)); }
@@ -570,7 +575,7 @@
         var current = presets.find(function (item) { return item.id === card.dataset.presetId; }); if (!current) return;
         var state = S.deserialize(S.serialize(current.state)); App.update(function () { return state; }); App.selectedId = state.currentId; App.deselect(); notice('已载入预设：' + current.name);
       });
-      var remove = document.createElement('button'); remove.className = 'preset-remove'; remove.textContent = '×'; remove.setAttribute('aria-label', '删除预设 ' + preset.name);
+      var remove = document.createElement('button'); remove.className = 'preset-remove'; remove.dataset.controlIcon = 'delete'; remove.setAttribute('aria-label', '删除预设 ' + preset.name);
       remove.addEventListener('click', function () { persistPresets(presets.filter(function (item) { return item.id !== card.dataset.presetId; })); });
       card.append(load, remove); list.appendChild(card);
     });

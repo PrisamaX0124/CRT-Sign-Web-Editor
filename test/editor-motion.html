@@ -19,8 +19,9 @@
   const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-sign-prefs', 'public-sign-presets', 'public-sign-custom-palettes', 'public-platform-sign-project-v1', 'public-platform-sign-presets-v1', 'public-transfer-sign-project-v1'];
   const savedStorage = storageKeys.map(key => [key, localStorage.getItem(key)]);
   const editors = [
-    { name: '导向标识', path: 'index.html', otherPath: 'platform.html', toolbar: '#element-toolbar', panel: '#right-panel-body', back: '#close-element-btn', heading: '#right-panel-title' },
-    { name: '站台标识', path: 'platform.html', otherPath: 'index.html', toolbar: '#platform-element-toolbar', panel: '#property-scroll', back: '#return-to-settings', heading: '#property-heading' },
+    { name: '导向标识', path: 'index.html', otherPath: 'platform.html', toolbar: '#element-toolbar', panel: '#right-panel-body', back: '#close-element-btn', heading: '#right-panel-title', palette: '#right-panel-body .cp-current' },
+    { name: '站台标识', path: 'platform.html', otherPath: 'index.html', toolbar: '#platform-element-toolbar', panel: '#property-scroll', back: '#return-to-settings', heading: '#property-heading', palette: '#property-settings .cp-current' },
+    { name: '换乘标识', path: 'index.html?editor=transfer', otherPath: 'platform.html', toolbar: '#transfer-element-toolbar', panel: '#transfer-property-scroll', back: '#transfer-return', heading: '#transfer-heading', palette: '#transfer-line-properties .cp-current' },
   ];
   const layouts = [
     { name: '导向标识', path: 'index.html', left: '#left-panel', middle: '#center-panel', right: '#right-panel' },
@@ -50,7 +51,8 @@
   function movement(playing, from) {
     return playing.some(animation => {
       const frame = animation.effect.getKeyframes()[0];
-      return frame.transform === 'translateX(' + from + 'px)' && frame.easing.startsWith('cubic-bezier(');
+      return frame.transform === 'translateX(' + from + 'px)' &&
+        [frame.easing, animation.effect.getTiming().easing].some(easing => easing.startsWith('cubic-bezier('));
     });
   }
   async function test(name, run) {
@@ -115,6 +117,7 @@
             const expander = document.getElementById(side + '-expander');
             const openWidth = bounds('.editor-header').width;
             document.getElementById(side + '-collapse').click();
+            assert(panel.inert && document.activeElement === expander, '收起时侧栏应立即停止响应，焦点应移到展开按钮');
             await finishAnimations(animations(panel));
             const header = bounds('.editor-header');
             const middle = bounds(layout.middle);
@@ -124,7 +127,8 @@
               '展开按钮应位于页眉下方且可点击');
             expander.click();
             await finishAnimations(animations(panel));
-            assert(expander.hidden && bounds('.editor-header').width === openWidth, '展开后应恢复页眉宽度');
+            assert(expander.hidden && !panel.inert && bounds('.editor-header').width === openWidth &&
+              document.activeElement === document.getElementById(side + '-collapse'), '展开后应恢复宽度和键盘焦点');
           }
         });
       }
@@ -158,30 +162,42 @@
       const toolbar = document.querySelector(editor.toolbar);
       const panel = document.querySelector(editor.panel);
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      let select, deselect, update;
+      let select, selectNext, deselect, update;
 
       if (editor.path === 'index.html') {
         const deadline = Date.now() + 10000;
         while (!app.measure && Date.now() < deadline) await repaint(window);
         assert(app.measure, '导向标识编辑器初始化超时');
         const state = window.SignState;
-        const sign = state.createSign();
+        const sign = state.addRow(state.createSign());
         const element = state.createElement('bilingual-text', { textZh: '测试站', textEn: 'Test Station' });
-        app.update(() => state.addElement(sign, sign.rows[0].id, element));
+        const next = state.createElement('bilingual-text', { textZh: '下一站', textEn: 'Next Station' });
+        app.update(() => state.addElement(state.addElement(sign, sign.rows[0].id, element), sign.rows[1].id, next));
         select = () => app.select(element.id);
+        selectNext = () => app.select(next.id);
         deselect = () => app.select(null);
         update = () => app.update(current => state.updateElementProps(current, element.id, { textZh: '新站名' }));
-      } else {
+      } else if (editor.path === 'platform.html') {
         await app.ready;
         const state = window.PlatformState;
+        app.update(current => state.addStation(current, current.currentId));
         select = () => app.select(app.state.currentId);
+        selectNext = () => app.select(app.state.stations.find(station => station.id !== app.state.currentId).id);
         deselect = () => app.deselect();
         update = () => app.update(current => state.patchStation(current, current.currentId, { zh: '新站名' }));
+      } else {
+        await app.ready;
+        const selectLine = name => document.querySelector('[data-transfer-element="line:' + name + '"]')
+          .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+        select = () => selectLine('first');
+        selectNext = () => selectLine('second');
+        deselect = () => document.getElementById('transfer-preview-scroll').click();
+        update = () => app.update(current => window.TransferState.changeLine(current, 'first', { name: '11' }));
       }
       deselect();
       await repaint(window);
 
-      await test(editor.name + '：页眉保留切换入口、当前位置、仓库图标和加星提示', async function () {
+      await test(editor.name + '：页眉保留编辑器入口，并轻微突出「前往仓库」', async function () {
         for (const width of [1280, 1100]) {
           frame.style.width = width + 'px';
           await repaint(window);
@@ -195,15 +211,74 @@
           assert(current?.getAttribute('href') === editor.path, '当前页应有明确标记');
           assert(other?.getAttribute('href') === editor.otherPath, '另一个编辑器应可直接打开');
           assert(repository?.host === 'github.com' && repository.pathname === '/PrisamaX0124/CRT-Sign-Web-Editor', '仓库链接不正确');
-          assert(repository.querySelector('svg') && repository.textContent.includes('加星'), '缺少仓库图标或加星提示');
+          assert(repository.querySelector('svg') && repository.textContent.replace(/\s+/g, ' ').trim() === '前往仓库 >' &&
+            window.getComputedStyle(repository).boxShadow !== 'none', '仓库入口应显示新文案并有轻微强调');
           const left = navigation.getBoundingClientRect();
           const right = repository.getBoundingClientRect();
           assert(left.left >= 0 && left.right < right.left && right.right <= width + 1, '两组入口应在页眉左右且完整显示');
-          assert(Math.abs(left.top - right.top) < 1 && document.documentElement.scrollWidth <= width + 1, '切换入口和加星链接应保持在同一行');
+          assert(Math.abs(left.top - right.top) < 1 && document.documentElement.scrollWidth <= width + 1, '切换入口和仓库链接应保持在同一行');
         }
         frame.style.width = '1280px';
         await repaint(window);
       });
+
+      await test(editor.name + '：底部的快捷键提示以圆角按键和操作说明显示', function () {
+        const visibleCenter = Array.from(document.querySelectorAll('.editor-center')).find(center => center.getClientRects().length);
+        const hint = visibleCenter?.querySelector('.editor-footer .shortcut-hint');
+        const key = hint?.querySelector('kbd');
+        assert(key && parseFloat(window.getComputedStyle(key).borderRadius) > 0, '快捷键应放在圆角标记里');
+        assert(hint.querySelector('.shortcut-description')?.textContent.trim(), '按键右边应显示操作说明');
+      });
+
+      if (editor.path === 'index.html' || editor.path === 'platform.html') {
+        await test(editor.name + '：剪贴板按钮在画布底部居中，以图标显示并保留可读名称', async function () {
+          const dock = document.querySelector('#edit-actions, #platform-edit-actions');
+          const copy = dock.querySelector('[data-edit-action="copy"]');
+          const cut = dock.querySelector('[data-edit-action="cut"]');
+          assert(copy.disabled && cut.disabled, '未选中内容时应禁用复制和剪切');
+          select();
+          assert(!copy.disabled && !cut.disabled, '选中可编辑内容后应启用复制和剪切');
+          for (const width of [1280, 1100]) {
+            frame.style.width = width + 'px';
+            await repaint(window);
+            const bounds = dock.getBoundingClientRect();
+            const preview = dock.closest('main').getBoundingClientRect();
+            assert(Math.abs(bounds.left + bounds.right - preview.left - preview.right) < 1 && preview.bottom - bounds.bottom < 48,
+              '工具栏应位于中栏底部并居中');
+            assert(dock.scrollWidth <= dock.clientWidth, '未打开提示时，工具栏宽度应只包括操作按钮');
+            for (const button of dock.querySelectorAll('button[data-edit-action]')) {
+              assert(button.getAttribute('aria-label') && window.getComputedStyle(button, '::before').maskImage !== 'none' && !button.querySelector('svg'),
+                '剪贴板按钮应显示图标并保留可读名称');
+              assert(button.querySelector('.control-hint kbd'), '剪贴板按钮应提供按键提示');
+            }
+          }
+          frame.style.width = '1280px';
+          deselect();
+          await repaint(window);
+        });
+
+        await test(editor.name + '：删除按钮使用白底红色垃圾桶，清空使用红底白色扫帚', async function () {
+          const guide = editor.path === 'index.html';
+          select();
+          const remove = document.querySelector(guide ? '#right-panel-body [data-control-icon="delete"]' : '#station-delete');
+          assert(remove && window.getComputedStyle(remove).backgroundColor === 'rgb(255, 255, 255)', '删除按钮应为白底');
+          const trash = window.getComputedStyle(remove, '::before');
+          const trashIcon = trash.maskImage;
+          assert(trash.backgroundColor === 'rgb(255, 56, 60)' && trashIcon !== 'none', '删除应使用系统红垃圾桶');
+          deselect();
+          if (!guide) return;
+          const clear = document.querySelector('#right-panel-body [data-control-icon="clear"]');
+          assert(clear && window.getComputedStyle(clear).backgroundColor === 'rgb(233, 21, 45)', '清空按钮应为红底');
+          const broom = window.getComputedStyle(clear, '::before');
+          assert(broom.backgroundColor === 'rgb(255, 255, 255)' && broom.maskImage !== 'none' && broom.maskImage !== trashIcon,
+            '清空应使用独立的白色图标');
+          clear.click();
+          const dialog = document.querySelector('.modal-mask');
+          assert(dialog.querySelector('[data-act="ok"][data-control-icon="clear"]'), '清空确认按钮也应显示清空图标');
+          dialog.querySelector('[data-act="cancel"]').click();
+          await finishAnimations(animations(dialog, true));
+        });
+      }
 
       await test(editor.name + '：黑白灰用于编辑界面，牌面继续显示项目里的颜色', function () {
         function grayscale(color) {
@@ -218,10 +293,13 @@
           app.update(state => window.SignState.updateSignSettings(state, { backgroundColor: '#173B57' }));
           const signBackground = page.querySelector('#sign-svg rect[fill="#173B57"]');
           assert(signBackground, '牌面应保留自定义背景色');
-        } else {
+        } else if (editor.path === 'platform.html') {
           app.update(state => window.PlatformState.settings(state, { color: '#173B57' }));
           const line = page.querySelector('#platform-svg [fill="#173B57"]');
           assert(line, '牌面应保留线路色');
+        } else {
+          app.update(state => window.TransferState.changeLine(state, 'first', { color: '#173B57' }));
+          assert(page.querySelector('#transfer-sign [data-role="line-band"][fill="#173B57"]'), '牌面应保留线路色');
         }
       });
 
@@ -247,18 +325,121 @@
       });
 
       await test(editor.name + '：属性从右侧进入，返回从左侧进入，修改内容不重播', async function () {
+        await finishAnimations(animations(panel, true));
         select();
         const forward = animations(panel, true);
-        assert(reduced ? forward.length === 0 : movement(forward, 10), '进入属性时的动画不正确');
+        assert(reduced ? forward.length === 0 : movement(forward, 12), '进入属性时的动画不正确');
         await finishAnimations(forward);
         update();
         assert(animations(panel, true).length === 0, '普通编辑不应触发动画');
         document.querySelector(editor.back).click();
         const backward = animations(panel, true);
-        assert(reduced ? backward.length === 0 : movement(backward, -10), '返回标识牌设置时的动画不正确');
+        assert(reduced ? backward.length === 0 : movement(backward, -12), '返回标识牌设置时的动画不正确');
         assert(document.activeElement === document.querySelector(editor.heading), '返回后键盘焦点应落在设置标题');
         await finishAnimations(backward);
       });
+
+      await test(editor.name + '：快速切换选中元素时，工具栏从当前位置移动', async function () {
+        const position = () => {
+          const bounds = toolbar.getBoundingClientRect();
+          return [bounds.left, bounds.top];
+        };
+        const displacement = (before, after) => Math.hypot(before[0] - after[0], before[1] - after[1]);
+        const travel = () => animations(toolbar).find(animation => 'translate' in animation.effect.getKeyframes()[0]);
+        select();
+        await finishAnimations(animations(toolbar));
+        selectNext();
+        const moving = travel();
+        assert(reduced ? !moving : !!moving, '切换选中元素时的移动未遵循减少动态效果设置');
+        if (moving) {
+          moving.pause();
+          moving.currentTime = moving.effect.getTiming().duration / 3;
+          const between = position();
+          select();
+          const returning = travel();
+          assert(returning, '中途返回时应继续移动');
+          returning.currentTime = 0;
+          assert(displacement(between, position()) < 2, '返回时工具栏应接着当前位置移动');
+          await finishAnimations(animations(toolbar));
+        }
+        assert(!toolbar.hidden && !toolbar.inert, '移动结束后工具栏仍应可操作');
+        deselect();
+      });
+
+      await test(editor.name + '：色板展开时跟随内容高度，快速开合后保持可用', async function () {
+        deselect();
+        if (editor.path.includes('transfer')) select();
+        const button = document.querySelector(editor.palette);
+        const options = document.getElementById(button.getAttribute('aria-controls'));
+        button.click();
+        assert(!options.hidden && !options.inert && button.getAttribute('aria-expanded') === 'true', '色板应在开始展开时就可以操作');
+        const opening = animations(options).find(animation => animation.transitionProperty === 'grid-template-rows');
+        assert(reduced ? !opening : !!opening, '色板应随内容高度过渡');
+        if (opening) opening.currentTime = opening.effect.getTiming().duration / 3;
+        button.click();
+        assert(options.hidden && options.inert && button.getAttribute('aria-expanded') === 'false', '收起的色板应立刻退出键盘操作');
+        button.click();
+        await finishAnimations(animations(options));
+        assert(!options.hidden && options.getBoundingClientRect().height > 30 && options.querySelector('.cp-swatch'), '再次展开后应完整显示色块');
+        button.click();
+        await finishAnimations(animations(options));
+        assert(window.getComputedStyle(options).display === 'none', '收起后应释放占用空间');
+        deselect();
+      });
+
+      if (editor.path !== 'index.html') {
+        await test(editor.name + '：底纹开关的圆点与设置面板一起过渡', async function () {
+          if (editor.path.includes('transfer')) select();
+          const button = document.getElementById('line-pattern-enabled');
+          const options = document.getElementById('line-pattern-controls');
+          button.getBoundingClientRect();
+          button.click();
+          const thumb = animations(button, true).some(animation => animation.transitionProperty === 'translate');
+          const opening = animations(options);
+          const expanding = opening.some(animation => animation.transitionProperty === 'grid-template-rows');
+          assert(button.getAttribute('aria-checked') === 'true' && !options.inert, '底纹启用后应立即能操作设置');
+          assert(reduced ? !thumb && !expanding : thumb && expanding, '圆点与面板的过渡应遵循减少动态效果设置');
+          await finishAnimations(opening);
+          button.click();
+          assert(button.getAttribute('aria-checked') === 'false' && options.inert, '底纹收起时应立即停用设置');
+          await finishAnimations(animations(options));
+          deselect();
+        });
+      }
+
+      if (editor.path === 'index.html' || editor.path === 'platform.html') {
+        await test(editor.name + '：切换预设标签时，按钮与内容同时过渡', async function () {
+          const guide = editor.path === 'index.html';
+          const button = document.querySelector(guide ? '#palette-tab-presets' : '[data-library="presets"]');
+          const pane = () => document.querySelector(guide ? '#palette-content' : '#preset-library');
+          const base = document.querySelector(guide ? '#palette-tab-elements' : '[data-library="stations"]');
+          button.getBoundingClientRect();
+          button.click();
+          const highlight = animations(button).some(animation => animation.transitionProperty === 'background-color');
+          const reveal = animations(pane());
+          assert(reduced ? !highlight && reveal.length === 0 : highlight && movement(reveal, 12), '标签状态和内容应同时切换');
+          await finishAnimations(reveal);
+          base.click();
+          await finishAnimations(animations(pane()));
+        });
+
+        await test(editor.name + '：关闭对话框立即退出键盘操作，画面平滑淡出', async function () {
+          const native = editor.path === 'platform.html';
+          const result = native ? null : window.SignUI.confirmDialog('测试内容', '测试标题');
+          const dialog = document.querySelector(native ? '#batch-dialog' : '.modal-mask');
+          if (native) dialog.showModal();
+          const opening = animations(dialog, true);
+          assert(reduced ? opening.length === 0 : opening.length > 0, '打开对话框时应遵循减少动态效果设置');
+          await finishAnimations(opening);
+          if (native) dialog.close();
+          else dialog.querySelector('[data-act="cancel"]').click();
+          const leaving = animations(dialog, true);
+          assert(native ? !dialog.open : dialog.inert && await result === false, '关闭时应立即解除对话框的操作状态');
+          assert(reduced ? leaving.length === 0 : leaving.length > 0, '关闭时应在允许动态效果时淡出');
+          await finishAnimations(leaving);
+          assert(!dialog.isConnected || window.getComputedStyle(dialog).display === 'none', '退出动画结束后应完全隐藏');
+        });
+      }
     }
   } catch (error) {
     await test('打开测试页面', function () { throw error; });

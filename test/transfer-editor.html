@@ -549,6 +549,9 @@
         await new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
         select('line:first');
         if (element('#line-pattern-enabled').getAttribute('aria-checked') !== 'true') click('#line-pattern-enabled');
+        const patternOptions = element('#line-pattern-controls');
+        patternOptions.getBoundingClientRect();
+        await Promise.allSettled(patternOptions.getAnimations().map(animation => animation.finished));
         const properties = element('#transfer-property-scroll');
         properties.scrollTop = properties.scrollHeight;
         assert(properties.scrollTop > 0, '右栏属性应能单独滚动');

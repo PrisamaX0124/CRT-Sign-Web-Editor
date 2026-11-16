@@ -101,7 +101,7 @@
         saveRowAsPreset(i);
       });
       var delBtn = h('button', {
-        class: 'row-del', text: '✕ 删除行',
+        class: 'row-del', text: '删除行', 'data-control-icon': 'delete',
         title: state.rows.length > 1 ? '删除此行' : '至少保留一行',
       });
       if (state.rows.length <= 1) delBtn.disabled = true;
@@ -205,7 +205,7 @@
     var actions = [
       { key: 'move-left', group: '移动元素', label: '向左移动元素', path: 'M19 12H5m6-6-6 6 6 6' },
       { key: 'move-right', group: '移动元素', label: '向右移动元素', path: 'M5 12h14m-6-6 6 6-6 6' },
-      { key: 'delete', group: '管理元素', label: '删除元素', path: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 10v7m4-7v7' },
+      { key: 'delete', group: '管理元素', label: '删除元素', icon: 'delete' },
     ];
     var actionRow = h('div', { class: 'toolbar-actions' });
     var groups = {};
@@ -222,8 +222,8 @@
       var btn = h('button', {
         type: 'button', 'data-action': action.key, 'aria-label': action.label,
         title: action.label,
-        class: action.key === 'delete' ? 'toolbar-danger' : '',
-      }, [actionIcon(action.path)]);
+        'data-control-icon': action.icon,
+      }, action.path ? [actionIcon(action.path)] : []);
       btn.addEventListener('click', function (ev) {
         ev.stopPropagation();
         var id = App.selection.elementId;
@@ -268,7 +268,7 @@
     var id = App.selection.elementId;
     var found = id && State.findElement(App.state, id);
     document.getElementById('center-panel').classList.toggle('has-element-selection', !!found);
-    elementToolbar.hidden = elementToolbar.inert = !found;
+    global.EditorMotion.setToolbarVisible(elementToolbar, !!found);
     if (!found) return;
     toolbarPaddingControls.forEach(function (sync) { sync(found); });
     toolbarAlignments.forEach(function (item) {
@@ -293,7 +293,7 @@
     // 不插入DOM，也不重建按钮：移动/调边距后焦点仍留在当前按钮。
     var selected = Array.prototype.slice.call(svg.querySelectorAll('g.element.selected'));
     if (!selected.length) {
-      elementToolbar.hidden = elementToolbar.inert = true;
+      global.EditorMotion.setToolbarVisible(elementToolbar, false);
       return;
     }
     var area = canvasScroll.getBoundingClientRect();
@@ -312,8 +312,7 @@
     var top = el.bottom + 8;
     if (top + size.height > area.bottom - 8) top = el.top - size.height - 8;
     top = Core.clamp(top, area.top + 8, Math.max(area.top + 8, area.bottom - size.height - 8));
-    elementToolbar.style.left = Math.round(left - center.left) + 'px';
-    elementToolbar.style.top = Math.round(top - center.top) + 'px';
+    global.EditorMotion.placeToolbar(elementToolbar, Math.round(left - center.left), Math.round(top - center.top), App.selection.elementId);
   }
 
   function hideIndicators() {
@@ -811,7 +810,7 @@
       SignUI.toast('已删除空行');
       return;
     }
-    SignUI.confirmDialog('确定要删除此行吗？行内 ' + App.state.rows[index].elements.length + ' 个元素将一并删除。', '删除行', '删除').then(function (ok) {
+    SignUI.confirmDialog('确定要删除此行吗？行内 ' + App.state.rows[index].elements.length + ' 个元素将一并删除。', '删除行', '删除', 'delete').then(function (ok) {
       if (!ok) return;
       // 确认回调时行序可能已变，按 id 删而非按下标
       App.update(function (st) { return State.deleteRow(st, rowId); });

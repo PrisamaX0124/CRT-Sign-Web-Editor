@@ -76,7 +76,7 @@
     var bar = document.getElementById('platform-edit-actions');
     ['copy', 'cut', 'delete'].forEach(function (action) { bar.querySelector('[data-edit-action="' + action + '"]').disabled = !count || (action !== 'copy' && App.state.stations.length <= 1); });
     document.getElementById('platform-clipboard-history').disabled = !entries.length;
-    document.getElementById('platform-selection-status').textContent = keys ? '已选 ' + keys + ' 个元素 · ' + count + ' 个站点' : 'Ctrl 单击加选 · Shift 单击范围选择';
+    document.getElementById('platform-selection-status').textContent = keys ? '已选 ' + keys + ' 个元素 · ' + count + ' 个站点' : '';
   }
   function init(app, notify) {
     App = app; notice = notify;

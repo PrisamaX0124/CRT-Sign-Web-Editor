@@ -167,7 +167,9 @@
       tabs[i].setAttribute('tabindex', selected ? '0' : '-1');
     }
     var content = root.querySelector('.palette-content');
-    content.parentNode.replaceChild(buildPaletteContent(), content);
+    var next = buildPaletteContent();
+    content.parentNode.replaceChild(next, content);
+    global.EditorMotion?.reveal(next, tab === 'presets' ? 1 : -1);
   }
 
   function buildPaletteCategory(category) {
@@ -255,11 +257,11 @@
     items.forEach(function (p) {
       var del = h('button', {
         class: 'preset-delete', type: 'button', title: '删除预设',
-        'aria-label': '删除预设：' + p.name, text: '✕',
+        'aria-label': '删除预设：' + p.name, 'data-control-icon': 'delete',
       });
       del.addEventListener('click', function (ev) {
         ev.stopPropagation();
-        SignUI.confirmDialog('确定要删除预设「' + p.name + '」吗？', '删除预设').then(function (ok) {
+        SignUI.confirmDialog('确定要删除预设「' + p.name + '」吗？', '删除预设', '删除', 'delete').then(function (ok) {
           if (!ok) return;
           Presets.remove(p.id);
           if (App.presetPreviewId === p.id) App.previewPreset(null);
@@ -333,6 +335,7 @@
 
   var lastSignature = null;
   var previousPanelMode = null;
+  var previousPanelSelection = null;
   var syncFns = [];
   var rowBackgroundId = null;
 
@@ -367,10 +370,13 @@
     var sig = panelSignature(mode);
     if (sig !== lastSignature) {
       var content = rebuildRightPanel(mode);
-      if (previousPanelMode && (previousPanelMode === 'settings') !== (mode === 'settings')) {
-        content.dataset.panelMotion = mode === 'settings' ? 'back' : 'forward';
+      var selection = mode === 'preset' ? App.presetPreviewId : App.selectedIds().join(',');
+      if (previousPanelMode && (previousPanelMode !== mode || previousPanelSelection !== selection)) {
+        document.getElementById('right-panel-body').scrollTop = 0;
+        global.EditorMotion.reveal(content, mode === 'settings' ? -1 : previousPanelMode === 'settings' ? 1 : 0);
       }
       previousPanelMode = mode;
+      previousPanelSelection = selection;
       lastSignature = sig;
     } else {
       syncFns.forEach(function (fn) { fn(); });
@@ -639,10 +645,10 @@
     }));
 
     root.appendChild(h('button', {
-      class: 'btn btn-danger', text: '🗑 清空标识牌',
+      class: 'btn', text: '清空标识牌', 'data-control-icon': 'clear',
       style: 'margin-top:6px',
     })).addEventListener('click', function () {
-      SignUI.confirmDialog('确定要清空所有行和元素吗？', '清空标识牌', '清空').then(function (ok) {
+      SignUI.confirmDialog('确定要清空所有行和元素吗？', '清空标识牌', '清空', 'clear').then(function (ok) {
         if (!ok) return;
         App.update(State.clearSign);
         App.select(null);
@@ -799,7 +805,7 @@
       }
       root.appendChild(colors);
     }
-    var del = h('button', { class: 'btn btn-danger', text: '删除选中元素' });
+    var del = h('button', { class: 'btn', text: '删除选中元素', 'data-control-icon': 'delete' });
     del.addEventListener('click', App.deleteSelection);
     root.appendChild(del);
     return root;
@@ -865,7 +871,7 @@
     });
 
     root.appendChild(h('div', { class: 'divider' }));
-    var del = h('button', { class: 'btn btn-danger', text: '🗑 删除元素' });
+    var del = h('button', { class: 'btn', text: '删除元素', 'data-control-icon': 'delete' });
     del.addEventListener('click', function () {
       App.update(function (st) { return State.deleteElement(st, el.id); });
       App.select(null);
@@ -995,7 +1001,7 @@
           var cur = lines()[idx];
           numInput.value = cur ? cur.number : '';
         });
-        var removeBtn = h('button', { class: 'le-remove', text: '✕', title: '移除此线路' });
+        var removeBtn = h('button', { class: 'le-remove', 'data-control-icon': 'delete', 'aria-label': '移除此线路', title: '移除此线路' });
         removeBtn.addEventListener('click', function () {
           patchProps(el.id, {
             lines: lines().filter(function (_, i) { return i !== idx; }),
@@ -1251,9 +1257,9 @@
     });
     root.appendChild(apply);
     root.appendChild(h('div', { class: 'divider' }));
-    var del = h('button', { class: 'btn btn-danger', text: '🗑 删除此预设' });
+    var del = h('button', { class: 'btn', text: '删除此预设', 'data-control-icon': 'delete' });
     del.addEventListener('click', function () {
-      SignUI.confirmDialog('确定要删除预设「' + p.name + '」吗？', '删除预设').then(function (ok) {
+      SignUI.confirmDialog('确定要删除预设「' + p.name + '」吗？', '删除预设', '删除', 'delete').then(function (ok) {
         if (!ok) return;
         Presets.remove(p.id);
         App.previewPreset(null);
