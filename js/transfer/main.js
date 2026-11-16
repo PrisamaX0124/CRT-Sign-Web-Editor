@@ -335,7 +335,7 @@
       if (lineEnglishName.value !== line.englishName) lineEnglishName.value = line.englishName;
       lineEnglishName.parentElement.hidden = !!display.number;
       lineLargeName.parentElement.hidden = !!display.number || !display.line;
-      lineLargeName.checked = line.largeName;
+      lineLargeName.setAttribute('aria-checked', String(line.largeName));
       colorPicker.sync();
       syncPattern(display);
       pattern.textContent = line.linePattern.enabled ? '关闭底纹' : '启用底纹';
@@ -472,7 +472,7 @@
   }
   lineName.addEventListener('input', () => changeLine({ name: lineName.value }, 'line-name'));
   lineEnglishName.addEventListener('input', () => changeLine({ englishName: lineEnglishName.value }, 'line-english-name'));
-  lineLargeName.addEventListener('change', () => changeLine({ largeName: lineLargeName.checked }));
+  lineLargeName.addEventListener('click', () => changeLine({ largeName: !selectedLine()?.largeName }));
   propertyScroll.addEventListener('focusout', () => { previousGroup = undefined; });
   palette.addEventListener('change', () => changeSettings({ city: palette.value }));
   width.min = state.minimumWidth;

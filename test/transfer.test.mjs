@@ -423,6 +423,40 @@ test('同组文字线路各自显示中英文，英文缺省时保留中文，�
   assert.deepEqual(values(content(partialScene, 'line-english-name')), ['Airport Express']);
 });
 
+test('两种版式的普通线路名与同组换乘提示的中英文字号一致', () => {
+  for (const [mode, arrangement, identifier] of [['guidance', '1', 'first'], ['separate', '1+1', 'second']]) {
+    const board = state.settings(initial, { mode, arrangement });
+    const project = state.changeLine(board, identifier, { name: '白饭线', englishName: 'Baifan Line' });
+    const scene = render.layout(project, measure);
+    for (const [nameRole, captionRole, caption] of [
+      ['line-name', 'label-chinese', '换乘'], ['line-english-name', 'label-english', 'Transfer'],
+    ]) {
+      const [name] = content(scene, nameRole);
+      const prompt = content(scene, captionRole).find(node => node.element.key === name.element.key && node.text === caption);
+      assert.equal(name.attributes['font-size'], prompt.attributes['font-size']);
+    }
+  }
+});
+
+test('放大线路名时两侧留出空隙，线字和英文之间仍用普通行距', () => {
+  const board = state.settings(initial, { arrangement: '1' });
+  const project = state.changeLine(board, 'first', { name: '环线', englishName: 'Loop Line', largeName: true });
+  const scene = render.layout(project, measure);
+  const [name] = content(scene, 'line-name');
+  const [suffix] = content(scene, 'line-name-suffix');
+  const [translation] = content(scene, 'line-english-name');
+  const [caption] = content(scene, 'label-chinese');
+  const [captionEnglish] = content(scene, 'label-english');
+  const scale = caption.attributes['font-size'] / 51;
+  const right = node => node.bounds.left + node.bounds.width;
+  const bottom = node => node.bounds.top + node.bounds.height;
+  assert.ok(Math.abs(name.bounds.left - Math.max(right(caption), right(captionEnglish)) - 14 * scale) < 1e-8);
+  assert.ok(Math.abs(suffix.bounds.left - right(name) - 14 * scale) < 1e-8);
+  assert.ok(Math.abs(translation.bounds.top - bottom(suffix) - 10 * scale) < 1e-8);
+  assert.equal(translation.attributes.y, captionEnglish.attributes.y);
+  assert.ok(bottom(name) > bottom(translation));
+});
+
 test('放大中文名时只拆开已有的线字，英文和线字同列，数字线路不受文字设置影响', () => {
   let project = state.settings(initial, { mode: 'separate', arrangement: '2+1' });
   project = state.changeLine(project, 'first', { name: '环线', englishName: 'Loop Line', largeName: true });
@@ -441,6 +475,8 @@ test('放大中文名时只拆开已有的线字，英文和线字同列，数�
   const right = node => node.bounds.left + node.bounds.width;
   assert.ok(Math.abs(right(suffix) - right(loopEnglish)) < 1e-8);
   assert.ok(Math.abs(right(express) - right(expressEnglish)) < 1e-8);
+  assert.ok(expressEnglish.bounds.top > express.bounds.top + express.bounds.height);
+  assert.ok(loopEnglish.bounds.top < expressEnglish.bounds.top);
   assert.deepEqual(values(content(scene, 'line-english-name')), ['Loop Line', 'Airport Express']);
   assert.deepEqual(values(content(scene, 'line-number')), ['6']);
   assert.equal(scene.usedFonts.num400, true);

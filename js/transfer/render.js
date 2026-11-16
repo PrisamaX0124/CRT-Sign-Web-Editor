@@ -6,6 +6,9 @@
   const designWidth = 768;
   const designHeight = 1024;
   const inkColor = '#161616';
+  const chineseCaptionSize = 51;
+  const englishCaptionSize = 29;
+  const enlargedNameGap = 14;
 
   function box(text, role, family, size, measure) {
     const weight = 400;
@@ -21,8 +24,8 @@
   function captionColumn(chinese, english, gapBefore, measure, scale) {
     return {
       gapBefore,
-      main: box(chinese, 'label-chinese', core.FONT_ZH, 51 * scale, measure),
-      english: box(english, 'label-english', core.FONT_EN, 29 * scale, measure),
+      main: box(chinese, 'label-chinese', core.FONT_ZH, chineseCaptionSize * scale, measure),
+      english: box(english, 'label-english', core.FONT_EN, englishCaptionSize * scale, measure),
     };
   }
 
@@ -34,18 +37,19 @@
   }
 
   function namedColumns(line, measure, scale) {
-    const gapBefore = 8 * scale;
     const name = line.line;
-    const splitSuffix = line.largeName && name.length > 1 && name.endsWith('线');
+    const enlarged = line.largeName && Boolean(name);
+    const gapBefore = (enlarged ? enlargedNameGap : 8) * scale;
+    const splitSuffix = enlarged && name.length > 1 && name.endsWith('线');
     const english = line.englishName
-      ? box(line.englishName, 'line-english-name', core.FONT_EN, 29 * scale, measure) : null;
+      ? box(line.englishName, 'line-english-name', core.FONT_EN, englishCaptionSize * scale, measure) : null;
     const main = name
-      ? box(splitSuffix ? name.slice(0, -1) : name, 'line-name', core.FONT_ZH, (line.largeName ? 116 : 57) * scale, measure)
+      ? box(splitSuffix ? name.slice(0, -1) : name, 'line-name', core.FONT_ZH, (enlarged ? 116 : chineseCaptionSize) * scale, measure)
       : null;
-    if (!splitSuffix) return [{ gapBefore, main, english }];
+    if (!splitSuffix) return [{ gapBefore, main, english, enlarged }];
     return [
-      { gapBefore, main },
-      { gapBefore, main: box('线', 'line-name-suffix', core.FONT_ZH, 51 * scale, measure), english },
+      { gapBefore, main, enlarged },
+      { gapBefore, main: box('线', 'line-name-suffix', core.FONT_ZH, chineseCaptionSize * scale, measure), english },
     ];
   }
 
@@ -56,25 +60,34 @@
       columns.push(...numberColumns(visibleLines.map(line => line.number).join('/'), measure, scale));
     } else {
       visibleLines.forEach((line, index) => {
-        if (index) columns.push({ gapBefore: 8 * scale, main: box('/', 'line-separator', core.FONT_ZH, 51 * scale, measure) });
+        if (index) {
+          const gapBefore = (columns.at(-1).enlarged ? enlargedNameGap : 8) * scale;
+          columns.push({ gapBefore, main: box('/', 'line-separator', core.FONT_ZH, chineseCaptionSize * scale, measure) });
+        }
         columns.push(...(line.number ? numberColumns(line.number, measure, scale) : namedColumns(line, measure, scale)));
       });
     }
 
-    const pairs = columns.filter(column => column.english);
+    const pairs = columns.filter(column => column.english && !column.enlarged);
     const pairedHeight = Math.max(...pairs.map(column => column.main?.height || 0));
     const tallestText = Math.max(...columns.map(column => column.main?.height || 0));
     const englishAscent = Math.max(...pairs.map(column => column.english.ascent));
     const englishDescent = Math.max(...pairs.map(column => column.english.descent));
-    const englishBaseline = Math.max(pairedHeight + 10 * scale + englishAscent, tallestText - englishDescent);
-    return {
-      columns: columns.map(({ gapBefore, main, english }) => ({
+    const rowGap = 10 * scale;
+    // 大字可以伸到英文一行的下方，给旁边的小字留出正常行距。
+    const captionBaseline = pairedHeight + rowGap + englishAscent;
+    const englishBaseline = columns.some(column => column.enlarged)
+      ? captionBaseline : Math.max(captionBaseline, tallestText - englishDescent);
+    const positionedColumns = columns.map(({ gapBefore, main, english, enlarged }) => {
+      const englishTop = enlarged ? main.height + rowGap : englishBaseline - (english?.ascent || 0);
+      return {
         gapBefore,
         width: Math.max(main?.width || 0, english?.width || 0),
-        text: [main && { ...main, top: 0 }, english && { ...english, top: englishBaseline - english.ascent }].filter(Boolean),
-      })),
-      height: englishBaseline + englishDescent,
-    };
+        text: [main && { ...main, top: 0 }, english && { ...english, top: englishTop }].filter(Boolean),
+      };
+    });
+    const height = Math.max(...positionedColumns.flatMap(column => column.text.map(item => item.top + item.height)));
+    return { columns: positionedColumns, height };
   }
 
   function makeArrow(group, left, top, size) {

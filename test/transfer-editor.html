@@ -643,16 +643,46 @@
       assert(numberLabels() === '10' && drawing('line-name')[0]?.textContent === '环线', '数字线路和文字线路没有同时显示');
       assert(drawing('line-band')[0].getAttribute('fill') === editor.SignCore.lineColorFor('环线', 'chongqing').bg, '文字线路没有匹配城市配色');
       const larger = element('#transfer-line-large-name');
+      const pattern = element('#line-pattern-enabled');
+      const checked = () => larger.getAttribute('aria-checked') === 'true';
+      assert(larger.tagName === 'BUTTON' && larger.getAttribute('role') === 'switch' &&
+        larger.className === pattern.className && larger.querySelector('span'), '放大选项没有沿用线路底纹的开关样式');
+      const label = element('#' + larger.getAttribute('aria-labelledby'));
+      const labelText = page.createRange();
+      labelText.selectNodeContents(label);
+      assert(labelText.getClientRects().length === 1 && label.getBoundingClientRect().right <= larger.getBoundingClientRect().left,
+        '放大选项的名称和开关应在同一行');
       larger.click();
-      assert(larger.checked && drawing('line-name')[0]?.textContent === '环' && drawing('line-name-suffix')[0]?.textContent === '线');
+      assert(checked() && drawing('line-name')[0]?.textContent === '环' && drawing('line-name-suffix')[0]?.textContent === '线');
+      const [largeName] = drawing('line-name');
+      const [suffix] = drawing('line-name-suffix');
+      const [translation] = drawing('line-english-name');
+      function ink(node) {
+        const size = Number(node.getAttribute('font-size'));
+        const family = node.getAttribute('font-family');
+        const measure = editor.App.measure;
+        const edges = measure.ink(node.textContent, family, 400, size);
+        const left = Number(node.getAttribute('x'));
+        const baseline = Number(node.getAttribute('y'));
+        return { left: left - edges.abl, right: left + edges.abr, size,
+          top: baseline - measure.ascent(node.textContent, family, 400, size),
+          bottom: baseline + measure.descent(node.textContent, family, 400, size) };
+      }
+      const suffixInk = ink(suffix);
+      const nameInk = ink(largeName);
+      const gap = ink(translation).top - suffixInk.bottom;
+      assert(gap > 0 && gap < suffixInk.size * 0.32, '放大后「线」与英文名的行距不合适');
+      const captionRight = Math.max(ink(drawing('label-chinese')[0]).right, ink(drawing('label-english')[0]).right);
+      assert(nameInk.left - captionRight > suffixInk.size * 0.25 && suffixInk.left - nameInk.right > suffixInk.size * 0.25,
+        '放大的线路名两侧太紧');
       click('#transfer-undo');
-      assert(!larger.checked && drawing('line-name')[0]?.textContent === '环线', '撤销没有恢复中文名的大小');
+      assert(!checked() && drawing('line-name')[0]?.textContent === '环线', '撤销没有恢复中文名的大小');
       click('#transfer-redo');
-      assert(larger.checked && drawing('line-english-name')[0]?.textContent === 'Loop Line', '重做没有恢复文字线路');
+      assert(checked() && drawing('line-english-name')[0]?.textContent === 'Loop Line', '重做没有恢复文字线路');
       line('first', '２号线');
       assert(!isVisible('#transfer-line-english-name') && numberLabels() === '2/10' && !drawing('line-english-name').length);
       line('first', '环线');
-      assert(english.value === 'Loop Line' && larger.checked, '改回文字线路后丢失英文或放大设置');
+      assert(english.value === 'Loop Line' && checked(), '改回文字线路后丢失英文或放大设置');
     });
 
     await test('版式 B 重新打开后按线路恢复中文、英文、放大设置和分组', async () => {
@@ -671,7 +701,8 @@
       assert(drawing('line-english-name').map(node => node.textContent).join(',') === 'Airport Express,Loop Line');
       select('label:lower');
       click('#transfer-label-lines [data-select-line="third"]');
-      assert(element('#transfer-line-english-name').value === 'Loop Line' && element('#transfer-line-large-name').checked);
+      assert(element('#transfer-line-english-name').value === 'Loop Line' &&
+        element('#transfer-line-large-name').getAttribute('aria-checked') === 'true');
       mode('guidance');
       assert(drawing('line-english-name').map(node => node.textContent).join(',') === 'Loop Line', '两个版式没有各自恢复线路内容');
     });
@@ -681,7 +712,7 @@
       arrangement('2+1');
       line('first', '机场东部综合交通枢纽快线');
       input('#transfer-line-english-name', 'Airport Eastern Transport Hub Express Service');
-      if (element('#transfer-line-large-name').checked) click('#transfer-line-large-name');
+      if (element('#transfer-line-large-name').getAttribute('aria-checked') === 'true') click('#transfer-line-large-name');
       line('second', '10');
       line('third', '6');
       select('label:upper');
@@ -689,6 +720,10 @@
       input('#transfer-group-arrow-position select', 'right', 'change');
       const translation = drawing('line-english-name')[0];
       const name = drawing('line-name')[0];
+      const transferChinese = drawing('label-chinese').find(node => node.textContent === '换乘');
+      const transferEnglish = drawing('label-english').find(node => node.textContent === 'Transfer');
+      assert(name.getAttribute('font-size') === transferChinese.getAttribute('font-size') &&
+        translation.getAttribute('font-size') === transferEnglish.getAttribute('font-size'), '预览中的线路名与换乘提示字号不同');
       const selection = element('[data-transfer-element="label:upper"]').getBBox();
       const arrowLeft = Number(drawing('direction-arrow')[0].getAttribute('x'));
       const bounds = translation.getBBox();
@@ -707,8 +742,12 @@
         const exported = new DOMParser().parseFromString(source, 'image/svg+xml');
         const exportedTranslation = [...exported.querySelectorAll('text')].find(node => node.textContent === translation.textContent);
         assert(exportedTranslation?.getAttribute('x') === translation.getAttribute('x'), '导出的英文名与预览不同');
-        assert([...exported.querySelectorAll('text')].some(node => node.textContent === name.textContent) &&
+        const exportedTexts = [...exported.querySelectorAll('text')];
+        const exportedName = exportedTexts.find(node => node.textContent === name.textContent);
+        assert(exportedName &&
           source.includes("font-family:'MiSans'") && source.includes('font-family:Frutiger'), '矢量图缺少线路名或字体');
+        assert(exportedName.getAttribute('font-size') === transferChinese.getAttribute('font-size') &&
+          exportedTranslation.getAttribute('font-size') === transferEnglish.getAttribute('font-size'), '导出的线路名字号与预览不同');
         click('#transfer-export-image');
         await waitFor(() => downloads.length === 2);
         const picture = await createImageBitmap(downloads[1].blob);
