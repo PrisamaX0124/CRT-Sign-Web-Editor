@@ -9,6 +9,10 @@ sign editor, and prepares both editors for GitHub Pages. Modified source
 files carry a change notice; the change summary is in docs/fork-changes.md.
 
 Existing font and icon source attributions are preserved in README.md.
+
+站台标识批量打包使用 zip.js 2.25.0，许可见 vendor/zip-LICENSE.txt。
+https://github.com/gildas-lormeau/zip.js
+
 The additional China Railway emblem is a vector outline based on the
 user-supplied reference image, with an added rounded rectangular border.
 Third-party assets remain subject to their respective rights and licenses.

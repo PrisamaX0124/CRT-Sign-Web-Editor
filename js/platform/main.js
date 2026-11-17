@@ -606,29 +606,56 @@
   }
   $('save-preset-confirm').addEventListener('click', savePreset);
   $('preset-dialog').querySelector('form').addEventListener('submit', function (event) { if (event.submitter && event.submitter.value === 'cancel') return; event.preventDefault(); savePreset(); });
-  function buildSVG(state, measure, embedData, scene) {
-    scene = scene || R.metrics(state, measure);
+  function drawExportSVG(scene, embedData) {
     var svg = document.createElementNS(Core.SVG_NS, 'svg'); R.draw(svg, scene, { clean: true });
-    var style = document.createElementNS(Core.SVG_NS, 'style'); style.textContent = SignExporters.buildFontCSS(scene.usedFonts, embedData); svg.insertBefore(style, svg.firstChild);
+    if (embedData) {
+      var style = document.createElementNS(Core.SVG_NS, 'style');
+      style.textContent = SignExporters.buildFontCSS(scene.usedFonts, embedData);
+      svg.insertBefore(style, svg.firstChild);
+    }
     svg.querySelectorAll('[data-station-id], [data-element-key], [data-role]').forEach(function (el) { ['data-station-id', 'data-element-key', 'data-role'].forEach(function (attr) { el.removeAttribute(attr); }); });
+    return svg;
+  }
+  function serializeExportSVG(svg) {
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(svg);
   }
-  function pngBlob(svgText, size, scale) {
-    return SignExporters.rasterizePNG(svgText, size, scale);
+  function buildSVG(state, measure, embedData, scene) {
+    scene = scene || R.metrics(state, measure);
+    return serializeExportSVG(drawExportSVG(scene, embedData));
+  }
+  function pngBlob(source, size, scale, signal) {
+    return SignExporters.rasterizePNG(source, size, scale, signal);
+  }
+  async function prepareExport(state, signal) {
+    await App.ready;
+    if (signal) signal.throwIfAborted();
+    var scene = R.metrics(state, App.measure);
+    var fonts = await SignExporters.ensureUsedFontData(scene.usedFonts);
+    if (signal) signal.throwIfAborted();
+    var drawing = drawExportSVG(scene, fonts);
+    return {
+      drawing: drawing,
+      size: scene.output,
+      get source() { return serializeExportSVG(drawing); },
+    };
   }
   async function exportFile(format) {
     if (busy) return;
     var state = App.state, scale = format === 'png' ? Number($('png-scale').value) : 1;
     busy = true; $('export-png').disabled = $('export-svg').disabled = true; notice('正在生成 ' + format.toUpperCase() + '…');
     try {
-      await App.ready; var scene = R.metrics(state, App.measure), fonts = await SignExporters.ensureUsedFontData(scene.usedFonts); var svg = buildSVG(state, App.measure, fonts, scene);
-      var blob = format === 'svg' ? new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }) : await pngBlob(svg, state.sizes[state.mode], scale);
+      var prepared = await prepareExport(state);
+      var blob = format === 'svg' ? new Blob([prepared.source], { type: 'image/svg+xml;charset=utf-8' }) : await pngBlob(prepared.drawing, prepared.size, scale);
       App.download(blob, filename(format, state)); notice(format.toUpperCase() + ' 已导出 · ' + state.sizes[state.mode].width * scale + ' × ' + state.sizes[state.mode].height * scale + ' px');
     } catch (err) { notice('导出失败：' + err.message); }
     finally { busy = false; $('export-png').disabled = $('export-svg').disabled = false; }
   }
-  global.PlatformExport = { buildSVG: buildSVG, pngBlob: pngBlob, exportFile: exportFile };
+  global.PlatformExport = { buildSVG: buildSVG, drawSVG: drawExportSVG, prepare: prepareExport, pngBlob: pngBlob, exportFile: exportFile };
   $('export-svg').addEventListener('click', function () { exportFile('svg'); }); $('export-png').addEventListener('click', function () { exportFile('png'); });
+  global.ImageUploadDialog.addButton($('export-png'), async function () {
+    var prepared = await prepareExport(App.state);
+    return pngBlob(prepared.drawing, prepared.size);
+  });
   [['line-color-picker','color','线路色','line-color','line-color-hex'],['background-color-picker','background','标识牌背景','background-color'],['muted-color-picker','muted','已驶过','muted-color']].forEach(function(spec){
     var picker=global.SignColorPicker.create({value:App.state[spec[1]],scope:spec[2],nativeId:spec[3],hexId:spec[4],swatchesId:spec[1]==='color'?'platform-swatches':undefined,
       getCity:function(){return App.state.city;},onCityChange:changeCity,getValue:function(){return App.state[spec[1]];},onChange:function(color){var patch={};patch[spec[1]]=color;set(patch,spec[3]);}});
@@ -651,4 +678,5 @@
   }
   render();
   App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message); });
+  global.PlatformBatchDialog.init(App, notice);
 })(window);

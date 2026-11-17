@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>图片上传测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1280px; height: 850px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>图片上传测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  const editors = [
+    { name: '导向标识', address: '../index.html', graphic: 'sign-svg' },
+    { name: '换乘标识', address: '../index.html?editor=transfer', graphic: 'transfer-sign' },
+    { name: '站台标识', address: '../platform.html', graphic: 'platform-svg' },
+  ];
+  const keys = ['provider', 'relay', 'key-imgbb', 'key-freeimage'].map(name => 'sign-image-upload-' + name);
+  const saved = keys.map(name => [name, localStorage.getItem(name)]);
+  const imgbbAddress = 'https://i.ibb.co/example/sign.png';
+  const freeimageAddress = 'https://iili.io/example.png';
+  const relayAddress = 'https://upload.example.com/freeimage';
+  let editor;
+  let requests;
+  let copies;
+  let refuseCopy;
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  async function waitFor(check, message) {
+    const deadline = Date.now() + 10000;
+    while (!check()) {
+      assert(Date.now() < deadline, message);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
+
+  async function open(address) {
+    await new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = address;
+    });
+    editor = frame.contentWindow;
+    requests = [];
+    copies = [];
+    refuseCopy = false;
+    editor.XMLHttpRequest = class {
+      upload = {};
+      open(method, address) { this.method = method; this.address = address; }
+      send(form) { this.form = form; requests.push(this); }
+      progress(loaded, total) { this.upload.onprogress({ lengthComputable: true, loaded, total }); }
+      reply(response) { this.status = 200; this.response = response; this.onload(); }
+    };
+    Object.defineProperty(editor.navigator, 'clipboard', {
+      configurable: true,
+      value: { async writeText(address) {
+        copies.push(address);
+        if (refuseCopy) throw new Error('测试时拒绝剪贴板访问');
+      } },
+    });
+    await waitFor(() => find('[data-open-image-upload]'), '编辑器缺少上传按钮');
+    await editor.App.ready;
+    find('[data-open-image-upload]').click();
+    assert(find('#image-upload-dialog').open, '上传窗口没有打开');
+  }
+
+  function find(selector) { return editor.document.querySelector(selector); }
+  function click(selector) { find(selector).click(); }
+  function key(provider) { return find('#image-upload-key-' + provider); }
+  function result(provider) { return find('[data-image-upload-result="' + provider + '"]'); }
+  function setValue(control, value, event = 'input') {
+    control.value = value;
+    control.dispatchEvent(new editor.Event(event, { bubbles: true }));
+  }
+
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try {
+      await run();
+      item.className = 'pass';
+      item.textContent = name;
+    } catch (error) {
+      item.className = 'fail';
+      item.textContent = name + '。' + error.message;
+    }
+    results.append(item);
+  }
+
+  try {
+    keys.forEach(name => localStorage.removeItem(name));
+    for (const { name, address, graphic } of editors) {
+      await test(name + '从导出区上传原尺寸图片，自动复制 ImgBB 原图地址', async () => {
+        await open(address);
+        const exportButton = find('[data-open-image-upload]').previousElementSibling;
+        assert(exportButton.textContent.includes('导出 PNG'), '上传按钮应紧邻下载按钮');
+        assert(find('#image-upload-provider').value === 'imgbb', '应默认选择 ImgBB');
+        assert(key('imgbb').value === '', '打开页面后应重新填写临时密钥');
+        if (find('#png-scale')) find('#png-scale').value = '4';
+        setValue(key('imgbb'), '假密钥');
+        const originalProject = editor.App.state;
+        click('#start-image-upload');
+        click('#start-image-upload');
+        await waitFor(() => requests.length === 1, '图片没有开始上传');
+        const request = requests[0];
+        assert(request.method === 'POST' && new URL(request.address).searchParams.get('key') === '假密钥', '没有按 ImgBB 要求发送请求');
+        const image = request.form.get('image');
+        const header = new DataView(await image.slice(0, 24).arrayBuffer());
+        const { width, height } = editor.document.getElementById(graphic).viewBox.baseVal;
+        assert(image.type === 'image/png' && header.getUint32(0) === 0x89504e47, '上传的文件应为 PNG 图片');
+        assert(header.getUint32(16) === Math.round(width) && header.getUint32(20) === Math.round(height), '图片应保持原尺寸');
+        request.reply({ data: { url: imgbbAddress } });
+        await waitFor(() => copies.length === 1, '没有尝试自动复制');
+        assert(copies[0] === imgbbAddress && result('imgbb').querySelector('input').value === imgbbAddress, '复制或展示的地址有误');
+        assert(editor.App.state === originalProject, '上传不应改动项目');
+        assert(localStorage.getItem(keys[2]) === null, '默认不应保存密钥');
+      });
+    }
+
+    await test('图床选择跨页面保存，两家密钥可分别记住和清除', async () => {
+      await open(editors[1].address);
+      assert(find('#image-upload-settings a[href="https://api.imgbb.com/"]'), '缺少 ImgBB 官网入口');
+      assert(find('#image-upload-settings a[href="https://freeimage.host/api"]'), '缺少 Freeimage.host 官网入口');
+      setValue(find('#image-upload-provider'), 'freeimage', 'change');
+      setValue(key('imgbb'), 'ImgBB 假密钥');
+      setValue(key('freeimage'), 'Freeimage.host 假密钥');
+      click('#remember-image-upload-key-freeimage');
+      setValue(find('#image-upload-relay'), relayAddress);
+      await open(editors[2].address);
+      assert(find('#image-upload-provider').value === 'freeimage', '应记住上次选用的图床');
+      assert(key('imgbb').value === '' && key('freeimage').value === 'Freeimage.host 假密钥', '只应记住主动保存的密钥');
+      assert(find('#image-upload-relay').value === relayAddress, '应记住转发地址');
+      click('#clear-image-upload-key-freeimage');
+      assert(key('freeimage').value === '' && !find('#remember-image-upload-key-freeimage').checked, '清除后应还原设置项');
+      await open(editors[1].address);
+      assert(key('freeimage').value === '', '清除的密钥不应重新出现');
+    });
+
+    await test('两家分别显示进度，先返回的原图立即尝试复制，超时后只重试失败的一家', async () => {
+      await open(editors[1].address);
+      setValue(find('#image-upload-provider'), 'both', 'change');
+      setValue(key('imgbb'), '假密钥');
+      setValue(key('freeimage'), '另一条假密钥');
+      refuseCopy = true;
+      click('#start-image-upload');
+      await waitFor(() => requests.length === 2, '两家没有同时发出请求');
+      const imgbb = requests.find(request => request.address.startsWith('https://api.imgbb.com/'));
+      const freeimage = requests.find(request => request.address === relayAddress);
+      assert(freeimage?.form.get('action') === 'upload', '转发请求有误');
+      imgbb.progress(1, 4);
+      freeimage.progress(2, 4);
+      assert(result('imgbb').querySelector('progress').value === 25, 'ImgBB 进度有误');
+      assert(result('freeimage').querySelector('progress').value === 50, 'Freeimage.host 进度有误');
+      freeimage.reply({ image: { url: freeimageAddress } });
+      await waitFor(() => result('freeimage').textContent.includes('请点「复制」'), '复制失败时缺少提示');
+      assert(copies.length === 1 && copies[0] === freeimageAddress, '第一条成功地址应立即尝试复制');
+      assert(find('#start-image-upload').disabled, '还有请求正在上传');
+      imgbb.ontimeout();
+      await waitFor(() => result('imgbb').textContent.includes('超时'), '超时后缺少提示');
+      const retry = result('imgbb').querySelector('[data-retry-image-upload]');
+      retry.click();
+      retry.click();
+      await waitFor(() => requests.length === 3, '应该只重试超时的一家');
+      assert(requests[2].address === imgbb.address, '重试发给了错误的图床');
+      const retryBytes = new Uint8Array(await requests[2].form.get('image').arrayBuffer());
+      const originalBytes = new Uint8Array(await imgbb.form.get('image').arrayBuffer());
+      assert(retryBytes.length === originalBytes.length && retryBytes.every((value, index) => value === originalBytes[index]), '重试应使用同一张图片');
+      assert(result('freeimage').querySelector('input').value === freeimageAddress, '已成功的地址应保留');
+      requests[2].reply({ data: { url: imgbbAddress } });
+      await waitFor(() => result('imgbb').querySelector('input')?.value === imgbbAddress, '重试成功后应展示第二条地址');
+      assert(copies.length === 1, '不应自动复制第二条地址');
+      refuseCopy = false;
+      find('#image-upload-dialog').close();
+      click('[data-open-image-upload]');
+      result('freeimage').querySelector('[data-copy-image-address]').click();
+      result('imgbb').querySelector('[data-copy-image-address]').click();
+      assert(copies.slice(1).join() === [freeimageAddress, imgbbAddress].join(), '重新打开窗口后两条地址都应能单独复制');
+    });
+
+    await test('转发地址未配置时，ImgBB 仍可在同时上传中成功', async () => {
+      await open(editors[1].address);
+      setValue(key('imgbb'), '假密钥');
+      setValue(key('freeimage'), '另一条假密钥');
+      setValue(find('#image-upload-relay'), '');
+      click('#start-image-upload');
+      await waitFor(() => requests.length === 1, '应该只向 ImgBB 发出请求');
+      assert(result('freeimage').textContent.includes('转发地址'), '缺少转发地址提示');
+      requests[0].reply({ data: { url: imgbbAddress } });
+      await waitFor(() => copies[0] === imgbbAddress, 'ImgBB 应可独立完成上传并复制');
+      setValue(find('#image-upload-relay'), relayAddress);
+      result('freeimage').querySelector('[data-retry-image-upload]').click();
+      await waitFor(() => requests.length === 2, '配置转发后应能重试 Freeimage.host');
+      assert(requests[1].address === relayAddress, '只应发出 Freeimage.host 请求');
+      requests[1].reply({ image: { url: freeimageAddress } });
+      await waitFor(() => result('freeimage').querySelector('input').value === freeimageAddress, '应展示补传的原图地址');
+      assert(copies.length === 1, '补传成功不应覆盖先复制的地址');
+    });
+
+    await test('缺少密钥时打开设置，生成图片失败后可以重新生成并上传', async () => {
+      await open(editors[1].address);
+      setValue(find('#image-upload-provider'), 'imgbb', 'change');
+      click('#start-image-upload');
+      assert(find('#image-upload-settings').open && result('imgbb').textContent.includes('填写密钥'), '应引导用户填写密钥');
+      assert(requests.length === 0, '缺少密钥时应等用户配置');
+      setValue(key('imgbb'), '假密钥');
+      const loadFonts = editor.SignExporters.ensureUsedFontData;
+      editor.SignExporters.ensureUsedFontData = async () => { throw new Error('测试时无法加载字体'); };
+      const retry = result('imgbb').querySelector('[data-retry-image-upload]');
+      retry.click();
+      await waitFor(() => result('imgbb').textContent.includes('无法加载字体'), '应展示图片生成错误');
+      assert(requests.length === 0, '生成图片失败时应等用户重试');
+      editor.SignExporters.ensureUsedFontData = loadFonts;
+      retry.click();
+      await waitFor(() => requests.length === 1, '重试应重新生成图片');
+      requests[0].reply({ data: { url: imgbbAddress } });
+      await waitFor(() => copies[0] === imgbbAddress, '重试成功后应尝试自动复制');
+    });
+  } finally {
+    for (const [name, value] of saved) {
+      if (value === null) localStorage.removeItem(name);
+      else localStorage.setItem(name, value);
+    }
+  }
+
+  const passed = results.querySelectorAll('.pass').length;
+  const failed = results.querySelectorAll('.fail').length;
+  const summary = passed + ' 通过 / ' + failed + ' 失败';
+  document.getElementById('summary').textContent = summary;
+  document.title = (failed ? '✖ ' : '✔ ') + summary + ' 图片上传测试';
+})();
+</script>

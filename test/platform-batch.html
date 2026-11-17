@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>站台标识批量生成测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { width: 1280px; height: 850px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>站台标识批量生成测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用站台标识编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  const projectKey = 'public-platform-sign-project-v1';
+  const savedProject = localStorage.getItem(projectKey);
+  const layouts = new Map([['route', '全线吊板'], ['station', '本站吊板'], ['vertical', '纵向线路图']]);
+  const sampleStations = [
+    { id: 'first', code: '01', zh: '首站', en: 'First' },
+    { id: 'middle', code: '05', zh: '上云岭', en: 'Shangyunling', transfers: [{ number: '2', color: '#123456' }] },
+    { id: 'last', code: '12', zh: '末站', en: 'Last' },
+  ];
+  let editor, project, samplePattern;
+  let downloads = [];
+  const requests = [];
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  function find(selector) { return editor.document.querySelector(selector); }
+  function all(selector) { return [...editor.document.querySelectorAll(selector)]; }
+  function control(name) { return find('#batch-generation-' + name); }
+  function click(name) { control(name).click(); }
+  function resultCards() { return all('.batch-generation-card'); }
+
+  async function waitFor(check, message) {
+    const deadline = Date.now() + 20000;
+    while (!check()) {
+      assert(Date.now() < deadline, message);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
+
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try {
+      await run();
+      item.className = 'pass';
+      item.textContent = name;
+    } catch (error) {
+      item.className = 'fail';
+      item.textContent = name + '。' + error.message;
+    } finally {
+      if (control('dialog').open) find('#close-batch-generation').click();
+    }
+    results.append(item);
+  }
+
+  function open() {
+    find('#open-batch-generation').click();
+    assert(control('dialog').open, '批量生成窗口没有打开');
+  }
+
+  async function preview(count) {
+    click('preview');
+    await waitFor(() => resultCards().length === count && !control('previews').inert, '预览没有完成');
+  }
+
+  function normalized(vector) {
+    const copy = vector.cloneNode(true);
+    copy.querySelector('style')?.remove();
+    for (const attribute of ['aria-hidden', 'aria-label', 'role']) copy.removeAttribute(attribute);
+    const names = new Map();
+    return new editor.XMLSerializer().serializeToString(copy).replace(/line-pattern-[\w-]+/g, name => {
+      if (!names.has(name)) names.set(name, 'line-pattern-' + names.size);
+      return names.get(name);
+    });
+  }
+
+  function parse(source) {
+    const document = new editor.DOMParser().parseFromString(source, 'image/svg+xml');
+    assert(!document.querySelector('parsererror'), '无法读取矢量文件');
+    return document.documentElement;
+  }
+
+  async function unzip(archive) {
+    const reader = new editor.zip.ZipReader(new editor.zip.BlobReader(archive));
+    try {
+      const entries = await reader.getEntries();
+      const files = new Map();
+      for (const entry of entries) {
+        files.set(entry.filename, await entry.getData(new editor.zip.BlobWriter(), { checkSignature: true }));
+      }
+      return files;
+    } finally {
+      await reader.close();
+    }
+  }
+
+  try {
+    await new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = '../platform.html';
+    });
+    editor = frame.contentWindow;
+    await editor.App.ready;
+    const pattern = editor.document.createElement('canvas');
+    pattern.width = pattern.height = 8;
+    const drawing = pattern.getContext('2d');
+    drawing.fillStyle = '#FFF';
+    drawing.fillRect(0, 0, 4, 4);
+    samplePattern = pattern.toDataURL();
+    editor.App.update(state => {
+      const replaced = editor.PlatformState.replaceStations(state, sampleStations);
+      return editor.PlatformState.settings(replaced, {
+        mode: 'station', direction: -1, currentId: 'middle', line: '10', lineName: '10号线',
+        sizes: { ...replaced.sizes, station: { width: 640, height: 192 }, vertical: { height: 800 } },
+        verticalVariant: 'double', verticalSwapped: true, fontScale: 1.2,
+        color: '#126586', background: '#F4E9CA', muted: '#767676',
+        linePattern: { enabled: true, source: 'custom', image: samplePattern, size: 150, opacity: 70 },
+        adjustments: { 'station:title': { x: 12, y: 3 }, 'vertical:left:middle': { x: -5, y: 4 } },
+      });
+    }, null, { replaceProject: true });
+    project = editor.App.state;
+    await waitFor(() => localStorage.getItem(projectKey) === editor.PlatformState.serialize(project), '测试项目尚未保存');
+    const saved = localStorage.getItem(projectKey);
+    editor.SignStorage.download = (archive, filename) => downloads.push({ archive, filename });
+    const fetchRequest = editor.fetch.bind(editor);
+    editor.fetch = (address, options) => {
+      requests.push({ address: new URL(address, editor.location.href), method: options?.method || 'GET' });
+      return fetchRequest(address, options);
+    };
+    const openRequest = editor.XMLHttpRequest.prototype.open;
+    editor.XMLHttpRequest.prototype.open = function (method, address, ...options) {
+      requests.push({ address: new URL(address, editor.location.href), method });
+      return openRequest.call(this, method, address, ...options);
+    };
+
+    await test('默认使用当前版式并选中全部站点，可全选、取消全选和手动选择', async () => {
+      open();
+      assert(control('layout').value === 'station', '默认版式应为本站吊板');
+      assert(control('direction').selectedOptions[0].textContent.includes('首站'), '当前方向应前往首站');
+      assert(control('station-count').textContent.includes('3 / 3'), '默认应选中全部站点');
+      const inputs = all('#batch-generation-stations input');
+      assert(inputs.map(input => input.value).join() === 'first,middle,last', '勾选列表应沿用站序');
+      click('select-none');
+      assert(inputs.every(input => !input.checked) && control('preview').disabled, '没有站点时无法预览');
+      inputs[2].click();
+      assert(control('station-count').textContent.includes('1 / 3'), '手动勾选后需更新数量');
+      click('select-all');
+      assert(inputs.every(input => input.checked), '全选后仍有未选站点');
+      click('png');
+      assert(control('scale').disabled && control('preview').disabled, '没有导出格式时无法预览');
+      click('svg');
+      assert(!control('preview').disabled, '可以单独选择 SVG');
+    });
+
+    await test('三种版式的双方向预览与逐张绘制相同，包括首末站和换乘站', async () => {
+      for (const [mode, name] of layouts) {
+        open();
+        control('layout').value = mode;
+        control('direction').value = 'both';
+        await preview(6);
+        const cards = resultCards();
+        for (const [index, card] of cards.entries()) {
+          const station = sampleStations[Math.floor(index / 2)];
+          const direction = index % 2 === 0 ? -1 : 1;
+          const ordinary = editor.PlatformState.settings(project, { mode, currentId: station.id, direction });
+          const expected = parse(editor.PlatformExport.buildSVG(ordinary, editor.App.measure, {}));
+          assert(normalized(card.querySelector('svg')) === normalized(expected), name + '预览与逐张绘制有差异');
+          assert(card.textContent.includes(station.code + ' ' + station.zh), '缺少站名或编号');
+          assert(card.textContent.includes(name + ' · ' + (direction === -1 ? '反向' : '正向')), '缺少版式或方向');
+        }
+        const thumbnail = cards[2].querySelector('svg');
+        cards[2].querySelector('button').click();
+        const large = control('large-preview').querySelector('svg');
+        assert(control('detail').open && normalized(large) === normalized(thumbnail), '大图与缩略图有差异');
+        const patternName = thumbnail.querySelector('pattern')?.id;
+        if (patternName) assert(patternName !== large.querySelector('pattern').id, '大图应独立引用底纹');
+        control('detail').querySelector('button').click();
+        await waitFor(() => !control('large-preview').childElementCount, '关闭大图后仍有绘图节点');
+        find('#close-batch-generation').click();
+      }
+    });
+
+    await test('勾选结果同时导出 SVG 和 2 倍 PNG，文件与单张导出一致', async () => {
+      open();
+      editor.App.select('middle');
+      const selection = editor.App.selectedKey;
+      const history = [find('#undo').disabled, find('#redo').disabled].join();
+      const localStorageBefore = JSON.stringify(Object.entries(editor.localStorage).sort());
+      click('select-none');
+      all('#batch-generation-stations input')[1].click();
+      control('direction').value = 'both';
+      click('svg');
+      control('scale').value = '2';
+      await preview(2);
+      resultCards()[1].querySelector('input').click();
+      assert(control('result-count').textContent.includes('1 / 2'), '取消勾选后数量有误');
+      click('download');
+      await waitFor(() => downloads.length === 1 || control('status').textContent.includes('失败'), '压缩包没有生成');
+      assert(downloads.length === 1, control('status').textContent);
+      assert(downloads[0].filename === '10号线_本站吊板_批量导出.zip', '压缩包名称有误');
+      assert(!control('dialog').open && !resultCards().length, '下载后应释放预览');
+      assert(editor.App.state === project && editor.App.selectedKey === selection, '批量生成改动了项目或选中元素');
+      assert([find('#undo').disabled, find('#redo').disabled].join() === history, '批量生成写入了撤销重做历史');
+      assert(localStorage.getItem(projectKey) === saved, '批量生成改动了本地项目');
+      assert(JSON.stringify(Object.entries(editor.localStorage).sort()) === localStorageBefore, '批量文件写入了浏览器存储');
+
+      const files = await unzip(downloads[0].archive);
+      const name = '10号线_05_上云岭_本站吊板_反向';
+      assert([...files.keys()].sort().join() === [name + '.png', name + '.svg'].join(), '压缩包文件名或数量有误');
+      const vector = parse(await files.get(name + '.svg').text());
+      assert(vector.querySelector('style').textContent.includes('@font-face'), '矢量文件未内嵌所用字体');
+      assert(vector.querySelector('pattern image')?.getAttribute('href') === samplePattern, '矢量文件未保留自定义底纹');
+      assert(vector.querySelector('rect').getAttribute('fill') === '#F4E9CA', '矢量文件未保留背景色');
+
+      const ordinary = [];
+      editor.App.download = (file, filename) => ordinary.push({ file, filename });
+      find('#png-scale').value = '2';
+      await editor.PlatformExport.exportFile('svg');
+      await editor.PlatformExport.exportFile('png');
+      assert(normalized(vector) === normalized(parse(await ordinary[0].file.text())), '批量与单张矢量内容不一致');
+      assert(vector.querySelector('style').textContent === parse(await ordinary[0].file.text()).querySelector('style').textContent, '内嵌字体不一致');
+      const image = new Uint8Array(await files.get(name + '.png').arrayBuffer());
+      const expected = new Uint8Array(await ordinary[1].file.arrayBuffer());
+      const header = new DataView(image.buffer);
+      assert(header.getUint32(16) === 1280 && header.getUint32(20) === 384, '图片并非 2 倍尺寸');
+      assert(image.length === expected.length && image.every((value, index) => value === expected[index]), '批量和单张 PNG 内容不一致');
+      editor.App.deselect();
+      downloads = [];
+    });
+
+    await test('反向单方向可只导出 4 倍 PNG，原尺寸选项可用', async () => {
+      for (const scale of [1, 4]) {
+        open();
+        click('select-none');
+        all('#batch-generation-stations input')[0].click();
+        control('direction').value = 'reverse';
+        control('scale').value = String(scale);
+        await preview(1);
+        assert(resultCards()[0].textContent.includes('正向'), '反向选项应反转现有方向');
+        click('download');
+        await waitFor(() => downloads.length === 1 || control('status').textContent.includes('失败'), '压缩包没有生成');
+        assert(downloads.length === 1, control('status').textContent);
+        const files = await unzip(downloads[0].archive);
+        assert(files.size === 1 && [...files.keys()][0].endsWith('_正向.png'), '压缩包应只有一张正向图片');
+        const header = new DataView(await [...files.values()][0].slice(0, 24).arrayBuffer());
+        assert(header.getUint32(16) === 640 * scale && header.getUint32(20) === 192 * scale, '导出的图片尺寸错误');
+        downloads = [];
+      }
+    });
+
+    await test('全线吊板和双列纵向线路图可直接打包，文件与预览一致', async () => {
+      for (const mode of ['route', 'vertical']) {
+        open();
+        control('layout').value = mode;
+        click('select-none');
+        all('#batch-generation-stations input')[1].click();
+        click('png');
+        click('svg');
+        await preview(1);
+        const thumbnail = normalized(resultCards()[0].querySelector('svg'));
+        click('download');
+        await waitFor(() => downloads.length === 1 || control('status').textContent.includes('失败'), '压缩包没有生成');
+        assert(downloads.length === 1, control('status').textContent);
+        const files = await unzip(downloads[0].archive);
+        const name = '10号线_05_上云岭_' + layouts.get(mode) + '_反向.svg';
+        assert(files.size === 1 && files.has(name), '压缩包应含一张所选版式的矢量图');
+        const vector = parse(await files.get(name).text());
+        assert(normalized(vector) === thumbnail, '文件内容与缩略图有差异');
+        assert(vector.querySelector('pattern image')?.getAttribute('href') === samplePattern, '文件未保留自定义底纹');
+        downloads = [];
+      }
+    });
+
+    await test('120 个站点分成 20 页，可跨页取消勾选并取消预览', async () => {
+      editor.App.update(state => editor.PlatformState.replaceStations(state,
+        Array.from({ length: 120 }, (_, index) => ({
+          id: 'station-' + index, code: String(index + 1), zh: '测试站' + (index + 1), en: 'Station ' + (index + 1),
+        }))));
+      open();
+      control('direction').value = 'both';
+      click('preview');
+      assert(control('status').textContent.includes('正在生成预览'), '缺少预览进度');
+      click('cancel');
+      assert(!control('settings').hidden && !resultCards().length, '取消后应回到设置并清除预览');
+      await preview(12);
+      assert(control('result-count').textContent.includes('240 / 240'), '双方向总数有误');
+      assert(control('page').textContent.includes('1 / 20'), '分页总数有误');
+      const first = resultCards()[0];
+      first.querySelector('input').click();
+      click('next-page');
+      await waitFor(() => resultCards().length === 12 && !control('previews').inert, '下一页未生成');
+      assert(!first.isConnected && resultCards()[0].textContent.includes('测试站7'), '翻页后上一页未释放，或站序有误');
+      click('previous-page');
+      await waitFor(() => resultCards().length === 12 && !control('previews').inert, '上一页未生成');
+      assert(!resultCards()[0].querySelector('input').checked, '翻页后取消勾选状态丢失');
+      assert(control('result-count').textContent.includes('239 / 240'), '总选择数有误');
+    });
+
+    await test('SVG 单格式打包失败后可直接重试，同名文件都能解压', async () => {
+      editor.App.update(state => editor.PlatformState.replaceStations(state, [
+        { id: 'first', code: '05', zh: '上云岭', en: 'Shangyunling' },
+        { id: 'second', code: '05', zh: '上云岭', en: 'Shangyunling' },
+      ]));
+      open();
+      click('png');
+      click('svg');
+      await preview(2);
+      const prepare = editor.PlatformExport.prepare;
+      editor.PlatformExport.prepare = () => Promise.reject(new Error('测试时无法读取字体'));
+      try {
+        click('download');
+        await waitFor(() => control('status').textContent.includes('无法读取字体'), '未显示打包失败原因');
+        assert(!downloads.length && resultCards().length === 2 && !control('download').disabled, '打包失败后应保留预览并允许重试');
+      } finally {
+        editor.PlatformExport.prepare = prepare;
+      }
+      click('download');
+      await waitFor(() => downloads.length === 1 || control('status').textContent.includes('失败'), '重试未完成');
+      assert(downloads.length === 1, control('status').textContent);
+      const files = await unzip(downloads[0].archive);
+      const name = '10号线_05_上云岭_本站吊板_反向';
+      assert(files.has(name + '.svg') && files.has(name + '_2.svg') && files.size === 2, '同名文件未分别保存');
+      downloads = [];
+    });
+
+    await test('取消 PNG 生成会释放图片地址，编辑器仍可继续编辑和撤销', async () => {
+      editor.App.update(() => project, null, { replaceProject: true });
+      const createAddress = editor.URL.createObjectURL;
+      const releaseAddress = editor.URL.revokeObjectURL;
+      const addresses = new Set();
+      let encodingCanvas;
+      const encode = editor.HTMLCanvasElement.prototype.toBlob;
+      editor.URL.createObjectURL = function (file) {
+        const address = createAddress.call(this, file);
+        if (file.type.startsWith('image/svg+xml')) addresses.add(address);
+        return address;
+      };
+      editor.URL.revokeObjectURL = function (address) {
+        addresses.delete(address);
+        releaseAddress.call(this, address);
+      };
+      editor.HTMLCanvasElement.prototype.toBlob = function () { encodingCanvas = this; };
+      try {
+        open();
+        await preview(3);
+        click('download');
+        await waitFor(() => encodingCanvas, 'PNG 没有开始生成');
+        assert(control('status').textContent.includes('正在处理'), '缺少打包进度');
+        click('cancel');
+        await waitFor(() => !addresses.size, '取消后仍保留图片地址');
+        assert(encodingCanvas.width === 0 && encodingCanvas.height === 0, '取消后仍占用生成图片的画布');
+        assert(!resultCards().length && !downloads.length, '取消后仍有预览或压缩包');
+        find('#close-batch-generation').click();
+        const previous = editor.App.state;
+        editor.App.update(state => editor.PlatformState.patchStation(state, state.currentId, { zh: '继续编辑' }));
+        assert(editor.App.state.stations[1].zh === '继续编辑', '取消后无法编辑');
+        editor.App.undo();
+        assert(editor.PlatformState.serialize(editor.App.state) === editor.PlatformState.serialize(previous), '取消后无法正常撤销');
+      } finally {
+        editor.HTMLCanvasElement.prototype.toBlob = encode;
+        editor.URL.createObjectURL = createAddress;
+        editor.URL.revokeObjectURL = releaseAddress;
+      }
+    });
+
+    await test('批量仅请求同源字体，每个字体只读取一次，界面只有本地打包下载', async () => {
+      assert(requests.every(request => request.method === 'GET' && request.address.origin === editor.location.origin &&
+        request.address.pathname.includes('/fonts/')), '批量生成发起了其他网络请求');
+      assert(new Set(requests.map(request => request.address.href)).size === requests.length, '重复读取导出字体');
+      assert(!control('dialog').querySelector('[data-open-image-upload]'), '批量窗口中出现图床上传入口');
+      assert(find('[data-open-image-upload]'), '原有单张上传按钮丢失');
+    });
+  } catch (error) {
+    const item = document.createElement('li');
+    item.className = 'fail';
+    item.textContent = error.message;
+    results.append(item);
+  } finally {
+    frame.remove();
+    if (savedProject === null) localStorage.removeItem(projectKey);
+    else localStorage.setItem(projectKey, savedProject);
+  }
+
+  const passed = results.querySelectorAll('.pass').length;
+  const failed = results.querySelectorAll('.fail').length;
+  const summary = passed + ' 通过 / ' + failed + ' 失败';
+  document.getElementById('summary').textContent = summary;
+  document.title = (failed ? '✖ ' : '✔ ') + summary + ' 站台标识批量生成测试';
+})();
+</script>
+</html>

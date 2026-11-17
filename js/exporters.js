@@ -202,8 +202,9 @@
   // ─── 导出 PNG ──────────────────────────────────────────────
 
   /** Rasterize vectors at the sampling size, never upscale an already decoded bitmap. */
-  function rasterizePNG(svgText, size, scale) {
+  function rasterizePNG(source, size, scale, signal) {
     return new Promise(function (resolve, reject) {
+      if (signal) signal.throwIfAborted();
       scale = scale === undefined ? 1 : scale;
       var width = Math.round(size.width * scale), height = Math.round(size.height * scale);
       if ([1, 2, 4].indexOf(scale) < 0 || !Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1 || width > 32768 || height > 32768 || width * height > 67108864) {
@@ -211,42 +212,68 @@
       }
       // Small signs get 4x supersampling. Bound the temporary surface for large exports.
       var sampling = Math.max(1, Math.min(4, Math.floor(32768 / width), Math.floor(32768 / height), Math.floor(Math.sqrt(16777216 / (width * height)))));
-      var doc = new DOMParser().parseFromString(svgText, 'image/svg+xml'), svg = doc.documentElement;
-      if (svg.localName !== 'svg' || doc.querySelector('parsererror')) { reject(new Error('SVG 光栅化失败')); return; }
+      var svg;
+      if (typeof source === 'string') {
+        var doc = new DOMParser().parseFromString(source, 'image/svg+xml');
+        svg = doc.documentElement;
+        if (svg.localName !== 'svg' || doc.querySelector('parsererror')) { reject(new Error('SVG 光栅化失败')); return; }
+      } else {
+        // 批量导出时，重新解析每张图的内嵌字体会占用主线程。
+        svg = source.cloneNode(true);
+      }
       // viewBox keeps the original layout while width/height select actual raster resolution.
       if (!svg.hasAttribute('viewBox')) svg.setAttribute('viewBox', '0 0 ' + size.width + ' ' + size.height);
       svg.setAttribute('width', width * sampling); svg.setAttribute('height', height * sampling);
       var str = new XMLSerializer().serializeToString(svg);
       var url = URL.createObjectURL(new Blob([str], { type: 'image/svg+xml;charset=utf-8' })), img = new Image();
+      var canvas;
+      function releaseImage() {
+        img.onload = img.onerror = null;
+        img.removeAttribute('src');
+        if (url) URL.revokeObjectURL(url);
+        url = null;
+      }
+      function finish(error, blob) {
+        releaseImage();
+        if (canvas) { canvas.width = canvas.height = 0; canvas = null; }
+        if (signal) signal.removeEventListener('abort', abort);
+        if (blob) resolve(blob); else reject(error);
+      }
+      function abort() { finish(signal.reason); }
+      if (signal) signal.addEventListener('abort', abort, { once: true });
       img.onload = function () {
         try {
-          var canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+          canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
           var ctx = canvas.getContext('2d'); if (!ctx) throw new Error('浏览器无法创建 PNG');
           ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
+          releaseImage();
           canvas.toBlob(function (blob) {
-            URL.revokeObjectURL(url);
-            if (blob) resolve(blob); else reject(new Error('PNG 编码失败'));
+            if (blob) finish(null, blob); else finish(new Error('PNG 编码失败'));
           }, 'image/png');
-        } catch (err) { URL.revokeObjectURL(url); reject(err); }
+        } catch (err) { finish(err); }
       };
-      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('SVG 光栅化失败')); };
+      img.onerror = function () { finish(new Error('SVG 光栅化失败')); };
       img.src = url;
     });
   }
 
-  function exportPNGFile(sign, measure) {
+  function createImage(sign, measure) {
     return ensureFontData(sign).then(function (embedData) {
-      var layout = Render.layoutSign(sign, measure);
-      var str = buildExportSVGString(sign, measure, embedData);
-      return rasterizePNG(str, layout).then(function (blob) {
-        Storage.download(blob, 'sign-' + Storage.timestamp() + '.png');
-        return Math.round(layout.width) + '×' + Math.round(layout.height);
+      var size = Render.layoutSign(sign, measure);
+      var source = buildExportSVGString(sign, measure, embedData);
+      return rasterizePNG(source, size).then(function (image) {
+        return { image: image, width: Math.round(size.width), height: Math.round(size.height) };
       });
-    }).then(function (dims) {
-      SignUI.toast('PNG 已导出（' + dims + ' px）', 'success');
-    }, function (err) {
-      SignUI.toast(err.message || '导出失败', 'error');
+    });
+  }
+
+  function exportPNGFile(sign, measure) {
+    return createImage(sign, measure).then(function (result) {
+      Storage.download(result.image, 'sign-' + Storage.timestamp() + '.png');
+      SignUI.toast('PNG 已导出（' + result.width + '×' + result.height + ' px）', 'success');
+    }).catch(function (error) {
+      SignUI.toast(error.message || '导出失败', 'error');
     });
   }
 
@@ -257,6 +284,7 @@
     buildFontCSS: buildFontCSS,
     buildExportSVGString: buildExportSVGString,
     rasterizePNG: rasterizePNG,
+    createImage: createImage,
     exportSVGFile: exportSVGFile,
     exportPNGFile: exportPNGFile,
   };

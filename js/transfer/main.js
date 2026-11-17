@@ -467,15 +467,19 @@
     return project;
   }
 
+  async function prepareExport(project) {
+    await App.ready;
+    const layout = drawing.layout(project, App.measure);
+    const fonts = await global.SignExporters.ensureUsedFontData(layout.usedFonts);
+    return { layout, source: drawing.exportVector(layout, fonts) };
+  }
+
   async function exportSign(format) {
     const project = App.state;
     exportImage.disabled = exportVector.disabled = true;
     notice('正在导出…');
     try {
-      await App.ready;
-      const layout = drawing.layout(project, App.measure);
-      const fonts = await global.SignExporters.ensureUsedFontData(layout.usedFonts);
-      const source = drawing.exportVector(layout, fonts);
+      const { layout, source } = await prepareExport(project);
       const file = format === 'svg'
         ? new Blob([source], { type: 'image/svg+xml;charset=utf-8' })
         : await global.SignExporters.rasterizePNG(source, layout);
@@ -553,6 +557,10 @@
   undoButton.addEventListener('click', () => restore('undo', 'redo'));
   redoButton.addEventListener('click', () => restore('redo', 'undo'));
   exportImage.addEventListener('click', () => exportSign('png'));
+  global.ImageUploadDialog.addButton(exportImage, async () => {
+    const { layout, source } = await prepareExport(App.state);
+    return global.SignExporters.rasterizePNG(source, layout);
+  });
   exportVector.addEventListener('click', () => exportSign('svg'));
   element('transfer-export-project').addEventListener('click', exportProject);
   element('transfer-import-project').addEventListener('click', () => projectFile.click());

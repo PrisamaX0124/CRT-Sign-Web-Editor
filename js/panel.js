@@ -675,9 +675,15 @@
     root.appendChild(exportButton('⬇ 导出 SVG', function () {
       return SignExporters.exportSVGFile(App.state, App.measure);
     }));
-    root.appendChild(exportButton('⬇ 导出 PNG', function () {
+    var imageActions = h('div', { class: 'image-upload-pair' });
+    var downloadImage = exportButton('⬇ 导出 PNG', function () {
       return SignExporters.exportPNGFile(App.state, App.measure);
-    }));
+    });
+    imageActions.appendChild(downloadImage);
+    global.ImageUploadDialog.addButton(downloadImage, function () {
+      return SignExporters.createImage(App.state, App.measure).then(function (result) { return result.image; });
+    });
+    root.appendChild(imageActions);
 
     root.appendChild(h('div', { class: 'divider' }));
     root.appendChild(h('div', { class: 'section-title', text: '项目' }));
