@@ -589,8 +589,18 @@
     var alignEnabled = sign.widthMode === 'fixed';
     var rows = sign.rows.map(function (row, ri) {
       var elements = layoutRowElements(row, h, measure, width, alignEnabled);
+      var top = ri * h;
+      elements.forEach(function (slot, index) {
+        var position = row.elements[index].props.positionOffset;
+        slot.box = {
+          x: Math.floor(slot.x) + (position?.x || 0),
+          y: top,
+          width: Math.ceil(Math.max(slot.width, 1)),
+          height: h,
+        };
+      });
       var contentWidth = elements.reduce(function (acc, s) { return acc + s.width; }, 0);
-      return { id: row.id, y: ri * h, height: h, elements: elements, contentWidth: contentWidth };
+      return { id: row.id, y: top, height: h, elements: elements, contentWidth: contentWidth };
     });
     return { width: width, height: height, rows: rows };
   }
@@ -876,8 +886,8 @@
       for (var ei = 0; ei < row.elements.length; ei++) {
         var el = row.elements[ei];
         var rendered = renderElement(el, sign.rowHeight, measure, { clean: options.clean });
-        // 平移向下取整：相邻元素背景边界落在整数像素上，避免抗锯齿透明缝
-        rendered.node.setAttribute('transform', 'translate(' + Math.floor(rowLayout.elements[ei].x) + ',' + rowLayout.y + ')');
+        var box = rowLayout.elements[ei].box;
+        rendered.node.setAttribute('transform', 'translate(' + box.x + ',' + box.y + ')');
         if (!options.clean && (options.selectedElementId === el.id || (options.selectedElementIds || []).indexOf(el.id) >= 0)) {
           rendered.node.setAttribute('class', 'element selected');
         }

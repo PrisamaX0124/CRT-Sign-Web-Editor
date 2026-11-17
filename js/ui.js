@@ -147,23 +147,21 @@
     alignmentTargets: function (key) {
       var types = key === 'align' ? ['bilingual-text', 'small-bilingual-text']
         : key === 'contentAlign' ? ['number-line', 'text-line', 'exit'] : null;
+      if (!types) return [];
       return App.selectedIds().filter(function (id) {
-        return !types || types.indexOf(SignState.findElement(App.state, id).element.type) >= 0;
+        return types.includes(SignState.findElement(App.state, id).element.type);
       });
     },
 
     alignmentValue: function (key) {
-      var prop = key === 'elementAlign' ? 'elementAlign' : 'align';
-      var values = App.alignmentTargets(key).map(function (id) { return SignState.findElement(App.state, id).element.props[prop]; });
+      var values = App.alignmentTargets(key).map(function (id) { return SignState.findElement(App.state, id).element.props.align; });
       return values.every(function (value) { return value === values[0]; }) ? values[0] || 'left' : null;
     },
 
     setAlignment: function (key, value) {
-      if (['elementAlign', 'align', 'contentAlign'].indexOf(key) < 0 || ['left', 'center', 'right'].indexOf(value) < 0 ||
-          (key === 'contentAlign' && value === 'center')) return;
-      var patch = {}; patch[key === 'elementAlign' ? 'elementAlign' : 'align'] = value;
-      var ids = App.alignmentTargets(key);
-      App.update(function (st) { return SignState.updateElementsProps(st, ids, patch); });
+      if (!['left', 'center', 'right'].includes(value) || (key === 'contentAlign' && value === 'center')) return;
+      var identifiers = App.alignmentTargets(key);
+      if (identifiers.length) App.update(function (state) { return SignState.updateElementsProps(state, identifiers, { align: value }); });
     },
 
     deleteSelection: function () {

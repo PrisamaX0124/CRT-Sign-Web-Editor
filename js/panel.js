@@ -752,7 +752,6 @@
     root.appendChild(h('div', { class: 'element-type-label', text: '已选择 ' + App.selectedIds().length + ' 个元素' }));
     var layout = panelSection('批量排版', 'layout');
     [
-      { key: 'elementAlign', label: '元素对齐', values: ['left', 'center', 'right'] },
       { key: 'align', label: '文字对齐', values: ['left', 'center', 'right'] },
       { key: 'contentAlign', label: '内容对齐', values: ['left', 'right'] },
     ].forEach(function (item) {
@@ -761,7 +760,7 @@
       }), function () { return App.alignmentValue(item.key); }, function (value) { App.setAlignment(item.key, value); }, item.label, item.key);
       var row = field(item.label, control);
       function sync() {
-        row.hidden = !App.alignmentTargets(item.key).length || (item.key === 'elementAlign' && App.state.widthMode !== 'fixed');
+        row.hidden = !App.alignmentTargets(item.key).length;
       }
       sync(); syncFns.push(sync); layout.appendChild(row);
     });
@@ -835,18 +834,6 @@
       else if (node.querySelector('.seg-group, .format-btn, .alignment-buttons, input[type="range"]')) layout.appendChild(node);
       else content.appendChild(node);
     });
-
-    // 元素对齐：仅固定宽度模式支持（动态宽度整体左起排列）。
-    // 编辑过程中宽度模式不会变化（它在设置面板里，与本面板互斥），构建时判断即可。
-    if (App.state.widthMode === 'fixed') {
-      layout.appendChild(field('元素对齐', alignmentButtons([
-        { value: 'left', label: '贴左' },
-        { value: 'center', label: '居中' },
-        { value: 'right', label: '贴右' },
-      ], function () { return live().props.elementAlign; }, function (v) {
-        patchProps(el.id, { elementAlign: v });
-      }, '元素对齐', 'elementAlign')));
-    }
 
     if (el.type !== 'exit') {
       colors.appendChild(buildBackgroundPicker(el, live));

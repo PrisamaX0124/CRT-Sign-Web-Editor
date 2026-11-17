@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 导向标识</title>
-  <link rel="stylesheet" href="style.css?v=b6c8167f91cd">
+  <link rel="stylesheet" href="style.css?v=df1145d95c86">
   <link rel="stylesheet" href="platform.css?v=652d04fe3cb3">
   <link rel="stylesheet" href="transfer.css?v=67436dc29216">
 </head>
@@ -84,6 +84,16 @@
             </button>
             <button type="button" data-edit-action="paste" data-control-icon="paste" aria-label="粘贴元素" aria-keyshortcuts="Control+V Meta+V">
               <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>V</kbd><span>粘贴</span></span>
+            </button>
+          </div>
+          <div class="element-position-controls" role="group" aria-label="移动元素">
+            <button type="button" id="guidance-position-mode" aria-pressed="false" title="开启后可在所属行内左右拖动，再按一次恢复拖动排序">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M8 7l-5 5 5 5m8-10 5 5-5 5"/></svg>
+              移动位置
+            </button>
+            <button type="button" id="guidance-alignment" aria-pressed="true" title="移动位置时自动吸附对齐">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h4v8a3 3 0 0 0 6 0V5h4v8a7 7 0 0 1-14 0ZM5 9h4m6 0h4"/></svg>
+              吸附对齐
             </button>
           </div>
           <div class="preview-zoom" id="guidance-zoom" role="group" aria-label="画布位置和缩放"></div>
@@ -289,18 +299,19 @@
   <script src="js/palette-manager.js?v=public-939b5399500f"></script>
   <script src="js/icons.js?v=public-8e9eb9f48086"></script>
   <script src="js/directions.js?v=ef2c097f48e6"></script>
-  <script src="js/state.js?v=2d8389f2f4f0"></script>
-  <script src="js/render.js?v=public-a2367ad9e85e"></script>
+  <script src="js/state.js?v=e71835c12df5"></script>
+  <script src="js/render.js?v=085d19565c52"></script>
   <script src="js/editor-motion.js?v=ca1eb0979930"></script>
   <script src="js/preview-zoom.js?v=714942225aa8"></script>
-  <script src="js/ui.js?v=bc8266bdcc51"></script>
+  <script src="js/element-alignment.js?v=e83d70ecce7f"></script>
+  <script src="js/ui.js?v=70ea3449a82c"></script>
   <script src="js/clipboard.js?v=public-1c7f4d30022d"></script>
   <script src="js/presets.js?v=public-a3e36419f654"></script>
   <script src="js/storage.js?v=5156bc2ae677"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
-  <script src="js/panel.js?v=3a2f42cce30c"></script>
-  <script src="js/interact.js?v=fcc37b7902dc"></script>
+  <script src="js/panel.js?v=01c0c5e0f3e1"></script>
+  <script src="js/interact.js?v=d7176ee5478b"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = 'CRT标识编辑器 - 换乘标识';

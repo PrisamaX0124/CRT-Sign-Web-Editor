@@ -560,21 +560,16 @@
         st = S.addElement(st, r, S.createElement('space', { widthRatio: 0.2 }));  // 20 贴左
         st = S.addElement(st, r, S.createElement('space', { widthRatio: 0.3, elementAlign: 'center' })); // 30
         st = S.addElement(st, r, S.createElement('space', { widthRatio: 0.1, elementAlign: 'right' }));  // 10
-        return st;
+        return S.deserializeSign(S.serializeSign(st));
       });
       var slots = w.App.layout.rows[0].elements;
       ok('S21 左对齐贴左', slots[0].x === 0, 'x=' + slots[0].x);
       ok('S21 居中成组', Math.abs(slots[1].x - (1000 - 30) / 2) < 0.5, 'x=' + slots[1].x);
       ok('S21 贴右贴右缘', Math.abs(slots[2].x - (1000 - 10)) < 0.5, 'x=' + slots[2].x);
-      // 面板出现元素对齐控件且可切换
       var g = $('#sign-svg g.element');
       var r0 = g.getBoundingClientRect();
       mouse('click', g.querySelector('.hitbox'), r0.left + 10, r0.top + 10);
-      var alignSelect = $('#right-panel-body [data-align="elementAlign"]');
-      ok('S21 固定宽度显示元素对齐', !!alignSelect && alignSelect.querySelectorAll('button').length === 3);
-      alignSelect.querySelector('[data-value="right"]').click();
-      var st = w.SignState.findElement(w.App.state, w.App.state.rows[0].elements[0].id).element;
-      ok('S21 元素对齐贴右生效', st.props.elementAlign === 'right');
+      ok('S21 固定宽度的属性栏和浮动栏已移除旧的元素对齐控件', !$('#right-panel-body [data-align="elementAlign"]') && !$('#element-toolbar [data-align="elementAlign"]'));
       w.App.select(null);
       // 动态宽度：不显示元素对齐控件，布局整体左起
       w.App.update(function (st2) { return S.updateSignSettings(st2, { widthMode: 'dynamic' }); });
@@ -1580,29 +1575,26 @@
         return !!b.querySelector('svg') && !b.textContent.trim() && !!b.getAttribute('aria-label');
       }));
       ok('S48 浮动栏按移动、左右边距和管理操作分组', bar.querySelectorAll('.toolbar-group:not([hidden])').length === 4);
-      var elementSelect = bar.querySelector('[data-align="elementAlign"] select');
       var textSelect = bar.querySelector('[data-align="align"] select');
-      ok('S48 元素对齐与文字对齐均为三个选项的下拉框', !!elementSelect && !!textSelect && elementSelect.options.length === 3 && textSelect.options.length === 3);
-      if (!elementSelect || !textSelect) return;
+      ok('S48 浮动栏的文字对齐保留三个选项', !!textSelect && textSelect.options.length === 3);
+      if (!textSelect) return;
       function choose(select, value) {
         select.value = value;
         select.dispatchEvent(new w.Event('change', { bubbles: true }));
       }
       var panelText = $('#right-panel-body [data-align="align"]');
-      var panelElement = $('#right-panel-body [data-align="elementAlign"]');
       function selectedValue(group) { return group.querySelector('[aria-pressed="true"]').getAttribute('data-value'); }
-      ok('S48 属性面板使用并排图标按钮', !!panelText && !!panelElement && !panelText.querySelector('select'));
-      elementSelect.focus();
-      choose(elementSelect, 'center');
-      ok('S48 修改对齐后下拉框保持焦点', w.document.activeElement === elementSelect);
+      ok('S48 属性面板使用并排图标按钮', !!panelText && !panelText.querySelector('select'));
+      textSelect.focus();
       choose(textSelect, 'right');
+      ok('S48 修改对齐后下拉框保持焦点', w.document.activeElement === textSelect);
       var props = S.findElement(w.App.state, text.id).element.props;
-      ok('S48 元素与文字对齐独立更新、面板同步且控件不重建', props.elementAlign === 'center' && props.align === 'right' && selectedValue(panelElement) === 'center' && selectedValue(panelText) === 'right' && panelText === $('#right-panel-body [data-align="align"]') && elementSelect === bar.querySelector('[data-align="elementAlign"] select'));
+      ok('S48 文字对齐与属性面板同步，操作时保留原控件', props.align === 'right' && selectedValue(panelText) === 'right' && panelText === $('#right-panel-body [data-align="align"]') && textSelect === bar.querySelector('[data-align="align"] select'));
       panelText.querySelector('[data-value="center"]').click();
       typeInto($('#right-panel-body input[placeholder="中文文本"]'), '已编辑文本');
       bar.querySelector('[data-action="left-plus"]').click();
       props = S.findElement(w.App.state, text.id).element.props;
-      ok('S48 连续文字编辑、对齐和边距操作互不回滚', props.textZh === '已编辑文本' && props.align === 'center' && props.elementAlign === 'center' && textSelect.value === 'center');
+      ok('S48 连续文字编辑、对齐和边距操作互不回滚', props.textZh === '已编辑文本' && props.align === 'center' && textSelect.value === 'center');
       ok('S48 下拉图标跟随当前值', bar.querySelector('[data-align="align"] .alignment-icon').getAttribute('data-icon') === 'align-center');
       w.App.select(small.id);
       ok('S48 小文本也显示文字对齐，且切换选中后回显当前值', !textSelect.closest('[data-align]').hidden && textSelect.value === small.props.align && textSelect.getAttribute('aria-label') === '文字对齐');
@@ -1616,9 +1608,8 @@
         ok('S48 线路内容对齐与面板同步', S.findElement(w.App.state, line.id).element.props.align === 'right' && selectedValue($('#right-panel-body [data-align="align"]')) === 'right');
       }
       w.App.select(space.id);
-      ok('S48 空白占位仅显示元素对齐，边距操作禁用', textSelect.closest('[data-align]').hidden && contentSelect.closest('[data-align]').hidden && paddingButtons.every(function (b) { return b.disabled; }));
+      ok('S48 空白占位不显示对齐控件，边距操作禁用', bar.querySelector('.toolbar-alignments').hidden && paddingButtons.every(function (b) { return b.disabled; }));
       w.App.update(function (st) { return S.updateSignSettings(st, { widthMode: 'dynamic' }); });
-      ok('S48 动态宽度隐藏浮动栏元素对齐', elementSelect.closest('[data-align]').hidden);
       w.App.select(small.id);
       ok('S48 动态宽度仍支持文字对齐', !textSelect.closest('[data-align]').hidden && textSelect.value === 'right');
       w.App.select(null);
@@ -1754,7 +1745,7 @@
       style.textContent = ':root { color-scheme:dark; --control-bg:#292929; --surface-soft:#282828; --text:#f1f1f1; }';
       d.head.appendChild(style);
       var options = $$('#element-toolbar [data-align] option, #right-panel-body [data-align] option');
-      ok('S52 深色模式浮动栏与右栏选项使用不透明灰底和亮色文字', options.length >= 6 && options.every(function (option) {
+      ok('S52 深色模式下文字与内容对齐选项使用不透明灰底和亮色文字', options.length === 5 && options.every(function (option) {
         var css = w.getComputedStyle(option);
         return css.backgroundColor === 'rgb(41, 41, 41)' && css.color === 'rgb(241, 241, 241)';
       }));
@@ -2009,11 +2000,7 @@
       click(4, { metaKey: true }); ok('S57 Cmd单击同样支持加选', count() === 5);
       click(0); ok('S57 普通单击恢复单选', count() === 1);
       ok('S57 Ctrl+A全选整牌所有行', key('a') && count() === 5);
-      var elementAlign = $('#right-panel-body [data-align="elementAlign"]');
-      elementAlign.querySelector('[data-value="right"]').click();
-      ok('S57 右栏一次修改所有类型的元素对齐', w.App.state.rows.every(function (row) {
-        return row.elements.every(function (el) { return el.props.elementAlign === 'right'; });
-      }));
+      ok('S57 批量属性和浮动栏已移除旧的元素对齐控件', !$('#right-panel-body [data-align="elementAlign"]') && !$('#element-toolbar [data-align="elementAlign"]'));
       var content = $('#element-toolbar [data-align="contentAlign"] select');
       content.value = 'right'; content.dispatchEvent(new w.Event('change', { bubbles: true }));
       ok('S57 混合类型批量内容对齐只作用于线路和出口', [2, 4].every(function (i) {
@@ -2059,8 +2046,8 @@
       var after = JSON.stringify(w.App.state);
       w.App.undo(); ok('S58 一步撤销粘贴，恢复粘贴前空选择', !w.App.selectedIds().length && !w.App.state.rows[0].elements.length);
       w.App.redo(); ok('S58 重做粘贴恢复新元素多选', JSON.stringify(w.App.state) === after && JSON.stringify(w.App.selectedIds()) === JSON.stringify(newIds));
-      var alignSelect = $('#element-toolbar [data-align="elementAlign"] select');
-      ok('S58 修改对齐后的下拉框焦点不阻止元素复制', clip('copy', '', alignSelect).ev.defaultPrevented);
+      var alignSelect = $('#element-toolbar [data-align="align"] select');
+      ok('S58 文字对齐下拉框的焦点不阻止元素复制', clip('copy', '', alignSelect).ev.defaultPrevented);
       var bad = clip('paste', '{"kind":"jr-sign-elements","version":99,"rows":[]}');
       ok('S58 损坏的元素剪贴板不改标识牌', bad.ev.defaultPrevented && JSON.stringify(w.App.state) === after);
       ok('S58 普通文本剪贴板不被误用为元素', !clip('paste', 'ordinary text').ev.defaultPrevented && JSON.stringify(w.App.state) === after);

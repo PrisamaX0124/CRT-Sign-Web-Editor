@@ -20,6 +20,7 @@
   var h = UI.h;
 
   var overlay, svg, elIndicator, rowIndicator, canvasScroll, elementToolbar;
+  var positionMode, positionMovement, resetPositionButton;
   var toolbarAlignments = [];
   var toolbarPaddingControls = [];
   var toolbarTurnControls;
@@ -59,6 +60,29 @@
     });
 
     var wrap = document.getElementById('canvas-wrap');
+    positionMode = document.getElementById('guidance-position-mode');
+    positionMovement = global.ElementAlignment.create({
+      paper: wrap,
+      graphic: svg,
+      toggle: document.getElementById('guidance-alignment'),
+      identifierAt: function (target) {
+        if (positionMode.getAttribute('aria-pressed') !== 'true') return null;
+        return target.closest('g.element')?.getAttribute('data-element-id');
+      },
+      select: selectPositionElements,
+      preview: function (preview, selection, distance) {
+        var sign = State.shiftElementPositions(App.state, selection.identifiers, distance);
+        global.SignRender.renderSignInto(preview, sign, App.measure, { selectedElementIds: selection.identifiers });
+      },
+      commit: function (selection, distance) {
+        App.update(function (state) { return State.shiftElementPositions(state, selection.identifiers, distance); });
+      },
+    });
+    positionMode.addEventListener('click', function () {
+      cancelElementDrag();
+      positionMovement.cancel();
+      positionMode.setAttribute('aria-pressed', String(positionMode.getAttribute('aria-pressed') !== 'true'));
+    });
     wrap.addEventListener('dragover', onPaletteDragOver);
     wrap.addEventListener('drop', onPaletteDrop);
     wrap.addEventListener('dragleave', onPaletteDragLeave);
@@ -67,6 +91,7 @@
   // ─── 覆盖层渲染 ────────────────────────────────────────────
 
   function renderOverlay(layout, state) {
+    positionMovement?.cancelActive();
     // 保留两个指示器（挂在 overlay 底部），清掉其余
     Array.prototype.slice.call(overlay.children).forEach(function (child) {
       if (child !== elIndicator && child !== rowIndicator) child.remove();
@@ -121,6 +146,24 @@
     var empty = state.rows.every(function (r) { return r.elements.length === 0; });
     document.getElementById('empty-hint').hidden = !empty;
     syncElementToolbar();
+  }
+
+  function selectPositionElements(identifier) {
+    if (!App.selectedIds().includes(identifier)) App.select(identifier);
+    var identifiers = App.selectedIds();
+    var selected = new Set(identifiers);
+    var elements = App.layout.rows.flatMap(function (row) { return row.elements; });
+    var boxes = elements.filter(function (element) { return selected.has(element.id); }).map(function (element) { return element.box; });
+    if (!boxes.length) return null;
+    var moving = global.ElementAlignment.selectionBounds(boxes);
+    var canvasWidth = App.layout.width;
+    return {
+      identifiers: identifiers,
+      moving: moving,
+      others: elements.filter(function (element) { return !selected.has(element.id); }).map(function (element) { return element.box; }),
+      canvasWidth: canvasWidth,
+      limits: global.ElementAlignment.limitsWithinCanvas(boxes, canvasWidth),
+    };
   }
 
   // ─── 选中元素的浮动操作栏（HTML，不参与SVG导出）──────────────
@@ -277,12 +320,17 @@
       });
       groups[action.group].appendChild(btn);
     });
+    resetPositionButton = h('button', { type: 'button', 'data-action': 'reset-position', text: '恢复排版', hidden: '' });
+    resetPositionButton.addEventListener('click', function () {
+      var identifiers = App.selectedIds();
+      App.update(function (state) { return State.resetElementPositions(state, identifiers); });
+    });
+    actionRow.appendChild(resetPositionButton);
     var alignRow = h('div', { class: 'toolbar-alignments' });
     elementToolbar.appendChild(alignRow);
     [
-      { key: 'elementAlign', prop: 'elementAlign', label: '元素对齐', labels: ['元素贴左', '元素居中', '元素贴右'], types: null },
-      { key: 'align', prop: 'align', label: '文字对齐', labels: ['文字左对齐', '文字居中', '文字右对齐'], types: ['bilingual-text', 'small-bilingual-text'] },
-      { key: 'contentAlign', prop: 'align', label: '内容对齐', labels: ['内容左对齐', '内容右对齐'], types: ['number-line', 'text-line', 'exit'] },
+      { key: 'align', label: '文字对齐', labels: ['文字左对齐', '文字居中', '文字右对齐'] },
+      { key: 'contentAlign', label: '内容对齐', labels: ['内容左对齐', '内容右对齐'] },
     ].forEach(function (config) {
       var values = config.labels.length === 2 ? ['left', 'right'] : ['left', 'center', 'right'];
       var control = UI.alignmentControl(values.map(function (value, i) {
@@ -306,12 +354,13 @@
     document.getElementById('center-panel').classList.toggle('has-element-selection', !!found);
     global.EditorMotion.setToolbarVisible(elementToolbar, !!found);
     if (!found) return;
+    resetPositionButton.hidden = !App.selectedIds().some(function (identifier) {
+      return State.findElement(App.state, identifier).element.props.positionOffset;
+    });
     toolbarTurnControls.hidden = App.selectedIds().length !== 1 || !Directions.canTurn(arrowDirection(found.element));
     toolbarPaddingControls.forEach(function (sync) { sync(found); });
     toolbarAlignments.forEach(function (item) {
-      item.control.node.hidden = item.config.types
-        ? !App.alignmentTargets(item.config.key).length
-        : App.state.widthMode !== 'fixed';
+      item.control.node.hidden = !App.alignmentTargets(item.config.key).length;
       item.control.sync();
     });
     elementToolbar.querySelector('.toolbar-alignments').hidden = toolbarAlignments.every(function (item) { return item.control.node.hidden; });
@@ -530,6 +579,7 @@
   var elemDrag = null; // {elementId, rowId, pointerId, active, ghost, dx, dy, startX, startY, target}
 
   function onElementPointerDown(ev) {
+    if (positionMode.getAttribute('aria-pressed') === 'true') return;
     if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
     var g = ev.target.closest ? ev.target.closest('g.element') : null;
     if (!g) return; // 空白处按下 → 冒泡为取消选中（click 处理）
@@ -567,12 +617,12 @@
 
     var slots = [];
     App.layout.rows.forEach(function (row) { row.elements.forEach(function (s) {
-      if (elemDrag.ids.indexOf(s.id) >= 0) slots.push({ id: s.id, x: s.x, y: row.y, width: s.width });
+      if (elemDrag.ids.indexOf(s.id) >= 0) slots.push({ id: s.id, ...s.box });
     }); });
     var left = Math.min.apply(null, slots.map(function (s) { return s.x; }));
     var top = Math.min.apply(null, slots.map(function (s) { return s.y; }));
     var viewBoxW = Math.max.apply(null, slots.map(function (s) { return s.x + s.width; })) - left;
-    var viewBoxH = Math.max.apply(null, slots.map(function (s) { return s.y + App.state.rowHeight; })) - top;
+    var viewBoxH = Math.max.apply(null, slots.map(function (s) { return s.y + s.height; })) - top;
     var svgRect = svg.getBoundingClientRect(), scale = svgRect.width / App.layout.width;
     rect = { left: svgRect.left + left * scale, top: svgRect.top + top * scale, width: viewBoxW * scale, height: viewBoxH * scale };
 

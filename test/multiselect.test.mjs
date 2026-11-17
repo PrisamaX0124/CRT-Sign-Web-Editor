@@ -116,8 +116,9 @@ test('多选对齐只改适用元素，一步撤销恢复完整多选，删除�
   assert.equal(S.findElement(A.state, els[0].id).element.props.align, 'right');
   assert.equal(S.findElement(A.state, els[2].id).element.props.align, 'left');
   A.undo(); assert.equal(JSON.stringify(A.state), before); assert.equal(A.selectedIds().length, 5);
+  const restored = A.state;
   A.setAlignment('elementAlign', 'right');
-  assert.ok(A.state.rows[0].elements.every(el => el.props.elementAlign === 'right'));
+  assert.equal(A.state, restored);
   A.update(st => S.deleteElements(st, [els[0].id, els[1].id]));
   assert.equal(A.selectedIds().length, 3);
   A.deleteSelection(); assert.equal(A.selectedIds().length, 0); assert.equal(A.state.rows[0].elements.length, 0);

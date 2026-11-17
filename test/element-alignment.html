@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>元素对齐测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1280px; height: 860px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>元素对齐测试</h1>
+<p id="summary">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  function near(actual, expected, message) {
+    assert(Math.abs(actual - expected) < 0.001, message + '（实际 ' + actual + '，预期 ' + expected + '）');
+  }
+
+  async function open(address) {
+    await new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = address;
+    });
+    const editor = frame.contentWindow;
+    const deadline = Date.now() + 10000;
+    while (!editor.App?.state || !editor.App.measure) {
+      assert(Date.now() < deadline, '等候编辑器超时');
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+    await editor.App.ready;
+    await editor.document.fonts.ready;
+    return editor;
+  }
+
+  async function test(name, run) {
+    const result = document.createElement('li');
+    try {
+      await run();
+      result.className = 'pass';
+      result.textContent = name;
+    } catch (error) {
+      result.className = 'fail';
+      result.textContent = name + '。' + error.message;
+    }
+    results.append(result);
+  }
+
+  function nextFrame(editor) {
+    return new Promise(resolve => editor.requestAnimationFrame(resolve));
+  }
+
+  function drag(editor, graphic, source, start, movement, scale) {
+    const bounds = graphic.getBoundingClientRect();
+    function send(type, target, x, y, pointerId = 9) {
+      target.dispatchEvent(new editor.PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerType: 'mouse', isPrimary: true, pointerId, button: 0,
+        clientX: bounds.left + x * scale, clientY: bounds.top + y * scale,
+      }));
+    }
+    send('pointerdown', source, start.x, start.y);
+    return {
+      move(x = movement.x, y = movement.y, pointerId = 9) { send('pointermove', editor.document, start.x + x, start.y + y, pointerId); },
+      drop(x = movement.x, y = movement.y) { send('pointerup', editor.document, start.x + x, start.y + y); },
+      cancel() { send('pointercancel', editor.document, start.x + movement.x, start.y + movement.y); },
+    };
+  }
+
+  function guide(editor, direction) {
+    return editor.document.querySelector('.alignment-guide-' + direction + ':not([hidden])');
+  }
+
+  const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-platform-sign-project-v1'];
+  const stored = storageKeys.map(key => [key, localStorage.getItem(key)]);
+  try {
+    const editor = await open('../index.html');
+    const application = editor.App;
+    const state = editor.SignState;
+    const query = selector => editor.document.querySelector(selector);
+    const graphic = query('#sign-svg');
+    const positionMode = query('#guidance-position-mode');
+    const snap = query('#guidance-alignment');
+    const first = state.createElement('arrow', { backgroundColor: '#FF0000' });
+    const second = state.createElement('arrow');
+    function setup() {
+      let sign = state.updateSignSettings(state.createSign(), { width: 768, frameWidth: 2 });
+      sign = state.addRow(sign);
+      sign = state.addElement(sign, sign.rows[0].id, first);
+      sign = state.addElement(sign, sign.rows[1].id, second);
+      application.update(() => sign);
+      application.select(first.id);
+      const zoom = query('#guidance-zoom select');
+      zoom.value = '100';
+      zoom.dispatchEvent(new editor.Event('change'));
+    }
+    function position(row) { return application.layout.rows[row].elements[0].box; }
+    function start(movement) {
+      const box = position(0);
+      const scale = graphic.getBoundingClientRect().width / application.layout.width;
+      return drag(editor, graphic, query('#sign-svg [data-element-id="' + first.id + '"] .hitbox'),
+        { x: box.x + box.width / 2, y: box.y + box.height / 2 }, movement, scale);
+    }
+
+    await test('导向标识斜拖时只横向吸附，预览和导出的元素都留在原行', async () => {
+      setup();
+      assert(positionMode && snap, '找不到移动位置或吸附开关');
+      positionMode.click();
+      const original = application.state;
+      const box = position(0);
+      const centered = (application.layout.width - box.width) / 2;
+      const bottom = application.layout.height - box.height;
+      const movement = start({ x: centered + 3, y: bottom - 4 });
+      movement.move();
+      await nextFrame(editor);
+      const vertical = guide(editor, 'vertical');
+      assert(vertical, '缺少中心参考线');
+      near(parseFloat(vertical.style.left), 50, '竖线穿过牌面中心');
+      const preview = query('.position-preview g.element.selected');
+      assert(preview?.parentNode.matches('.sign-row:first-of-type'), '预览时元素离开了所属行');
+      assert(preview.getAttribute('transform') === 'translate(' + centered + ',' + box.y + ')', '预览时元素上下移动');
+      assert(application.state === original, '松手前不应修改项目');
+      movement.drop();
+      near(position(0).x, centered, '松手后元素横向居中');
+      near(position(0).y, box.y, '松手后元素应留在原行');
+      assert(!guide(editor, 'vertical'), '松手后参考线仍可见');
+      assert(application.state.rows[0].elements[0].id === first.id, '元素所属行改变');
+      const vectorText = editor.SignExporters.buildExportSVGString(application.state, application.measure);
+      const drawing = new editor.DOMParser().parseFromString(vectorText, 'image/svg+xml');
+      const placed = drawing.querySelector('g.element rect[fill="#FF0000"]').parentNode;
+      assert(placed.getAttribute('transform') === 'translate(' + centered + ',' + box.y + ')', '导出位置与预览不一致');
+      assert(placed.parentNode === drawing.querySelector('.sign-row') &&
+        placed.parentNode.lastElementChild.matches('.sign-frame'), '导出时元素应留在原行且由边框覆盖');
+      assert(!drawing.querySelector('.alignment-guides'), '参考线进入导出文件');
+      application.undo();
+      assert(application.state === original, '一次撤销未恢复项目');
+      application.redo();
+      near(position(0).x, centered, '重做后未恢复位置');
+      query('[data-action="reset-position"]').click();
+      near(position(0).x, box.x, '恢复排版后未回到原位');
+    });
+
+    await test('导向标识只向下拖过行边界时不启动移动，旧档有纵向偏移也会回到原行', async () => {
+      setup();
+      const original = application.state;
+      const movement = start({ x: 0, y: position(1).y + 30 });
+      movement.move();
+      await nextFrame(editor);
+      assert(query('.position-preview').hasAttribute('hidden'), '仅纵向拖动不应显示移动预览');
+      movement.drop();
+      assert(application.state === original, '纵向拖动修改了项目');
+      const previous = state.updateElementProps(original, first.id, { positionOffset: { x: 32, y: original.rowHeight / 2 } });
+      const restored = state.deserializeSign(state.serializeSign(previous));
+      application.update(() => restored);
+      near(position(0).x, 32, '旧项目的横向位置');
+      near(position(0).y, 0, '旧项目的元素应回到所属行');
+      assert(!('y' in state.findElement(application.state, first.id).element.props.positionOffset), '旧纵向偏移仍在项目里');
+    });
+
+    await test('导向标识多选按整组选框对齐，关闭吸附后保留拖动的精确位置', async () => {
+      setup();
+      application.selectMany([first.id, second.id]);
+      const firstBox = position(0), secondBox = position(1);
+      const centered = (application.layout.width - Math.max(firstBox.width, secondBox.width)) / 2;
+      const movement = start({ x: centered + 3, y: 0 });
+      movement.move();
+      await nextFrame(editor);
+      near(parseFloat(guide(editor, 'vertical').style.left), 50, '多选参考线应穿过组中心');
+      movement.drop();
+      near(position(0).x - firstBox.x, centered, '第一项移动量');
+      near(position(1).x - secondBox.x, centered, '第二项移动量');
+      near(position(1).y - position(0).y, secondBox.y - firstBox.y, '组内纵向间距');
+      application.undo();
+      snap.click();
+      assert(snap.getAttribute('aria-pressed') === 'false', '开关状态未更新');
+      const free = start({ x: centered + 3, y: 0 });
+      free.move();
+      await nextFrame(editor);
+      assert(!guide(editor, 'vertical'), '关闭吸附后仍显示参考线');
+      free.drop();
+      near(position(0).x - firstBox.x, centered + 3, '关闭吸附后的位置');
+      snap.click();
+    });
+
+    await test('导向标识放大后按屏幕距离吸附，取消拖动会清理参考线并保留原位置', async () => {
+      setup();
+      const zoom = query('#guidance-zoom select');
+      zoom.value = '200';
+      zoom.dispatchEvent(new editor.Event('change'));
+      const original = application.state;
+      const box = position(0);
+      const centered = (application.layout.width - box.width) / 2;
+      const movement = start({ x: centered + 4, y: 0 });
+      movement.move();
+      await nextFrame(editor);
+      assert(!guide(editor, 'vertical'), '超出屏幕吸附距离后仍有竖线');
+      movement.move(centered + 2, 0, 10);
+      await nextFrame(editor);
+      assert(!guide(editor, 'vertical'), '其他指针改变了参考线');
+      movement.move(centered + 2, 0);
+      await nextFrame(editor);
+      assert(guide(editor, 'vertical'), '进入屏幕吸附距离后缺少竖线');
+      movement.cancel();
+      assert(application.state === original && !guide(editor, 'vertical') && query('.position-preview').hasAttribute('hidden'), '取消后项目、参考线或预览未恢复');
+      assert(zoom.value === '200', '移动元素改变了缩放比例');
+    });
+
+    await test('导向标识可贴住相邻元素的边缘，排序模式可将整个元素移入另一行', async () => {
+      setup();
+      const neighbor = position(1);
+      const edge = neighbor.x + neighbor.width;
+      const movement = start({ x: edge + 3, y: neighbor.y });
+      movement.move();
+      await nextFrame(editor);
+      near(parseFloat(guide(editor, 'vertical').style.left), edge / application.layout.width * 100, '竖线未穿过相邻元素右边缘');
+      movement.drop();
+      near(position(0).x, edge, '松手后第一个元素未贴到相邻元素右侧');
+      near(position(0).y, 0, '吸附同时应保持原行');
+      application.undo();
+      positionMode.click();
+      const reorder = start({ x: 12, y: neighbor.y });
+      reorder.move();
+      assert(query('#element-drop-indicator').style.display === 'block', '原来的拖动排序缺少插入指示线');
+      reorder.drop();
+      assert(application.state.rows[0].elements.length === 0 && application.state.rows[1].elements.length === 2, '退出移动位置后无法换行排序');
+      assert(application.layout.rows[1].elements.every(element => element.box.y === application.layout.rows[1].y), '换行应将整个元素放进目标行');
+    });
+
+
+    await test('导向标识的两个开关有图标，关闭吸附拖过边缘后仍可选中元素', async () => {
+      setup();
+      assert(positionMode.querySelector('svg[aria-hidden="true"] path') && snap.querySelector('svg[aria-hidden="true"] path'), '开关缺少图标');
+      positionMode.click();
+      snap.click();
+      const zoom = query('#guidance-zoom select');
+      zoom.value = 'fit';
+      zoom.dispatchEvent(new editor.Event('change'));
+      const movement = start({ x: 1400, y: -600 });
+      movement.move();
+      await nextFrame(editor);
+      movement.drop();
+      const box = position(0);
+      near(box.x + box.width, application.layout.width, '元素右侧应停在画布边缘');
+      near(box.y, 0, '元素上侧应停在画布边缘');
+      const hit = query('#sign-svg [data-element-id="' + first.id + '"] .hitbox');
+      const bounds = hit.getBoundingClientRect();
+      const target = editor.document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+      assert(target === hit, '停在画布边缘的元素无法点到');
+      await new Promise(resolve => editor.setTimeout(resolve, 0));
+      application.select(null);
+      query('#sign-svg [data-element-id="' + first.id + '"] .hitbox').dispatchEvent(new editor.MouseEvent('click', { bubbles: true }));
+      assert(application.selection.elementId === first.id, '停在画布边缘的元素无法选中');
+      snap.click();
+    });
+
+    await test('导向标识多选拖过角落时，所有元素都留在画布内并保持相对位置', () => {
+      setup();
+      application.selectMany([first.id, second.id]);
+      const before = [position(0), position(1)];
+      const movement = start({ x: 1500, y: 900 });
+      movement.move();
+      movement.drop();
+      const after = [position(0), position(1)];
+      assert(after.every(box => box.x >= 0 && box.y >= 0 && box.x + box.width <= application.layout.width &&
+        box.y + box.height <= application.layout.height), '有元素被拖出了画布');
+      near(after[1].x - after[0].x, before[1].x - before[0].x, '保持原水平间距');
+      near(after[1].y - after[0].y, before[1].y - before[0].y, '保持原竖直间距');
+    });
+
+    const platform = await open('../platform.html');
+    const platformApplication = platform.App;
+    const platformState = platform.PlatformState;
+    const platformQuery = selector => platform.document.querySelector(selector);
+    const platformGraphic = platformQuery('#platform-svg');
+    function setupPlatform(mode, settings = {}) {
+      const stations = platformState.parseStations('01|松林|Pine Grove|1\n02|河西|West River|2\n03|花园|Garden', 'chongqing');
+      const project = platformState.settings(platformState.replaceStations(platformState.create(), stations), {
+        mode, city: 'chongqing', currentId: stations[1].id, ...settings,
+      });
+      platformApplication.update(() => project, null, { replaceProject: true });
+      const zoom = platformQuery('#platform-zoom select');
+      zoom.value = 'fit';
+      zoom.dispatchEvent(new platform.Event('change'));
+      return project;
+    }
+    function startPlatform(key, target) {
+      const { elements, output, frame: artwork } = platformApplication.scene;
+      const box = elements.find(element => element.key === key).box;
+      const scale = platformGraphic.getBoundingClientRect().width / output.width;
+      const point = {
+        x: artwork.x + (box.x + box.width / 2) * artwork.scale,
+        y: artwork.y + (box.y + box.height / 2) * artwork.scale,
+      };
+      return drag(platform, platformGraphic, platformQuery('#platform-svg [data-element-key="' + key + '"]'), point, {
+        x: (target.x ?? point.x) - point.x, y: (target.y ?? point.y) - point.y,
+      }, scale);
+    }
+    function checkPlatformDrag(original, key, target) {
+      platformApplication.selectElement(key);
+      const movement = startPlatform(key, target);
+      movement.move();
+      movement.drop();
+      assert(platformApplication.state === original && platformApplication.selectedKey === key, '牌面拖动改变了项目或选择');
+      assert(!platformQuery('#platform-station-insertion, #platform-alignment'), '已移除的牌面拖动控件仍存在');
+      assert(!platformQuery('#platform-paper').hasAttribute('data-station-reorder'), '牌面仍标为可拖动排序');
+    }
+
+    await test('本站吊板不能通过拖动移动元素，仍可精确输入和微调', () => {
+      const original = setupPlatform('station');
+      const key = 'station:title';
+      checkPlatformDrag(original, key, { x: 20, y: 90 });
+      const input = platformQuery('#element-offset-x');
+      input.value = '2.375';
+      input.dispatchEvent(new platform.Event('change', { bubbles: true }));
+      near(platformApplication.state.adjustments[key].x, 2.375, '输入位置有误');
+      platformQuery('[data-nudge-x="1"]').click();
+      near(platformApplication.state.adjustments[key].x, 3.375, '单步微调有误');
+    });
+
+    await test('全线吊板从牌面拖动站点不会写入站序或位置', () => {
+      const original = setupPlatform('route');
+      const key = 'route:' + original.stations[0].id;
+      checkPlatformDrag(original, key, { x: platformApplication.scene.output.width - 8 });
+    });
+
+    await test('单列和双列纵向线路图从牌面拖动站点或顶栏时不改变项目', () => {
+      for (const variant of ['right', 'double']) {
+        const original = setupPlatform('vertical', { verticalVariant: variant, verticalSwapped: variant === 'double' });
+        const key = 'vertical:right:' + original.stations[0].id;
+        checkPlatformDrag(original, key, { y: 10 });
+        checkPlatformDrag(original, 'vertical:title', { x: 60, y: 140 });
+      }
+    });
+  } catch (error) {
+    await test('打开编辑器', () => { throw error; });
+  } finally {
+    frame.remove();
+    stored.forEach(([key, value]) => value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value));
+    const failed = results.querySelectorAll('.fail').length;
+    document.getElementById('summary').textContent = results.children.length - failed + ' 项通过，' + failed + ' 项失败';
+    document.title = (failed ? '✖ ' : '✔ ') + '元素对齐测试';
+  }
+})();
+</script>
