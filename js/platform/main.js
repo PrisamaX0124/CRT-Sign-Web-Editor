@@ -4,7 +4,7 @@
   var KEY = 'public-platform-sign-project-v1', undo = [], redo = [], groupKey = null, groupTime = 0;
   var HISTORY_LIMIT = 20;
   var PRESET_KEY = 'public-platform-sign-presets-v1', presets = [], presetSignature = '', library = 'stations';
-  var saveTimer, noticeTimer, listSignature = '', transferSignature = '', layoutMode = '', busy = false;
+  var noticeTimer, listSignature = '', transferSignature = '', layoutMode = '', busy = false;
   var previousPanelSelection = '';
   var basePickers=[],transferPickers=[],paletteRevision=-1;
   var syncLinePattern;
@@ -14,9 +14,10 @@
     $('platform-notice').textContent = message; $('platform-notice').hidden = false;
     clearTimeout(noticeTimer); noticeTimer = setTimeout(function () { $('platform-notice').hidden = true; }, 4200);
   }
-  var initial;
-  try { var saved = localStorage.getItem(KEY); initial = saved ? S.deserialize(saved) : S.create(); }
-  catch (err) { initial = S.create(); notice('未能恢复本地项目：' + err.message); }
+  var restoredProject;
+  try { var saved = localStorage.getItem(KEY); if (saved) restoredProject = S.deserialize(saved); }
+  catch (err) { notice('未能恢复本地项目：' + err.message); }
+  var initial = restoredProject || S.create();
   try { presets = P.deserialize(localStorage.getItem(PRESET_KEY) || '[]'); }
   catch (err) { notice('未能恢复预设：' + err.message); }
   var App = global.App = {
@@ -30,13 +31,13 @@
       }
       groupKey = key || null; groupTime = now; redo = [];
       var previous = App.state; App.state = next;
-      if (!live()) App.selectedId = next.currentId;
+      if ((options && options.replaceProject) || !live()) App.selectedId = next.currentId;
       if (options && options.selectNew) {
         App.selectionKeys = next.stations.filter(function (s) { return !previous.stations.some(function (old) { return old.id === s.id; }); }).map(function (s) { return stationKey(s.id, next); });
         App.selectedKey = App.selectionKeys[App.selectionKeys.length - 1] || null; App.anchorKey = App.selectionKeys[0] || null;
       }
-      if (options && options.clearSelection) { App.selectionKeys = []; App.selectedKey = App.anchorKey = null; }
-      render(); scheduleSave();
+      if (options && (options.clearSelection || options.replaceProject)) { App.selectionKeys = []; App.selectedKey = App.anchorKey = App.hoverKey = null; }
+      render(); autosave.schedule();
     },
     select: function (id, modifiers) {
       if (!App.state.stations.some(function (s) { return s.id === id; })) return;
@@ -92,6 +93,22 @@
     },
     render: render,
   };
+  var autosave = global.SignStorage.createAutosave({
+    storageKey: KEY,
+    indicator: $('platform-save'),
+    serializeProject: serializeProject,
+    exportProject: exportProject,
+    delay: 500,
+    restored: Boolean(restoredProject),
+  });
+  var previewZoom = global.PreviewZoom.create({
+    viewport: $('platform-preview-scroll'),
+    stage: $('platform-preview-scroll').firstElementChild,
+    paper: $('platform-paper'),
+    graphic: $('platform-svg'),
+    controls: $('platform-zoom'),
+    onChange: paintInteraction,
+  });
   function live() { return App.state.stations.find(function (s) { return s.id === App.selectedId; }); }
   function snapshot() { return { state: App.state, selectedId: App.selectedId, selectedKey: App.selectedKey, selectionKeys: App.selectedKeys(), anchorKey: App.anchorKey }; }
   function findElement(key) { return App.scene && (App.scene.elements || []).find(function (item) { return item.key === key; }); }
@@ -110,17 +127,8 @@
     to.push(snapshot());
     if (to.length > HISTORY_LIMIT) to.shift();
     var old = from.pop(); App.state = Core.isPalette(old.state.city) ? old.state : S.settings(old.state,{city:'chongqing'}); App.selectedId = old.selectedId; App.selectedKey = old.selectedKey; App.selectionKeys = old.selectionKeys; App.anchorKey = old.anchorKey; groupKey = null;
-    render(); scheduleSave();
+    render(); autosave.schedule();
   }
-  function flushSave() {
-    clearTimeout(saveTimer);
-    try { localStorage.setItem(KEY, S.serialize(App.state)); $('save-status').textContent = '已自动保存到本机'; }
-    catch (err) { $('save-status').textContent = '自动保存失败，请保存项目 JSON'; }
-  }
-  function scheduleSave() { $('save-status').textContent = '保存中…'; clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 500); }
-  global.addEventListener('pagehide', flushSave);
-  global.addEventListener('beforeunload', flushSave);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) flushSave(); });
   function value(id, v) { if (document.activeElement !== $(id)) $(id).value = v; }
   function set(patch, key) { App.update(function (state) { return S.settings(state, patch); }, key); }
   function patchStation(patch, key) { App.update(function (state) { return S.patchStation(state, App.selectedId, patch); }, key); }
@@ -131,15 +139,8 @@
     var selected = findElement(App.selectedKey);
     var id = selected && selected.stationId || stationIdFromKey(App.selectedKey); if (id) App.selectedId = id;
     if (!S.validElementKey(App.anchorKey, App.state.stations)) App.anchorKey = App.selectedKey;
-    sync(); fitPreview();
-  }
-  function fitPreview() {
-    if (!App.scene) return;
-    var size = App.scene.output, box = $('platform-preview-scroll'), mode = $('preview-zoom').value;
-    var pad = 32;
-    var scale = mode === 'fit' ? Math.max(0.01, Math.min(App.state.mode === 'vertical' ? 1 : 3, (box.clientWidth - pad) / size.width, (box.clientHeight - pad) / size.height)) : Number(mode);
-    $('platform-svg').style.width = size.width * scale + 'px'; $('platform-svg').style.height = size.height * scale + 'px';
-    paintInteraction();
+    sync();
+    previewZoom.refresh(App.scene.output.width, App.scene.output.height);
   }
   function paintInteraction() {
     if (!App.scene) return;
@@ -160,8 +161,10 @@
     extra.forEach(function (key, i) { outline(layer.children[i], key); });
     var toolbar = $('platform-element-toolbar'), item = findElement(App.selectedKey);
     var anchor = $('element-selection-outline').getBoundingClientRect();
-    var viewport = $('platform-preview-scroll').getBoundingClientRect();
-    var visible = item && anchor.bottom >= viewport.top && anchor.top <= viewport.bottom && anchor.right >= viewport.left && anchor.left <= viewport.right;
+    var scroller = $('platform-preview-scroll');
+    var viewport = scroller.getBoundingClientRect();
+    var right = viewport.left + scroller.clientWidth, bottom = viewport.top + scroller.clientHeight;
+    var visible = item && anchor.bottom >= viewport.top && anchor.top <= bottom && anchor.right >= viewport.left && anchor.left <= right;
     global.EditorMotion.setToolbarVisible(toolbar, !!visible);
     if (!visible) return;
     $('toolbar-element-label').textContent = keys.length > 1 ? '已选 ' + keys.length + ' 个元素' : item.label;
@@ -170,10 +173,12 @@
     $('tool-current').disabled = !singleStation || stationIds[0] === App.state.currentId;
     $('tool-up').disabled = !singleStation || index <= 0; $('tool-down').disabled = !singleStation || index >= App.state.stations.length - 1; $('tool-delete').disabled = App.state.stations.length <= 1;
     var area = document.querySelector('.platform-preview').getBoundingClientRect();
-    var left = Math.max(8, Math.min(anchor.left - area.left, area.width - toolbar.offsetWidth - 8));
+    var left = Math.max(8, Math.min(anchor.left - area.left, right - area.left - toolbar.offsetWidth - 8));
     var top = anchor.bottom - area.top + 8;
-    if (top + toolbar.offsetHeight > viewport.bottom - area.top) top = anchor.top - area.top - toolbar.offsetHeight - 8;
-    global.EditorMotion.placeToolbar(toolbar, left, Math.max(viewport.top - area.top + 4, top), App.selectedKey);
+    var toolBottom = bottom - parseFloat(getComputedStyle(scroller).paddingBottom) - area.top;
+    if (top + toolbar.offsetHeight > toolBottom) top = anchor.top - area.top - toolbar.offsetHeight - 8;
+    top = Math.max(viewport.top - area.top + 4, Math.min(top, toolBottom - toolbar.offsetHeight));
+    global.EditorMotion.placeToolbar(toolbar, left, top, App.selectedKey);
   }
   function syncList() {
     var signature = App.state.stations.map(function (s) { return s.id; }).join('|');
@@ -451,8 +456,6 @@
   $('platform-svg').addEventListener('pointermove', function (event) { var target = event.target.closest('[data-element-key]'), key = target ? target.dataset.elementKey : null; if (key !== App.hoverKey) { App.hoverKey = key; paintInteraction(); } });
   $('platform-svg').addEventListener('pointerleave', function () { App.hoverKey = null; paintInteraction(); });
   $('platform-preview-scroll').addEventListener('scroll', paintInteraction);
-  $('preview-zoom').addEventListener('change', fitPreview);
-  new ResizeObserver(fitPreview).observe($('platform-preview-scroll'));
   $('undo').addEventListener('click', App.undo); $('redo').addEventListener('click', App.redo);
   document.addEventListener('keydown', function (event) {
     if (event.defaultPrevented || event.isComposing || document.querySelector('dialog[open]') || global.PlatformClipboard.editing(event.target)) return;
@@ -540,12 +543,22 @@
     } catch (err) { $('batch-error').textContent = err.message; }
   });
   function filename(ext, state) { return 'platform-' + state.mode + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.' + ext; }
-  $('save-project').addEventListener('click', function () { App.download(new Blob([S.serialize(App.state)], { type: 'application/json' }), filename('json', App.state)); notice('项目 JSON 已保存'); });
-  $('import-project').addEventListener('click', function () { $('project-file').click(); });
-  $('project-file').addEventListener('change', async function (event) {
-    var file = event.target.files[0]; event.target.value = ''; if (!file) return;
-    try { if (file.size > 2 * 1024 * 1024) throw new Error('项目 JSON 过大'); var state = S.deserialize(await file.text()); App.update(function () { return state; }); App.select(state.currentId); notice('项目已导入'); }
-    catch (err) { notice('导入失败：' + err.message); }
+  function serializeProject() { return S.serialize(App.state); }
+  function exportProject() {
+    global.SignStorage.exportProject(serializeProject, filename('json', App.state), notice, App.download);
+  }
+  var projectFile = $('project-file');
+  $('save-project').addEventListener('click', exportProject);
+  $('import-project').addEventListener('click', function () { projectFile.click(); });
+  global.SignStorage.bindProjectImport({
+    input: projectFile,
+    deserialize: async function (source) {
+      var project = S.deserialize(source);
+      await global.PlatformPatterns.validateImage(project.linePattern.image);
+      return project;
+    },
+    applyProject: function (project) { App.update(function () { return project; }, null, { replaceProject: true }); },
+    notice: notice,
   });
   function selectLibrary(name) {
     var changed = library !== name;

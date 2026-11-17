@@ -85,6 +85,17 @@ test('项目导入：校验外部数据、重复 id、尺寸、换乘；往返�
   assert.equal(result.stations[0].transfers.length, 1);
 });
 
+test('站台项目文件拒绝空值和数组站点，仍可读取缺少可选字段的旧项目', () => {
+  const oldProject = { kind: 'platform-sign', version: 1, stations: [{ zh: '旧站名' }] };
+  const restored = PlatformState.deserialize(JSON.stringify(oldProject));
+  assert.equal(restored.stations[0].zh, '旧站名');
+  assert.equal(restored.version, 3);
+  for (const invalidStation of [null, [], '站名']) {
+    const source = JSON.stringify({ ...oldProject, stations: [invalidStation] });
+    assert.throws(() => PlatformState.deserialize(source), /第 1 个站点/);
+  }
+});
+
 test('批量站点：支持编号与自定义换乘色，空白/非法记录明确报错', () => {
   const S = globalThis.PlatformState;
   assert.ok(S);

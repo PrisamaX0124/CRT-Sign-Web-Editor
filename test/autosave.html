@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>项目自动保存测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1280px; height: 850px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>项目自动保存测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  const editors = [
+    {
+      name: '导向标识', address: '../index.html', storageKey: 'public-sign-autosave',
+      indicator: 'guidance-save', delay: 500,
+      edit: (editor, value) => editor.App.update(project => editor.SignState.updateSignSettings(project, { frameWidth: value })),
+      serialize: editor => editor.SignState.serializeSign(editor.App.state),
+    },
+    {
+      name: '站台标识', address: '../platform.html', storageKey: 'public-platform-sign-project-v1',
+      indicator: 'platform-save', delay: 500,
+      edit: (editor, value) => editor.App.update(project => editor.PlatformState.settings(project, { lineName: '测试线路 ' + value })),
+      serialize: editor => editor.PlatformState.serialize(editor.App.state),
+    },
+    {
+      name: '换乘标识', address: '../index.html?editor=transfer', storageKey: 'public-transfer-sign-project-v1',
+      indicator: 'transfer-save', delay: 0,
+      edit: (editor, value) => editor.App.update(project => editor.TransferState.settings(project, { width: 768 + value })),
+      serialize: editor => editor.TransferState.serialize(editor.App.state),
+    },
+  ];
+  const keys = editors.map(editor => editor.storageKey).concat('public-sign-instance');
+  const stored = keys.map(key => [key, localStorage.getItem(key)]);
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  async function waitFor(check) {
+    const deadline = Date.now() + 10000;
+    while (!check()) {
+      assert(Date.now() < deadline, '等候编辑器更新超时');
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+  async function open(address) {
+    await new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = address;
+    });
+    const editor = frame.contentWindow;
+    if (address !== 'about:blank') {
+      await waitFor(() => editor.App?.measure && editor.App.state);
+      await editor.App.ready;
+    }
+    return editor;
+  }
+  async function test(name, run) {
+    const result = document.createElement('li');
+    try {
+      await run();
+      result.className = 'pass';
+      result.textContent = name;
+    } catch (error) {
+      result.className = 'fail';
+      result.textContent = name + '。' + error.message;
+    }
+    results.append(result);
+  }
+
+  try {
+    keys.forEach(key => localStorage.removeItem(key));
+    for (const settings of editors) {
+      let editor = await open(settings.address);
+      const status = () => editor.document.querySelector('#' + settings.indicator + ' [role="status"]');
+      const backup = () => editor.document.querySelector('#' + settings.indicator + ' button');
+      const saved = () => localStorage.getItem(settings.storageKey);
+      const current = () => settings.serialize(editor);
+      const edit = value => settings.edit(editor, value);
+      const checkControls = () => assert(status() && backup(), '页面缺少保存状态或备份按钮');
+
+      await test(settings.name + '连续修改后保存最后一版，保持原来的写入时机', async () => {
+        const initialStatus = status()?.textContent;
+        edit(11);
+        checkControls();
+        assert(initialStatus === '本地自动保存', '默认项目还没有写入');
+        if (settings.delay) {
+          assert(status().textContent === '保存中' && saved() === null, '应等编辑停下再写入');
+        } else {
+          assert(status().textContent === '已保存' && saved() === current(), '每次修改应立即写入');
+        }
+        edit(12);
+        edit(13);
+        await waitFor(() => status().textContent === '已保存');
+        assert(saved() === current(), '写入的不是最新内容');
+        assert(backup().hidden, '保存成功时不应显示备份按钮');
+      });
+
+      for (const [errorName, description, value] of [
+        ['QuotaExceededError', '空间不足', 21],
+        ['SecurityError', '浏览器拒绝写入', 31],
+      ]) {
+        await test(settings.name + '遇到' + description + '时持续提示失败，备份当前项目，恢复后保存最新内容', async () => {
+          const oldProject = saved();
+          const write = editor.Storage.prototype.setItem;
+          const createObjectUrl = editor.URL.createObjectURL;
+          const openDownload = editor.HTMLAnchorElement.prototype.click;
+          let file, filename;
+          let attempts = 0;
+          editor.Storage.prototype.setItem = function (key, content) {
+            if (key === settings.storageKey) {
+              attempts++;
+              throw new editor.DOMException(description, errorName);
+            }
+            return write.call(this, key, content);
+          };
+          editor.URL.createObjectURL = blob => {
+            file = blob;
+            return createObjectUrl.call(editor.URL, blob);
+          };
+          editor.HTMLAnchorElement.prototype.click = function () { filename = this.download; };
+          try {
+            edit(value);
+            await waitFor(() => attempts > 0);
+            assert(status()?.textContent === '保存失败', '写入失败后没有显示保存失败');
+            checkControls();
+            assert(saved() === oldProject, '失败的写入改动了上一次存档');
+            if (settings.name === '换乘标识') {
+              editor.document.getElementById('transfer-export-project').click();
+              assert(status().textContent === '保存失败', '导出提示盖住了保存失败状态');
+              file = filename = undefined;
+            }
+            edit(value + 1);
+            assert(!backup().hidden && backup().getClientRects().length, '失败后应能点到备份按钮');
+            try {
+              frame.style.width = '1100px';
+              await new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
+              const footer = backup().closest('.editor-footer');
+              const bounds = footer.getBoundingClientRect();
+              const entry = backup().getBoundingClientRect();
+              const shortcuts = footer.querySelector('.footer-shortcuts').getBoundingClientRect();
+              assert(footer.scrollWidth <= footer.clientWidth + 1 && entry.left >= bounds.left && entry.right <= bounds.right,
+                '窄窗口内的备份按钮应完整显示');
+              assert(entry.right <= shortcuts.left, '备份按钮与快捷键入口之间应留足空间');
+            } finally {
+              frame.style.width = '';
+            }
+            backup().click();
+            assert(filename?.endsWith('.json') && file?.type === 'application/json', '备份没有下载项目 JSON');
+            assert(await file.text() === current(), '备份没有包含最新修改');
+            await waitFor(() => status().textContent === '保存失败');
+          } finally {
+            editor.Storage.prototype.setItem = write;
+            editor.URL.createObjectURL = createObjectUrl;
+            editor.HTMLAnchorElement.prototype.click = openDownload;
+          }
+          edit(value + 2);
+          await waitFor(() => status().textContent === '已保存');
+          assert(saved() === current() && backup().hidden, '恢复后应保存最新修改并收起备份按钮');
+        });
+      }
+
+      if (settings.delay) {
+        await test(settings.name + '离开页面时立即保存，原定时器不会再写入', async () => {
+          checkControls();
+          const writes = [];
+          const write = editor.Storage.prototype.setItem;
+          editor.Storage.prototype.setItem = function (key, content) {
+            if (key === settings.storageKey) writes.push(content);
+            return write.call(this, key, content);
+          };
+          try {
+            edit(41);
+            edit(42);
+            editor.dispatchEvent(new editor.Event('pagehide'));
+            assert(status().textContent === '已保存' && saved() === current(), '离开时应立即保存最新内容');
+            await new Promise(resolve => setTimeout(resolve, settings.delay + 100));
+            assert(writes.length === 1 && writes[0] === current(), '先前安排的保存仍在写入');
+          } finally {
+            editor.Storage.prototype.setItem = write;
+          }
+        });
+      }
+
+      await test(settings.name + '重新打开后恢复最近一次存档并显示已保存', async () => {
+        const expected = current();
+        await open('about:blank');
+        localStorage.removeItem('public-sign-instance');
+        editor = await open(settings.address);
+        checkControls();
+        assert(current() === expected, '没有恢复最后一次存档');
+        assert(status().textContent === '已保存' && backup().hidden, '状态和存档不一致');
+      });
+    }
+  } catch (error) {
+    await test('打开测试页面', () => { throw error; });
+  } finally {
+    await open('about:blank');
+    for (const [key, value] of stored) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = (results.children.length - failed) + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = summary;
+    document.title = (failed ? '✖ ' : '✔ ') + summary + ' 项目自动保存测试';
+  }
+})();
+</script>
+</html>

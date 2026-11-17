@@ -110,6 +110,7 @@
     select.replaceChildren();
     var builtin=h('optgroup',{label:'预设线路配色'}),custom=h('optgroup',{label:'我的色板'});
     Core.paletteOptions().forEach(function(p){(p.custom?custom:builtin).appendChild(h('option',{value:p.id,text:p.name}));});
+    if (selected && !Core.isPalette(selected)) custom.appendChild(h('option', { value: selected, text: '原色板未安装' }));
     select.appendChild(builtin);if(custom.children.length)select.appendChild(custom);select.value=selected;
   }
   if(global.addEventListener)global.addEventListener('sign-palettes-change',function(){document.querySelectorAll('.color-picker').forEach(function(root){if(root.sync)root.sync();});});

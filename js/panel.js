@@ -681,20 +681,11 @@
 
     root.appendChild(h('div', { class: 'divider' }));
     root.appendChild(h('div', { class: 'section-title', text: '项目' }));
-    root.appendChild(h('button', { class: 'btn', text: '📤 导出项目（JSON）' })).addEventListener('click', function () {
-      SignStorage.exportProject(App.state);
+    root.appendChild(h('button', { class: 'btn', id: 'guidance-export-project', text: '导出项目 JSON' })).addEventListener('click', function () {
+      App.exportProject();
     });
-    root.appendChild(h('button', { class: 'btn', text: '📥 导入项目（JSON）' })).addEventListener('click', function () {
-      SignStorage.pickImportFile().then(function (file) {
-        if (!file) return;
-        SignStorage.importProject(file).then(function (sign) {
-          App.update(function () { return sign; });
-          App.select(null);
-          SignUI.toast('项目导入成功', 'success');
-        }, function (err) {
-          SignUI.toast(err.message, 'error');
-        });
-      });
+    root.appendChild(h('button', { class: 'btn', id: 'guidance-import-project', text: '导入项目 JSON' })).addEventListener('click', function () {
+      document.getElementById('guidance-project-file').click();
     });
 
     return root;

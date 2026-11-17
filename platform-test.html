@@ -579,6 +579,39 @@
       await choose(S.serialize(imported)); await waitFor(function () { return A.state.mode === 'vertical' && A.state.line === '5'; }); assert(A.state.color === '#00A3E0' && A.state.stations.length === 8);
       var before = S.serialize(A.state); await choose('{"kind":"wrong","stations":[]}'); await waitFor(function () { return $('platform-notice').textContent.includes('导入失败'); }); assert(S.serialize(A.state) === before);
     });
+    await test('站台项目使用相同的按钮和文件提示，导入后回到整牌设置，支持撤销和重做', async function () {
+      restore();
+      assert($('save-project').textContent === '导出项目 JSON' && $('import-project').textContent === '导入项目 JSON',
+        '项目按钮用语与其他编辑器不一致');
+      var initial = S.serialize(A.state);
+      var selected = A.selectedKeys().join('|');
+      var imported = S.serialize(S.settings(A.state, { mode: 'vertical', lineName: '导入后的线路' }));
+      function submit(name, source) {
+        var selection = new w.DataTransfer();
+        selection.items.add(new w.File([source], name, { type: 'application/json' }));
+        $('project-file').files = selection.files;
+        $('project-file').dispatchEvent(new w.Event('change', { bubbles: true }));
+      }
+      submit('站台项目.json', imported);
+      await waitFor(function () { return S.serialize(A.state) === imported; });
+      assert(!A.selectedKeys().length && !$('save-project').closest('section').hidden, '导入后应回到整牌设置');
+      var damagedPattern = JSON.parse(imported);
+      damagedPattern.linePattern = { source: 'custom', image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB' };
+      for (var [name, source, message] of [
+        ['站台项目.txt', imported, '请选择 JSON 文件'],
+        ['站台项目.json', '{', 'JSON 格式有误'],
+        ['站台项目.json', '{"kind":"platform-sign","version":3,"stations":[null]}', '第 1 个站点'],
+        ['站台项目.json', JSON.stringify(damagedPattern), '底纹图片无法读取'],
+      ]) {
+        submit(name, source);
+        await waitFor(function () { return $('platform-notice').textContent.includes(message); });
+        assert(S.serialize(A.state) === imported && !A.selectedKeys().length, '错误文件改动了当前项目或选中项');
+      }
+      A.undo();
+      assert(S.serialize(A.state) === initial && A.selectedKeys().join('|') === selected, '撤销未恢复导入前的项目和选中项');
+      A.redo();
+      assert(S.serialize(A.state) === imported && !A.selectedKeys().length, '重做未恢复导入结果');
+    });
     await test('窄窗口仍可纵向拖动和滚动站点，横向滚动后可使用导出按钮', async function () {
       restore();
       var oldWidth = frame.style.width, oldHeight = frame.style.height;

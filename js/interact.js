@@ -334,6 +334,8 @@
       return;
     }
     var area = canvasScroll.getBoundingClientRect();
+    var right = area.left + canvasScroll.clientWidth;
+    var bottom = area.top + canvasScroll.clientHeight - parseFloat(getComputedStyle(canvasScroll).paddingBottom);
     var centerPanel = document.getElementById('center-panel');
     var center = centerPanel.getBoundingClientRect();
     var rects = selected.map(function (node) { return node.getBoundingClientRect(); });
@@ -341,14 +343,14 @@
       right: Math.max.apply(null, rects.map(function (r) { return r.right; })),
       top: Math.min.apply(null, rects.map(function (r) { return r.top; })),
       bottom: Math.max.apply(null, rects.map(function (r) { return r.bottom; })) };
-    elementToolbar.style.maxWidth = Math.max(80, area.width - 16) + 'px';
+    elementToolbar.style.maxWidth = Math.max(80, canvasScroll.clientWidth - 16) + 'px';
     var size = { width: elementToolbar.offsetWidth, height: elementToolbar.offsetHeight };
     // 工具栏换行后可能盖住加行按钮。
     centerPanel.style.setProperty('--element-toolbar-gap', Math.ceil(size.height + 12) + 'px');
-    var left = Core.clamp((el.left + el.right - size.width) / 2, area.left + 8, area.right - size.width - 8);
+    var left = Core.clamp((el.left + el.right - size.width) / 2, area.left + 8, right - size.width - 8);
     var top = el.bottom + 8;
-    if (top + size.height > area.bottom - 8) top = el.top - size.height - 8;
-    top = Core.clamp(top, area.top + 8, Math.max(area.top + 8, area.bottom - size.height - 8));
+    if (top + size.height > bottom - 8) top = el.top - size.height - 8;
+    top = Core.clamp(top, area.top + 8, Math.max(area.top + 8, bottom - size.height - 8));
     global.EditorMotion.placeToolbar(elementToolbar, Math.round(left - center.left), Math.round(top - center.top), App.selection.elementId);
   }
 

@@ -5,9 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 导向标识</title>
-  <link rel="stylesheet" href="style.css?v=eed32fb46d81">
-  <link rel="stylesheet" href="platform.css?v=2c460a9842b1">
-  <link rel="stylesheet" href="transfer.css?v=e8bfd1a0d050">
+  <link rel="stylesheet" href="style.css?v=b6c8167f91cd">
+  <link rel="stylesheet" href="platform.css?v=652d04fe3cb3">
+  <link rel="stylesheet" href="transfer.css?v=67436dc29216">
 </head>
 <body class="editor-page">
 
@@ -20,9 +20,24 @@
   <header class="editor-header">
     <div class="editor-header-content">
       <nav class="editor-navigation" aria-label="切换编辑器">
-        <a href="index.html" aria-current="page">导向标识</a>
-        <a href="index.html?editor=transfer">换乘标识</a>
-        <a href="platform.html">站台标识</a>
+        <button type="button" class="editor-switch" aria-expanded="false" aria-controls="editor-choices">
+          <span>导向标识编辑器</span>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="editor-choices" id="editor-choices" hidden>
+          <a href="index.html" aria-current="page">
+            <span>导向标识</span>
+            <img src="assets/editor-previews/guidance.png?v=5ad1811fd030" width="384" height="152" alt="">
+          </a>
+          <a href="index.html?editor=transfer">
+            <span>换乘标识</span>
+            <img src="assets/editor-previews/transfer.png?v=fb719a33cf0f" width="384" height="152" alt="">
+          </a>
+          <a href="platform.html">
+            <span>站台标识</span>
+            <img src="assets/editor-previews/platform.png" width="384" height="152" alt="">
+          </a>
+        </div>
       </nav>
       <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="有帮助？求 Star！（前往仓库，在新标签页打开）">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
@@ -51,8 +66,31 @@
 
     <!-- ══ 中栏：SVG 编辑区 ══ -->
     <main id="center-panel" class="editor-center">
-      <div id="canvas-scroll">
-        <div id="canvas-area">
+      <div class="preview-toolbar">
+        <div class="preview-heading">
+          <strong>导向标识</strong>
+          <span id="guidance-preview-dimensions" class="preview-dimensions"></span>
+        </div>
+        <div class="preview-toolbar-actions">
+          <div id="edit-actions" class="clipboard-tools" role="toolbar" aria-label="选择与剪贴板">
+            <button type="button" data-edit-action="select-all" data-control-icon="select-all" aria-label="全选元素" aria-keyshortcuts="Control+A Meta+A">
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>A</kbd><span>全选</span></span>
+            </button>
+            <button type="button" data-edit-action="copy" data-control-icon="copy" aria-label="复制选中元素" aria-keyshortcuts="Control+C Meta+C" disabled>
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>C</kbd><span>复制</span></span>
+            </button>
+            <button type="button" data-edit-action="cut" data-control-icon="cut" aria-label="剪切选中元素" aria-keyshortcuts="Control+X Meta+X" disabled>
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>X</kbd><span>剪切</span></span>
+            </button>
+            <button type="button" data-edit-action="paste" data-control-icon="paste" aria-label="粘贴元素" aria-keyshortcuts="Control+V Meta+V">
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>V</kbd><span>粘贴</span></span>
+            </button>
+          </div>
+          <div class="preview-zoom" id="guidance-zoom" role="group" aria-label="画布位置和缩放"></div>
+        </div>
+      </div>
+      <div id="canvas-scroll" class="preview-zoom-viewport">
+        <div id="canvas-area" class="preview-zoom-stage">
           <div id="canvas-wrap">
             <svg id="sign-svg" xmlns="http://www.w3.org/2000/svg"></svg>
             <div id="sign-overlay">
@@ -66,27 +104,23 @@
 
       <div id="element-toolbar" class="floating-toolbar" role="toolbar" aria-label="元素快捷操作" hidden inert></div>
       <footer class="editor-footer">
-        <div id="edit-actions" class="clipboard-tools" role="toolbar" aria-label="选择与剪贴板">
-          <button type="button" data-edit-action="select-all" data-control-icon="select-all" aria-label="全选元素" aria-keyshortcuts="Control+A Meta+A">
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>A</kbd><span>全选</span></span>
-          </button>
-          <button type="button" data-edit-action="copy" data-control-icon="copy" aria-label="复制选中元素" aria-keyshortcuts="Control+C Meta+C" disabled>
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>C</kbd><span>复制</span></span>
-          </button>
-          <button type="button" data-edit-action="cut" data-control-icon="cut" aria-label="剪切选中元素" aria-keyshortcuts="Control+X Meta+X" disabled>
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>X</kbd><span>剪切</span></span>
-          </button>
-          <button type="button" data-edit-action="paste" data-control-icon="paste" aria-label="粘贴元素" aria-keyshortcuts="Control+V Meta+V">
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>V</kbd><span>粘贴</span></span>
-          </button>
-        </div>
-        <div class="editor-footer-guidance">
-          <div class="shortcut-hints" aria-label="选择快捷键">
-            <span class="shortcut-hint"><kbd>Ctrl / ⌘</kbd><span class="shortcut-description">单击加选</span></span>
-            <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">单击范围选择</span></span>
-            <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
+        <div class="editor-footer-status">
+          <div class="project-save" id="guidance-save">
+            <span role="status">本地自动保存</span>
+            <button type="button" hidden>备份项目 JSON</button>
           </div>
           <span id="selection-status" class="selection-status" role="status"></span>
+        </div>
+        <div class="editor-footer-controls">
+          <details class="footer-shortcuts">
+            <summary>快捷键</summary>
+            <div class="shortcut-hints" aria-label="选择快捷键">
+              <span class="shortcut-hint"><kbd>Ctrl / ⌘</kbd><span class="shortcut-description">单击加选</span></span>
+              <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">单击范围选择</span></span>
+              <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
+              <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">滚轮缩放</span></span>
+            </div>
+          </details>
         </div>
       </footer>
     </main>
@@ -104,6 +138,7 @@
       <div class="panel-body" id="right-panel-body">
         <!-- panel.js 填充：标识牌设置 / 元素属性 / 预设预览 -->
       </div>
+      <input type="file" id="guidance-project-file" accept=".json,application/json" hidden>
     </aside>
 
   </div>
@@ -124,18 +159,23 @@
     </aside>
     <main class="platform-preview editor-center" id="transfer-preview" aria-label="换乘标识预览">
       <div class="preview-toolbar">
-        <div class="transfer-preview-heading">
+        <div class="preview-heading">
           <strong id="transfer-preview-title"></strong>
-          <span id="transfer-dimensions"></span>
+          <span id="transfer-dimensions" class="preview-dimensions"></span>
         </div>
-        <div class="history-actions">
-          <button type="button" id="transfer-undo" class="icon-btn" title="撤销" aria-label="撤销">↶</button>
-          <button type="button" id="transfer-redo" class="icon-btn" title="重做" aria-label="重做">↷</button>
+        <div class="preview-toolbar-actions">
+          <div class="preview-zoom" id="transfer-zoom" role="group" aria-label="画布位置和缩放"></div>
+          <div class="history-actions">
+            <button type="button" id="transfer-undo" class="icon-btn" title="撤销" aria-label="撤销">↶</button>
+            <button type="button" id="transfer-redo" class="icon-btn" title="重做" aria-label="重做">↷</button>
+          </div>
         </div>
       </div>
-      <div class="transfer-preview-scroll" id="transfer-preview-scroll">
-        <div class="transfer-paper">
-          <svg id="transfer-sign" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="换乘标识牌上的元素"></svg>
+      <div class="transfer-preview-scroll preview-zoom-viewport" id="transfer-preview-scroll">
+        <div class="preview-zoom-stage">
+          <div class="transfer-paper">
+            <svg id="transfer-sign" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="换乘标识牌上的元素"></svg>
+          </div>
         </div>
       </div>
       <div id="transfer-element-toolbar" class="floating-toolbar" role="toolbar" aria-label="元素快捷操作" hidden inert>
@@ -148,11 +188,21 @@
         <div id="transfer-tool-arrow-position" hidden></div>
       </div>
       <footer class="editor-footer">
-        <div class="editor-footer-guidance">
-          <span id="transfer-status" role="status">本地自动保存</span>
-          <div class="shortcut-hints" aria-label="选择快捷键">
-            <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
+        <div class="editor-footer-status">
+          <div class="project-save" id="transfer-save">
+            <span role="status">本地自动保存</span>
+            <button type="button" hidden>备份项目 JSON</button>
           </div>
+          <span id="transfer-status" class="selection-status" role="status"></span>
+        </div>
+        <div class="editor-footer-controls">
+          <details class="footer-shortcuts">
+            <summary>快捷键</summary>
+            <div class="shortcut-hints" aria-label="选择快捷键">
+              <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
+              <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">滚轮缩放</span></span>
+            </div>
+          </details>
         </div>
       </footer>
     </main>
@@ -223,12 +273,15 @@
       <div class="transfer-export">
         <button type="button" class="btn btn-primary" id="transfer-export-image">导出 PNG</button>
         <button type="button" class="btn" id="transfer-export-vector">导出 SVG</button>
+        <button type="button" class="btn" id="transfer-export-project">导出项目 JSON</button>
+        <button type="button" class="btn" id="transfer-import-project">导入项目 JSON</button>
+        <input type="file" id="transfer-project-file" accept=".json,application/json" hidden>
       </div>
     </aside>
   </div>
 
   <!-- 通知与对话框 -->
-  <div id="toasts"></div>
+  <div id="toasts" aria-live="polite"></div>
   <div id="modal-root"></div>
 
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
@@ -236,17 +289,18 @@
   <script src="js/palette-manager.js?v=public-939b5399500f"></script>
   <script src="js/icons.js?v=public-8e9eb9f48086"></script>
   <script src="js/directions.js?v=ef2c097f48e6"></script>
-  <script src="js/state.js?v=public-54054425a188"></script>
+  <script src="js/state.js?v=2d8389f2f4f0"></script>
   <script src="js/render.js?v=public-a2367ad9e85e"></script>
   <script src="js/editor-motion.js?v=ca1eb0979930"></script>
-  <script src="js/ui.js?v=public-84ac1cb95055"></script>
+  <script src="js/preview-zoom.js?v=714942225aa8"></script>
+  <script src="js/ui.js?v=bc8266bdcc51"></script>
   <script src="js/clipboard.js?v=public-1c7f4d30022d"></script>
   <script src="js/presets.js?v=public-a3e36419f654"></script>
-  <script src="js/storage.js?v=public-85ae228675bd"></script>
+  <script src="js/storage.js?v=5156bc2ae677"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
-  <script src="js/panel.js?v=eeb623f9f24c"></script>
-  <script src="js/interact.js?v=6fa383399ada"></script>
+  <script src="js/panel.js?v=3a2f42cce30c"></script>
+  <script src="js/interact.js?v=fcc37b7902dc"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = 'CRT标识编辑器 - 换乘标识';
@@ -258,11 +312,12 @@
       document.querySelector('.editor-navigation a[href="index.html?editor=transfer"]').setAttribute('aria-current', 'page');
     }
   </script>
-  <script src="js/main.js?v=9158f42c0c7a"></script>
+  <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
+  <script src="js/main.js?v=e412c4bd5878"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
-  <script src="js/platform/patterns.js?v=3b04442c85b2"></script>
-  <script src="js/transfer/state.js?v=23ea64b52f07"></script>
+  <script src="js/platform/patterns.js?v=921404baed81"></script>
+  <script src="js/transfer/state.js?v=6892c96cc48e"></script>
   <script src="js/transfer/render.js?v=2e7d9e52f7ae"></script>
-  <script src="js/transfer/main.js?v=fa11502975e4"></script>
+  <script src="js/transfer/main.js?v=d97ce518b040"></script>
 </body>
 </html>

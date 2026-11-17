@@ -11,7 +11,7 @@ function harness() {
   c.App.state = c.SignState.createSign();
   c.App.renderAll = () => {};
   const saved = [];
-  c.SignStorage = { scheduleAutosave: state => saved.push(state) };
+  c.App.autosave = { schedule: () => saved.push(c.App.state) };
   return { ...c, saved };
 }
 

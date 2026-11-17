@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>预览缩放测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1280px; height: 860px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>预览缩放测试</h1>
+<p id="summary">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  const editors = [
+    {
+      name: '导向标识', address: '../index.html', viewport: '#canvas-scroll', graphic: '#sign-svg',
+      project: 'public-sign-autosave',
+      prepare(editor) {
+        const state = editor.SignState;
+        editor.App.update(() => {
+          let sign = state.updateSignSettings(state.createSign(), { width: 768 });
+          sign = state.addElement(sign, sign.rows[0].id, state.createElement('exit'));
+          sign = state.addElement(sign, sign.rows[0].id, state.createElement('arrow'));
+          return state.addRow(state.addRow(state.addRow(sign)));
+        });
+      },
+      dimensions: editor => editor.App.layout,
+      serialize: editor => editor.SignState.serializeSign(editor.App.state),
+      exportButtons: document => [...document.querySelectorAll('#right-panel-body button')].filter(button => /导出 (SVG|PNG)/.test(button.textContent)),
+      downloadFrom: editor => editor.SignStorage,
+    },
+    {
+      name: '换乘标识', address: '../index.html?editor=transfer', viewport: '#transfer-preview-scroll', graphic: '#transfer-sign',
+      project: 'public-transfer-sign-project-v1',
+      prepare: editor => editor.App.update(() => editor.TransferState.settings(editor.TransferState.create(), { width: 696 })),
+      dimensions: editor => {
+        const graphic = editor.document.querySelector('#transfer-sign');
+        return { width: Number(graphic.getAttribute('width')), height: Number(graphic.getAttribute('height')) };
+      },
+      serialize: editor => editor.TransferState.serialize(editor.App.state),
+      exportButtons: document => document.querySelectorAll('#transfer-export-vector, #transfer-export-image'),
+      downloadFrom: editor => editor.SignStorage,
+    },
+    {
+      name: '站台标识', address: '../platform.html', viewport: '#platform-preview-scroll', graphic: '#platform-svg',
+      project: 'public-platform-sign-project-v1',
+      prepare(editor) {
+        const state = editor.PlatformState;
+        editor.App.update(() => {
+          const project = state.create();
+          return state.settings(state.addStation(state.addStation(project)), { mode: 'vertical', verticalVariant: 'double' });
+        });
+      },
+      dimensions: editor => editor.App.scene.output,
+      serialize: editor => editor.PlatformState.serialize(editor.App.state),
+      exportButtons: document => document.querySelectorAll('#export-svg, #export-png'),
+      downloadFrom: editor => editor.App,
+    },
+  ];
+  const keys = editors.map(settings => settings.project).concat('public-sign-instance');
+  const stored = keys.map(key => [key, localStorage.getItem(key)]);
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  function near(actual, expected, message, tolerance = 1.25) {
+    assert(Math.abs(actual - expected) < tolerance, message + '（' + actual + '，预期 ' + expected + '）');
+  }
+  async function waitFor(check) {
+    const deadline = Date.now() + 10000;
+    while (!check()) {
+      assert(Date.now() < deadline, '等候编辑器超时');
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+  }
+  async function open(address) {
+    await new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = address;
+    });
+    const editor = frame.contentWindow;
+    if (address !== 'about:blank') {
+      await waitFor(() => editor.App?.state && editor.App.measure);
+      await editor.App.ready;
+      await editor.document.fonts.ready;
+    }
+    return editor;
+  }
+  async function test(name, run) {
+    const result = document.createElement('li');
+    try {
+      await run();
+      result.className = 'pass';
+      result.textContent = name;
+    } catch (error) {
+      result.className = 'fail';
+      result.textContent = name + '。' + error.message;
+    }
+    results.append(result);
+  }
+  try {
+    keys.forEach(key => localStorage.removeItem(key));
+    for (const settings of editors) {
+      const editor = await open(settings.address);
+      const document = editor.document;
+      const viewport = document.querySelector(settings.viewport);
+      const graphic = document.querySelector(settings.graphic);
+      const controls = viewport.closest('main').querySelector('.preview-zoom');
+      const zoomMenu = controls?.querySelector('select');
+      const shown = () => Number(zoomMenu.selectedOptions[0].text.match(/(\d+)%/)[1]);
+      const scale = () => graphic.getBoundingClientRect().width / settings.dimensions(editor).width;
+      const fit = () => zoomMenu.value === 'fit';
+      const checkControls = () => assert(zoomMenu && controls.getClientRects().length, '未找到预览缩放菜单');
+      function chooseZoom(value) {
+        zoomMenu.value = value;
+        zoomMenu.dispatchEvent(new editor.Event('change', { bubbles: true }));
+      }
+      function center() {
+        const bounds = viewport.getBoundingClientRect();
+        return { clientX: bounds.left + viewport.clientWidth / 2, clientY: bounds.top + viewport.clientHeight / 2 };
+      }
+      function wheel(target, options) {
+        const event = new editor.WheelEvent('wheel', { bubbles: true, cancelable: true, ...center(), ...options });
+        target.dispatchEvent(event);
+        return event.defaultPrevented;
+      }
+      function frameReady() {
+        return new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
+      }
+      function reveal(target) {
+        const bounds = target.getBoundingClientRect();
+        const pointer = center();
+        viewport.scrollLeft += bounds.left + bounds.width / 2 - pointer.clientX;
+        viewport.scrollTop += bounds.top + bounds.height / 2 - pointer.clientY;
+      }
+      function hitPoint(target, selector) {
+        const bounds = target.getBoundingClientRect();
+        const area = viewport.getBoundingClientRect();
+        const left = Math.max(bounds.left, area.left + 2);
+        const right = Math.min(bounds.right, area.left + viewport.clientWidth - 2);
+        const top = Math.max(bounds.top, area.top + 2);
+        const bottom = Math.min(bounds.bottom, area.top + viewport.clientHeight - 2);
+        assert(left < right && top < bottom, '目标没有进入预览区');
+        for (const horizontal of [0.5, 0.3, 0.7]) for (const vertical of [0.5, 0.25, 0.75]) {
+          const x = left + (right - left) * horizontal;
+          const y = top + (bottom - top) * vertical;
+          const node = document.elementFromPoint(x, y);
+          if (node?.closest(selector) === target.closest(selector)) return { node, clientX: x, clientY: y };
+        }
+        throw new Error('鼠标无法命中排版对应的元素');
+      }
+      function clickPoint(point, extra = {}) {
+        point.node.dispatchEvent(new editor.MouseEvent('click', { bubbles: true, ...point, ...extra }));
+      }
+      function checkToolbar(toolbar) {
+        const bounds = toolbar.getBoundingClientRect();
+        const area = viewport.getBoundingClientRect();
+        assert(!toolbar.hidden && bounds.width > 0 && bounds.left >= area.left - 1 && bounds.right <= area.right + 1 &&
+          bounds.top >= area.top - 1 && bounds.bottom <= area.bottom + 1, '浮动工具栏超出预览区');
+        assert(bounds.top >= controls.getBoundingClientRect().bottom - 1, '浮动工具栏挡住了标题栏');
+        return bounds.width;
+      }
+      settings.prepare(editor);
+
+      await test(settings.name + '首次打开独立适应画布，下拉菜单中的固定档位对应准确尺寸', () => {
+        checkControls();
+        assert(fit(), '打开页面时未启用适应画布');
+        const area = viewport.getBoundingClientRect();
+        const sign = graphic.getBoundingClientRect();
+        assert(sign.left >= area.left && sign.top >= area.top && sign.right <= area.right && sign.bottom <= area.bottom, '适应后没有完整显示');
+        const choices = [...zoomMenu.options].filter(option => !option.disabled).map(option => option.value).join(',');
+        assert(choices === 'fit,25,50,75,100,125,150,200,300,400', '缩放菜单应列出固定档位和适应画布');
+        chooseZoom(100);
+        assert(!fit() && shown() === 100, '实际尺寸没有同步比例');
+        near(graphic.getBoundingClientRect().width, settings.dimensions(editor).width, '实际尺寸下宽度错误');
+        near(graphic.getBoundingClientRect().height, settings.dimensions(editor).height, '实际尺寸下高度错误');
+        chooseZoom(75);
+        assert(shown() === 75, '固定档位没有同步显示');
+        near(scale(), 0.75, '下拉菜单没有更新实际尺寸', 0.002);
+      });
+
+      await test(settings.name + 'Shift 滚轮按鼠标位置缩放，普通滚轮和预览区外不被拦截', () => {
+        checkControls();
+        chooseZoom(150);
+        viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
+        viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) / 2;
+        const pointer = center();
+        const before = graphic.getBoundingClientRect();
+        const horizontal = (pointer.clientX - before.left) / before.width;
+        const vertical = (pointer.clientY - before.top) / before.height;
+        assert(wheel(viewport, { shiftKey: true, deltaY: -75 }), '未处理 Shift 滚轮');
+        const after = graphic.getBoundingClientRect();
+        near(after.left + after.width * horizontal, pointer.clientX, '横向锚点偏移');
+        near(after.top + after.height * vertical, pointer.clientY, '纵向锚点偏移');
+        assert(shown() > 150 && zoomMenu.selectedOptions[0].disabled, '滚轮应显示实际比例，保持固定档位不变');
+        const enlarged = scale();
+        assert(wheel(viewport, { shiftKey: true, deltaX: 3, deltaMode: 1 }) && scale() < enlarged, '只提供横向滚动量时不能缩小');
+        const current = scale();
+        assert(!wheel(viewport, { deltaY: 80 }) && !wheel(controls, { deltaY: -80, shiftKey: true }) && scale() === current,
+          '普通滚轮或预览区外的滚轮改变了缩放');
+      });
+
+      await test(settings.name + '缩放停在 25% 和 400%，放大后能向两边滚动', () => {
+        checkControls();
+        for (let count = 0; count < 20; count++) wheel(viewport, { shiftKey: true, deltaY: 120 });
+        assert(shown() === 25 && zoomMenu.value === '25', '缩小超过 25%');
+        near(scale(), 0.25, '最小比例与实际尺寸不同', 0.002);
+        for (let count = 0; count < 20; count++) wheel(viewport, { shiftKey: true, deltaY: -120 });
+        assert(shown() === 400 && zoomMenu.value === '400', '放大超过 400%');
+        near(scale(), 4, '最大比例与实际尺寸不同', 0.002);
+        viewport.scrollLeft = viewport.scrollWidth;
+        viewport.scrollTop = viewport.scrollHeight;
+        assert(viewport.scrollLeft > 0 && viewport.scrollTop > 0, '放大后无法查看右侧或底部');
+        const sign = graphic.getBoundingClientRect();
+        const area = viewport.getBoundingClientRect();
+        assert(sign.right <= area.right + 1 && sign.bottom <= area.bottom + 1, '滚动无法到达牌面边缘');
+      });
+
+      await test(settings.name + '窗口变化时重新适应，手动比例继续保留', async () => {
+        checkControls();
+        chooseZoom('fit');
+        const full = scale();
+        try {
+          frame.style.width = '1120px';
+          frame.style.height = '620px';
+          await frameReady();
+          assert(fit() && scale() < full, '缩小窗口后适应比例没有更新');
+          chooseZoom(125);
+          frame.style.width = '1280px';
+          frame.style.height = '860px';
+          await frameReady();
+          near(scale(), 1.25, '窗口变化覆盖了手动比例', 0.002);
+        } finally {
+          frame.style.width = '1280px';
+          frame.style.height = '860px';
+          chooseZoom('fit');
+          await frameReady();
+        }
+      });
+
+      await test(settings.name + '使用同一个锁图标，开锁可拖动，闭锁固定位置和比例', () => {
+        checkControls();
+        const lock = controls.querySelector('button');
+        const icon = lock?.querySelector('svg');
+        const body = icon?.querySelector('rect');
+        const shackle = icon?.querySelector('path');
+        assert(body && shackle && lock.getAttribute('aria-pressed') === 'false', '默认应显示一把打开的锁');
+        const bodyTop = body.y.baseVal.value;
+        function shackleEnd() { return shackle.getPointAtLength(shackle.getTotalLength()).y; }
+        assert(shackleEnd() < bodyTop && lock.title.startsWith('已解锁'), '开锁时应看得到锁扣缺口和解锁提示');
+        chooseZoom(200);
+        viewport.scrollLeft = 150;
+        viewport.scrollTop = 160;
+        const capture = viewport.setPointerCapture;
+        viewport.setPointerCapture = () => {};
+        function drag(button, target = graphic) {
+          const start = center();
+          for (const [type, node, horizontal, vertical] of [
+            ['pointerdown', target, 0, 0], ['pointermove', viewport, -40, -35], ['pointerup', viewport, -40, -35],
+          ]) {
+            node.dispatchEvent(new editor.PointerEvent(type, {
+              bubbles: true, cancelable: true, pointerId: 99, pointerType: 'mouse', isPrimary: true,
+              button, clientX: start.clientX + horizontal, clientY: start.clientY + vertical,
+            }));
+          }
+        }
+        try {
+          const project = settings.serialize(editor);
+          drag(0);
+          near(viewport.scrollLeft, 190, '左键拖动未平移画布');
+          near(viewport.scrollTop, 195, '左键拖动未平移画布');
+          const before = graphic.getBoundingClientRect();
+          const currentScale = shown();
+          lock.click();
+          assert(lock.querySelector('svg') === icon && icon.querySelector('rect') === body && icon.querySelector('path') === shackle &&
+            shackleEnd() === bodyTop && lock.getAttribute('aria-pressed') === 'true' && zoomMenu.disabled && lock.title.startsWith('已锁定'),
+            '锁定时应合上原来的锁扣并暂停缩放');
+          drag(0);
+          drag(1);
+          wheel(viewport, { shiftKey: true, deltaY: -100 });
+          near(graphic.getBoundingClientRect().left, before.left, '锁定后画布水平位置改变');
+          near(graphic.getBoundingClientRect().top, before.top, '锁定后画布垂直位置改变');
+          assert(shown() === currentScale, '锁定后比例改变');
+          lock.click();
+          assert(!zoomMenu.disabled && shackleEnd() < bodyTop && lock.getAttribute('aria-pressed') === 'false', '解锁后应打开原来的锁并恢复缩放');
+          drag(1);
+          near(viewport.scrollLeft, 230, '解锁后中键不能平移');
+          assert(settings.serialize(editor) === project, '平移或锁定改动了项目内容');
+        } finally {
+          viewport.setPointerCapture = capture;
+          if (lock.getAttribute('aria-pressed') === 'true') lock.click();
+          chooseZoom('fit');
+        }
+      });
+
+      await test(settings.name + '缩放前后项目、撤销按钮、自动保存和两种导出文件一致', async () => {
+        checkControls();
+        const before = settings.serialize(editor);
+        const history = [...document.querySelectorAll('#undo-btn, #redo-btn, #transfer-undo, #transfer-redo, #undo, #redo')].map(button => button.disabled);
+        const downloader = settings.downloadFrom(editor);
+        const download = downloader.download;
+        const downloads = [];
+        const write = editor.Storage.prototype.setItem;
+        let writes = 0;
+        downloader.download = blob => downloads.push(blob);
+        async function exportBoth() {
+          const buttons = settings.exportButtons(document);
+          assert(buttons.length === 2, '找不到图片导出按钮');
+          for (const button of buttons) {
+            const count = downloads.length;
+            button.click();
+            await waitFor(() => downloads.length > count && !button.disabled);
+          }
+          return downloads.splice(0);
+        }
+        async function pixels(file) {
+          const image = await editor.createImageBitmap(file);
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.width;
+            canvas.height = image.height;
+            const context = canvas.getContext('2d');
+            context.drawImage(image, 0, 0);
+            return context.getImageData(0, 0, canvas.width, canvas.height);
+          } finally {
+            image.close();
+          }
+        }
+        try {
+          const original = await exportBoth();
+          editor.Storage.prototype.setItem = function (key, value) {
+            if (key === settings.project) writes++;
+            return write.call(this, key, value);
+          };
+          chooseZoom(300);
+          const enlarged = await exportBoth();
+          const svg = original.findIndex(file => file.type.includes('svg'));
+          const png = original.findIndex(file => file.type.includes('png'));
+          assert(await original[svg].text() === await enlarged[svg].text(), 'SVG 源文件随预览比例改变');
+          const first = await pixels(original[png]);
+          const second = await pixels(enlarged[png]);
+          assert(first.width === second.width && first.height === second.height &&
+            first.data.every((value, position) => value === second.data[position]), 'PNG 尺寸或像素随预览比例改变');
+          await new Promise(resolve => setTimeout(resolve, 600));
+          assert(before === settings.serialize(editor) && writes === 0, '缩放改动或写入了项目');
+          assert(history.every((disabled, index) => disabled === document.querySelectorAll('#undo-btn, #redo-btn, #transfer-undo, #transfer-redo, #undo, #redo')[index].disabled),
+            '缩放改动了撤销记录');
+        } finally {
+          editor.Storage.prototype.setItem = write;
+          downloader.download = download;
+        }
+      });
+
+      if (settings.name === '导向标识') {
+        await test('导向标识放大和缩小后可以多选并拖到另一行，覆盖层仍与牌面对齐', async () => {
+          const app = editor.App;
+          const state = editor.SignState;
+          const items = app.state.rows[0].elements.map(item => item.id);
+          const target = identifier => graphic.querySelector('[data-element-id="' + identifier + '"]');
+          const selector = 'g.element';
+          for (const percent of [50, 200]) {
+            chooseZoom(percent);
+            viewport.scrollLeft = viewport.scrollTop = 0;
+            const first = hitPoint(target(items[0]).querySelector('.hitbox'), selector);
+            clickPoint(first);
+            clickPoint(hitPoint(target(items[1]).querySelector('.hitbox'), selector), { ctrlKey: true });
+            assert(items.every(identifier => app.selectedIds().includes(identifier)), '画布多选遗漏了元素');
+            checkToolbar(document.getElementById('element-toolbar'));
+            const source = hitPoint(target(items[0]).querySelector('.hitbox'), selector);
+            const bounds = graphic.getBoundingClientRect();
+            const destination = { clientX: source.clientX, clientY: bounds.top + app.state.rowHeight * percent / 100 * 1.25 };
+            function pointer(type, node, point) {
+              node.dispatchEvent(new editor.PointerEvent(type, {
+                bubbles: true, cancelable: true, pointerId: 91, pointerType: 'mouse', isPrimary: true,
+                button: 0, ...point,
+              }));
+            }
+            pointer('pointerdown', source.node, source);
+            pointer('pointermove', document, destination);
+            const overlay = document.getElementById('sign-overlay').getBoundingClientRect();
+            near(overlay.width, bounds.width, '覆盖层宽度偏移');
+            near(overlay.height, bounds.height, '覆盖层高度偏移');
+            assert(document.querySelector('.row-band.drop-ok')?.dataset.rowIndex === '1', '拖放指示没有指向第二行');
+            pointer('pointerup', document, destination);
+            assert(items.every(identifier => state.findElement(app.state, identifier).rowIndex === 1), '多选拖动使用了错误的行坐标');
+            app.undo();
+            app.select(null);
+            await frameReady();
+          }
+        });
+      } else if (settings.name === '换乘标识') {
+        await test('换乘标识的箭头在两种比例下均可选中和转向，工具栏尺寸不随牌面放大', async () => {
+          const selector = '[data-transfer-element="arrow:upper"]';
+          const toolbar = document.getElementById('transfer-element-toolbar');
+          let toolbarWidth;
+          for (const percent of [50, 200]) {
+            chooseZoom(percent);
+            const target = graphic.querySelector(selector);
+            reveal(target);
+            await frameReady();
+            clickPoint(hitPoint(target, selector));
+            assert(target.getAttribute('aria-pressed') === 'true', '换乘箭头没有被选中');
+            const width = checkToolbar(toolbar);
+            if (toolbarWidth) near(width, toolbarWidth, '工具栏宽度随牌面变化');
+            toolbarWidth = width;
+            const state = editor.TransferState;
+            const before = state.board(editor.App.state).directions.upper;
+            document.getElementById('transfer-tool-turn').click();
+            assert(state.board(editor.App.state).directions.upper === editor.SignDirections.turn(before, 1), '工具栏改错了箭头');
+          }
+        });
+      } else {
+        await test('站台标识放大和缩小后可以多选和微调，选框跟随排版坐标', async () => {
+          const app = editor.App;
+          app.update(project => editor.PlatformState.settings(project, { mode: 'route' }));
+          const keys = app.state.stations.slice(0, 2).map(station => 'route:' + station.id);
+          for (const percent of [50, 200]) {
+            chooseZoom(percent);
+            app.deselect();
+            for (const [index, key] of keys.entries()) {
+              const selector = '.platform-hitbox[data-element-key="' + key + '"]';
+              const target = graphic.querySelector(selector);
+              reveal(target);
+              await frameReady();
+              clickPoint(hitPoint(target, selector), { ctrlKey: index > 0 });
+            }
+            assert(keys.every(key => app.selectedKeys().includes(key)), '画布多选遗漏了站点');
+            checkToolbar(document.getElementById('platform-element-toolbar'));
+            const outline = document.getElementById('element-selection-outline');
+            const before = outline.getBoundingClientRect().left;
+            const units = app.scene.frame.scale * percent / 100;
+            document.querySelector('[data-nudge-x="1"][data-nudge-y="0"]').click();
+            near(outline.getBoundingClientRect().left - before, units, '选框未按显示比例跟随元素', 0.4);
+            assert(keys.every(key => app.state.adjustments[key].x === 1), '微调应只移动 1 个实际像素');
+            app.undo();
+          }
+        });
+      }
+    }
+  } catch (error) {
+    await test('打开编辑器', () => { throw error; });
+  } finally {
+    await open('about:blank');
+    for (const [key, value] of stored) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = (results.children.length - failed) + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = summary;
+    document.title = (failed ? '✖ ' : '✔ ') + summary + ' 预览缩放测试';
+  }
+})();
+</script>
+</html>

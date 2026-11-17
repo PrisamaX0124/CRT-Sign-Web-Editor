@@ -1,23 +1,15 @@
 .transfer-preview-scroll {
-  display: grid;
-  place-items: center;
-  container-type: size;
-  flex: 1;
-  min-height: 0;
   padding: 16px;
   background-image: radial-gradient(var(--border) 1px, transparent 1px);
   background-size: 18px 18px;
 }
 .transfer-paper {
-  width: min(100cqw, 75cqh);
   box-shadow: 0 4px 28px rgb(0 0 0 / 9%);
 }
 #transfer-sign { display: block; width: 100%; height: auto; }
 .transfer-hit-target { fill: transparent; stroke: transparent; cursor: pointer; }
 .transfer-hit-target:is(:hover, :focus-visible) { stroke: var(--selection); stroke-dasharray: 4 3; stroke-width: 1; outline: 0; }
 .transfer-hit-target[aria-pressed="true"] { stroke: var(--selection); stroke-dasharray: none; stroke-width: 2; }
-.transfer-preview-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; min-width: 0; }
-#transfer-dimensions { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 #transfer-element-toolbar {
   position: absolute;
   z-index: 20;
@@ -112,8 +104,7 @@
 #transfer-directions .direction-card { cursor: pointer; }
 #transfer-directions .direction-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-text); }
 #transfer-directions .card-icon { background: transparent; }
-.transfer-export { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
-.transfer-export .btn { flex: 1; margin: 0; }
-#transfer-status { white-space: normal; overflow-wrap: anywhere; }
+.transfer-export { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.transfer-export .btn { margin: 0; }
 
 #transfer-properties { width: 304px; }

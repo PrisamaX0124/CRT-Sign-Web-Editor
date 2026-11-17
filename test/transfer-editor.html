@@ -54,10 +54,10 @@
   function drawing(role) {
     return [...element('#transfer-sign').querySelectorAll('[data-role="' + role + '"]')];
   }
-  function chooseFile(name, content, type) {
+  function chooseFile(name, content, type, selector = '#line-pattern-file') {
     const selection = new editor.DataTransfer();
     selection.items.add(new editor.File([content], name, { type }));
-    const file = element('#line-pattern-file');
+    const file = element(selector);
     file.files = selection.files;
     file.dispatchEvent(new editor.Event('change', { bubbles: true }));
   }
@@ -104,10 +104,16 @@
       await waitFor(() => editor.App?.measure);
       guideArrows = Array.from(page.querySelectorAll('.direction-grid .direction-card'), card => card.querySelector('path').getAttribute('d'));
       editor.App.update(current => editor.SignState.updateSignSettings(current, { backgroundColor: '#102030' }));
-      await navigate(() => element('header .editor-navigation a[href="index.html?editor=transfer"]').click());
+      await navigate(() => {
+        element('.editor-switch').click();
+        const link = element('.editor-navigation a[href="index.html?editor=transfer"]');
+        assert(link.getClientRects().length, '展开后应能点击换乘标识入口');
+        link.click();
+      });
       await editor.App.ready;
       assert(editor.location.pathname.endsWith('/index.html'), '换乘编辑器应使用同一个网页');
-      assert(element('.editor-navigation [aria-current="page"]').textContent === '换乘标识', '页眉没有标出当前编辑器');
+      assert(element('.editor-navigation [aria-current="page"]').textContent.trim() === '换乘标识', '页眉没有标出当前编辑器');
+      assert(element('.editor-switch').textContent.trim() === '换乘标识编辑器', '大标题应显示换乘标识编辑器的全称');
       assert(!element('#transfer-editor').hidden && element('#app').hidden, '只应显示换乘编辑器');
       assert(element('[data-transfer-mode="guidance"]').textContent.trim() === '版式 A', '版式 A 标签有误');
       assert(element('[data-transfer-mode="separate"]').textContent.trim() === '版式 B', '版式 B 标签有误');
@@ -371,10 +377,16 @@
       select('arrow:upper');
       input('#transfer-group-alignment select', 'right', 'change');
       input('#transfer-group-arrow-position select', 'right', 'change');
-      await navigate(() => element('.editor-navigation a[href="index.html"]').click());
+      await navigate(() => {
+        element('.editor-switch').click();
+        element('.editor-navigation a[href="index.html"]').click();
+      });
       await waitFor(() => editor.App?.measure);
       assert(editor.App.state.backgroundColor === '#102030', '切回后丢失了导向标识');
-      await navigate(() => element('.editor-navigation a[href="index.html?editor=transfer"]').click());
+      await navigate(() => {
+        element('.editor-switch').click();
+        element('.editor-navigation a[href="index.html?editor=transfer"]').click();
+      });
       await editor.App.ready;
       assert(numberLabels() === '1,10/6' && drawing('line-pattern').length === 2, '版式 B 的分组或底纹没有载入');
       assert(drawing('direction-arrow')[1].dataset.direction === 'right-down', '没有载入下方箭头');
@@ -772,6 +784,135 @@
       } finally {
         editor.SignStorage.download = originalDownload;
       }
+    });
+    await test('换乘项目可导出、在新页面导入、一次撤销和重做，再刷新恢复', async () => {
+      const originalDownload = editor.SignStorage.download;
+      let download;
+      editor.SignStorage.download = (blob, name) => { download = { blob, name }; };
+      try {
+        const state = editor.TransferState;
+        const image = page.createElement('canvas');
+        image.width = image.height = 2;
+        mode('guidance');
+        editor.App.update(project => state.changeLine(state.settings(project, { width: 611, arrangement: '1' }), 'first', {
+          name: '机场线', englishName: 'Airport Line', largeName: true, color: '#13579B',
+          linePattern: { source: 'custom', image: image.toDataURL(), opacity: 46, size: 120 },
+        }));
+        direction('upper', 'left-down');
+        mode('separate');
+        arrangement('2+1');
+        editor.App.update(project => state.changeArrowPosition(state.changeAlignment(project, 'upper', 'right'), 'upper', 'right'));
+        line('third', '17');
+        direction('lower', 'right-up');
+        click('#transfer-export-project');
+        const source = editor.TransferState.serialize(editor.App.state);
+        assert(download && /^换乘标识项目-\d{8}-\d{6}\.json$/.test(download.name), '导出文件名不正确');
+        assert(await download.blob.text() === source, '下载内容不是完整项目');
+        await navigate(() => { frame.src = 'about:blank'; });
+        localStorage.removeItem('public-transfer-sign-project-v1');
+        await navigate(() => { frame.src = '../index.html?editor=transfer'; });
+        await editor.App.ready;
+        line('first', '4');
+        const beforeImport = editor.TransferState.serialize(editor.App.state);
+        const file = element('#transfer-project-file');
+        let opened = false;
+        file.click = () => { opened = true; };
+        click('#transfer-import-project');
+        assert(opened && file.hidden && file.accept.includes('.json'), '未使用隐藏的 JSON 文件选择控件');
+        chooseFile(download.name, source, 'application/json', '#transfer-project-file');
+        await waitFor(() => element('#transfer-status').textContent === '项目已导入');
+        assert(editor.TransferState.serialize(editor.App.state) === source, '两种版式的内容没有全部恢复');
+        assert(isVisible('#transfer-settings') && !isVisible('#transfer-line-properties'), '导入后应回到整牌设置');
+        assert(element('#transfer-preview-title').textContent === '版式 B' && drawing('line-band').length === 3, '预览没有更新到导入的版式');
+        click('#transfer-undo');
+        assert(editor.TransferState.serialize(editor.App.state) === beforeImport, '一次撤销没有恢复导入前两个版式');
+        assert(isVisible('#transfer-line-properties'), '撤销没有恢复原来选中的线路');
+        click('#transfer-redo');
+        assert(editor.TransferState.serialize(editor.App.state) === source && !isVisible('#transfer-line-properties'), '重做没有恢复导入结果');
+        mode('guidance');
+        const guidance = editor.TransferState.board(editor.App.state);
+        assert(guidance.width === 611 && guidance.arrangement === '1' && guidance.directions.upper === 'left-down', '版式 A 的宽度、排列或方向未恢复');
+        assert(guidance.lines[0].englishName === 'Airport Line' && guidance.lines[0].color === '#13579B' &&
+          guidance.lines[0].linePattern.image && guidance.lines[0].linePattern.opacity === 46, '版式 A 的线路颜色、文字或底纹未恢复');
+        mode('separate');
+        await waitFor(() => localStorage.getItem('public-transfer-sign-project-v1') === source);
+        await navigate(() => editor.location.reload());
+        await editor.App.ready;
+        assert(editor.TransferState.serialize(editor.App.state) === source, '刷新后没有恢复导入结果');
+      } finally {
+        editor.SignStorage.download = originalDownload;
+      }
+    });
+
+    await test('错误的换乘项目文件会提示原因，并保留当前项目和撤销记录', async () => {
+      const source = editor.TransferState.serialize(editor.App.state);
+      const undoDisabled = element('#transfer-undo').disabled;
+      for (const [name, content, message] of [
+        ['项目.txt', source, '请选择 JSON 文件'],
+        ['项目.json', '{', 'JSON 格式有误'],
+        ['项目.json', '{"kind":"platform-sign","version":2}', '请选择换乘标识项目'],
+        ['项目.json', '{"kind":"transfer-sign","version":3}', '只支持版本 1 和 2'],
+        ['项目.json', '{"kind":"transfer-sign","version":2,"mode":"separate"}', '缺少版式'],
+        ['项目.json', ' '.repeat(2 * 1024 * 1024 + 1), '不能超过 2 MB'],
+      ]) {
+        chooseFile(name, content, 'application/json', '#transfer-project-file');
+        await waitFor(() => element('#transfer-status').textContent.includes(message));
+        assert(editor.TransferState.serialize(editor.App.state) === source, '导入失败后项目发生变化');
+        assert(element('#transfer-undo').disabled === undoDisabled, '导入失败后撤销记录发生变化');
+      }
+    });
+    await test('换乘项目拒绝只有图片头的底纹文件，保留当前项目', async () => {
+      const current = editor.TransferState.serialize(editor.App.state);
+      const project = editor.TransferState.create();
+      project.boards.guidance.lines[0].linePattern = {
+        enabled: true, source: 'custom', size: 100, opacity: 85,
+        image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+      };
+      chooseFile('损坏底纹.json', editor.TransferState.serialize(project), 'application/json', '#transfer-project-file');
+      await waitFor(() => element('#transfer-status').textContent.includes('底纹图片无法读取'));
+      assert(editor.TransferState.serialize(editor.App.state) === current, '损坏底纹覆盖了当前项目');
+    });
+    await test('连续选择两个项目文件时，较早开始的读取不能覆盖后选的项目', async () => {
+      const state = editor.TransferState;
+      const first = state.serialize(state.settings(state.create(), { width: 401 }));
+      const second = state.serialize(state.settings(state.create(), { width: 402 }));
+      const readText = editor.File.prototype.text;
+      let finishFirst;
+      editor.File.prototype.text = function () {
+        if (this.name === '较早选择.json') return new Promise(resolve => { finishFirst = resolve; });
+        return readText.call(this);
+      };
+      try {
+        chooseFile('较早选择.json', first, 'application/json', '#transfer-project-file');
+        await waitFor(() => finishFirst);
+        chooseFile('后来选择.json', second, 'application/json', '#transfer-project-file');
+        await waitFor(() => state.serialize(editor.App.state) === second);
+        finishFirst(first);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        assert(state.serialize(editor.App.state) === second, '较早开始的读取覆盖了后选的项目');
+      } finally {
+        editor.File.prototype.text = readText;
+      }
+    });
+    await test('切换版式后也能依次撤销其他版式的后续修改和整份项目导入', async () => {
+      const state = editor.TransferState;
+      const initial = state.serialize(editor.App.state);
+      const project = state.settings(state.create(), { mode: 'guidance', width: 530 });
+      chooseFile('换乘项目.json', state.serialize(project), 'application/json', '#transfer-project-file');
+      await waitFor(() => state.serialize(editor.App.state) === state.serialize(project));
+      mode('separate');
+      line('first', '后改的线路');
+      mode('guidance');
+      assert(!element('#transfer-undo').disabled, '切换版式后无法撤销导入');
+      click('#transfer-undo');
+      assert(editor.App.state.mode === 'separate' && editor.App.state.boards.separate.lines[0].name === project.boards.separate.lines[0].name,
+        '应先撤销导入后的线路修改');
+      click('#transfer-undo');
+      assert(state.serialize(editor.App.state) === initial, '应再撤销整份项目导入');
+      click('#transfer-redo');
+      assert(editor.App.state.boards.guidance.width === 530, '重做未恢复导入的项目');
+      click('#transfer-redo');
+      assert(editor.App.state.boards.separate.lines[0].name === '后改的线路', '重做丢失了导入后的线路修改');
     });
   } finally {
     await navigate(() => { frame.src = 'about:blank'; });

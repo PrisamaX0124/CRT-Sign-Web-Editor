@@ -35,6 +35,7 @@
   const redoButton = element('transfer-redo');
   const exportImage = element('transfer-export-image');
   const exportVector = element('transfer-export-vector');
+  const projectFile = element('transfer-project-file');
   const status = element('transfer-status');
   const panels = {
     line: element('transfer-line-properties'),
@@ -42,13 +43,12 @@
     label: element('transfer-label-properties'),
   };
   const descriptions = { guidance: '贴柱式换乘引导标识', separate: '贴柱式换乘标识' };
-  const history = {
-    guidance: { undo: [], redo: [] },
-    separate: { undo: [], redo: [] },
-  };
+  const history = { undo: [], redo: [] };
+  const historyLimit = 20;
   let previousGroup;
   let groupTime = 0;
   let paletteRevision = -1;
+  let shownPalette;
   let shownMode;
   let shownArrangement;
   let shownLabelGroup;
@@ -67,31 +67,34 @@
   function loadProject() {
     try {
       const saved = localStorage.getItem(storageKey);
-      return saved ? state.deserialize(saved) : state.create();
+      if (saved) return state.deserialize(saved);
     } catch {
       notice('未能恢复本地项目，已打开默认标识牌');
-      return state.create();
     }
   }
 
+  const restoredProject = loadProject();
   const App = global.App = {
-    state: loadProject(),
+    state: restoredProject || state.create(),
     measure: global.SignCore.createCanvasMeasurer(),
-    update(change, group) {
+    update(change, group, options) {
       const next = change(App.state);
       const saved = state.serialize(next);
       if (saved === state.serialize(App.state)) return;
-      if (next.mode === App.state.mode) {
-        const { undo, redo } = history[next.mode];
+      if (options?.replaceProject) {
+        pushChange(history.undo, projectSnapshot());
+        history.redo.length = 0;
+      } else if (next.mode === App.state.mode) {
         const now = Date.now();
         if (!group || group !== previousGroup || now - groupTime >= 800) {
-          undo.push(state.board(App.state));
-          if (undo.length > 20) undo.shift();
+          pushChange(history.undo, boardSnapshot());
         }
         previousGroup = group;
         groupTime = now;
-        redo.length = 0;
-      } else {
+        const boundary = history.redo.findLastIndex(entry => entry.project);
+        history.redo = history.redo.slice(boundary + 1).filter(entry => entry.mode !== next.mode);
+      }
+      if (options?.replaceProject || next.mode !== App.state.mode) {
         previousGroup = undefined;
         selected = undefined;
         propertyScroll.scrollTop = 0;
@@ -99,6 +102,47 @@
       commit(next, saved);
     },
   };
+
+  const autosave = global.SignStorage.createAutosave({
+    storageKey,
+    indicator: element('transfer-save'),
+    exportProject,
+    restored: Boolean(restoredProject),
+  });
+  const previewZoom = global.PreviewZoom.create({
+    viewport: previewScroll,
+    stage: previewScroll.firstElementChild,
+    paper: vector.parentElement,
+    graphic: vector,
+    controls: element('transfer-zoom'),
+    onChange: positionToolbar,
+  });
+
+  function projectSnapshot() {
+    return { project: App.state, selection: selected?.key ?? null };
+  }
+
+  function boardSnapshot(mode = App.state.mode) {
+    return { mode, board: App.state.boards[mode] };
+  }
+
+  function pushChange(entries, change) {
+    entries.push(change);
+    if (entries.filter(entry => entry.mode === change.mode).length <= historyLimit) return;
+    const oldest = entries.findIndex(entry => entry.mode === change.mode);
+    if (entries[oldest].project) entries.splice(0, oldest + 1);
+    else entries.splice(oldest, 1);
+  }
+
+  function latestChange(entries) {
+    for (let index = entries.length - 1; index >= 0; index--) {
+      const entry = entries[index];
+      // 跳过另一版式的后续修改会让修改记录留在错误的项目里。
+      if (entry.project) return entries.length - 1;
+      if (entry.mode === App.state.mode) return index;
+    }
+    return -1;
+  }
 
   function selectedEditableGroup() {
     if (selected?.kind !== 'arrow' && selected?.kind !== 'label') return undefined;
@@ -129,24 +173,29 @@
     return { host, select };
   });
 
-  function commit(next, saved = state.serialize(next)) {
+  function commit(next, saved = state.serialize(next), selection = selected?.key) {
     App.state = next;
-    render();
-    try {
-      localStorage.setItem(storageKey, saved);
-      notice('已保存到本机');
-    } catch {
-      notice('未能保存到本机');
-    }
+    autosave.schedule(saved);
+    render(selection);
   }
 
   function restore(fromName, toName) {
     previousGroup = undefined;
-    const currentHistory = history[App.state.mode];
-    const from = currentHistory[fromName];
-    if (!from.length) return;
-    currentHistory[toName].push(state.board(App.state));
-    commit(state.replaceBoard(App.state, from.pop()));
+    const from = history[fromName];
+    const index = latestChange(from);
+    if (index < 0) return;
+    const [entry] = from.splice(index, 1);
+    if (entry.project) {
+      pushChange(history[toName], projectSnapshot());
+      propertyScroll.scrollTop = 0;
+      commit(entry.project, undefined, entry.selection);
+    } else {
+      const switchesBoard = entry.mode !== App.state.mode;
+      if (switchesBoard) propertyScroll.scrollTop = 0;
+      pushChange(history[toName], boardSnapshot(entry.mode));
+      const project = state.settings(App.state, { mode: entry.mode });
+      commit(state.replaceBoard(project, entry.board), undefined, switchesBoard ? null : selected?.key);
+    }
   }
 
   function changeSettings(changes) {
@@ -274,19 +323,24 @@
   }
 
   function positionToolbar() {
-    if (toolbar.hidden) return;
     const target = vector.querySelector('[aria-pressed="true"]');
-    if (!target) return;
-    const bounds = target.getBoundingClientRect();
+    const bounds = target?.getBoundingClientRect();
     const frame = preview.getBoundingClientRect();
     const canvas = previewScroll.getBoundingClientRect();
+    const right = canvas.left + previewScroll.clientWidth;
+    const bottom = canvas.top + previewScroll.clientHeight;
+    const visible = !!bounds && bounds.bottom > canvas.top && bounds.top < bottom && bounds.right > canvas.left && bounds.left < right;
+    global.EditorMotion.setToolbarVisible(toolbar, visible);
+    if (!visible) return;
     const toolbarWidth = toolbar.offsetWidth;
     const toolbarHeight = toolbar.offsetHeight;
     const centered = bounds.left - frame.left + (bounds.width - toolbarWidth) / 2;
     const above = bounds.top - frame.top - toolbarHeight - 8;
-    const left = Math.max(8, Math.min(centered, frame.width - toolbarWidth - 8));
+    const left = Math.max(8, Math.min(centered, right - frame.left - toolbarWidth - 8));
     const top = above >= canvas.top - frame.top ? above : bounds.bottom - frame.top + 8;
-    global.EditorMotion.placeToolbar(toolbar, left, top, selected.key);
+    const controlsSpace = parseFloat(getComputedStyle(previewScroll).paddingBottom);
+    const boundedTop = Math.max(canvas.top - frame.top + 4, Math.min(top, bottom - controlsSpace - frame.top - toolbarHeight - 4));
+    global.EditorMotion.placeToolbar(toolbar, left, boundedTop, selected.key);
   }
 
   function syncSelection() {
@@ -298,7 +352,6 @@
     for (const target of vector.querySelectorAll('[data-transfer-element]')) {
       target.setAttribute('aria-pressed', String(target.dataset.transferElement === selected?.key));
     }
-    global.EditorMotion.setToolbarVisible(toolbar, !!selected);
     const group = selectedEditableGroup();
     groupPlacement.hidden = !group;
     for (const { host, control } of alignmentControls) {
@@ -317,6 +370,7 @@
     }
     previousPanelSelection = panelSelection;
     if (!selected) {
+      global.EditorMotion.setToolbarVisible(toolbar, false);
       syncLineButtons();
       return;
     }
@@ -370,14 +424,14 @@
     syncSelection();
   }
 
-  function render() {
+  function render(selection = selected?.key) {
     const project = App.state;
     const board = state.board(project);
     currentGroups = state.groups(project);
     scene = drawing.layout(project, App.measure);
     const focused = document.activeElement?.dataset.transferElement;
     drawing.draw(vector, scene);
-    if (selected && !scene.elements.some(target => target.key === selected.key)) selected = undefined;
+    selected = scene.elements.find(target => target.key === selection);
     for (const target of scene.elements) {
       const control = vector.querySelector('[data-transfer-element="' + target.key + '"]');
       control.setAttribute('aria-label', targetTitle(target));
@@ -388,15 +442,29 @@
     for (const button of modeButtons) button.setAttribute('aria-pressed', String(button.dataset.transferMode === project.mode));
     width.value = board.width;
     const revision = global.SignPalettes.revision();
-    if (revision !== paletteRevision) {
+    if (revision !== paletteRevision || shownPalette !== board.city) {
       palettePicker.syncPaletteSelect(palette, board.city);
       paletteRevision = revision;
+      shownPalette = board.city;
     }
     palette.value = board.city;
     syncGroupList(project.mode, board.arrangement);
     syncSelection();
-    undoButton.disabled = !history[project.mode].undo.length;
-    redoButton.disabled = !history[project.mode].redo.length;
+    previewZoom.refresh(scene.width, scene.height);
+    undoButton.disabled = latestChange(history.undo) < 0;
+    redoButton.disabled = latestChange(history.redo) < 0;
+  }
+
+  function exportProject() {
+    const storage = global.SignStorage;
+    storage.exportProject(() => state.serialize(App.state), '换乘标识项目-' + storage.timestamp() + '.json', notice);
+  }
+
+  async function readProject(source) {
+    const project = state.deserializeProject(source);
+    const images = new Set(Object.values(project.boards).flatMap(board => board.lines.map(line => line.linePattern.image)));
+    await Promise.all(Array.from(images, patterns.validateImage));
+    return project;
   }
 
   async function exportSign(format) {
@@ -486,11 +554,16 @@
   redoButton.addEventListener('click', () => restore('redo', 'undo'));
   exportImage.addEventListener('click', () => exportSign('png'));
   exportVector.addEventListener('click', () => exportSign('svg'));
-  global.addEventListener('sign-palettes-change', () => {
-    if (global.SignCore.isPalette(state.board(App.state).city)) render();
-    else changeSettings({ city: 'chongqing' });
+  element('transfer-export-project').addEventListener('click', exportProject);
+  element('transfer-import-project').addEventListener('click', () => projectFile.click());
+  global.SignStorage.bindProjectImport({
+    input: projectFile,
+    deserialize: readProject,
+    applyProject: project => App.update(() => project, null, { replaceProject: true }),
+    notice,
   });
-  new ResizeObserver(positionToolbar).observe(previewScroll);
+  global.addEventListener('sign-palettes-change', () => render());
+  previewScroll.addEventListener('scroll', positionToolbar);
 
   render();
   App.ready = Promise.all([

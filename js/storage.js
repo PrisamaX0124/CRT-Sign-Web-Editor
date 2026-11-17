@@ -13,7 +13,6 @@
   var HEARTBEAT_MS = 2000;
   var FRESH_WINDOW_MS = 5000;
 
-  var saveTimer = null;
   var instanceId = null;
   var heartbeatTimer = null;
 
@@ -44,16 +43,54 @@
 
   // ─── 自动保存 ──────────────────────────────────────────────
 
-  /** 状态变更后调用；debounce 500ms 写入 localStorage */
-  function scheduleAutosave(state) {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
+  function createAutosave({ storageKey, indicator, serializeProject, exportProject, delay = 0, restored = false }) {
+    var status = indicator.querySelector('[role="status"]');
+    var backup = indicator.querySelector('button');
+    var saveTimer;
+    backup.addEventListener('click', exportProject);
+
+    function showStatus(state, message) {
+      indicator.dataset.saveState = state;
+      if (status.textContent !== message) status.textContent = message;
+    }
+
+    function writeProject(serializedProject) {
       try {
-        localStorage.setItem(AUTOSAVE_KEY, State.serializeSign(state));
-      } catch (e) {
-        console.error('自动保存失败', e);
+        global.localStorage.setItem(storageKey, serializedProject ?? serializeProject());
+      } catch {
+        showStatus('failed', '保存失败');
+        backup.hidden = false;
+        return;
       }
-    }, 500);
+      showStatus('saved', '已保存');
+      backup.hidden = true;
+    }
+
+    function flush() {
+      clearTimeout(saveTimer);
+      writeProject();
+    }
+
+    function schedule(serializedProject) {
+      showStatus('saving', '保存中');
+      if (!delay) {
+        writeProject(serializedProject);
+        return;
+      }
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(flush, delay);
+    }
+
+    if (restored) showStatus('saved', '已保存');
+    if (delay) {
+      // 浏览器可能在页面离开或切到后台时暂停计时。
+      global.addEventListener('beforeunload', flush);
+      global.addEventListener('pagehide', flush);
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) flush();
+      });
+    }
+    return { schedule };
   }
 
   /** 启动时恢复上次编辑状态；无存档返回 null */
@@ -162,42 +199,50 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
   }
 
-  function exportProject(state) {
-    var blob = new Blob([State.serializeSign(state)], { type: 'application/json' });
-    download(blob, 'sign-project-' + timestamp() + '.json');
-    SignUI.toast('项目已导出为 JSON', 'success');
+  function exportProject(serializeProject, filename, notice, saveFile = global.SignStorage.download) {
+    try {
+      var file = new Blob([serializeProject()], { type: 'application/json' });
+      saveFile(file, filename);
+    } catch {
+      notice('导出失败。无法生成项目 JSON', 'error');
+      return;
+    }
+    notice('项目 JSON 已导出', 'success');
   }
 
-  /** 从用户选择的文件导入 → Promise<SignState>；失败 reject（错误消息中文） */
-  function importProject(file) {
-    return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onload = function () {
-        try {
-          resolve(State.deserializeSign(String(reader.result)));
-        } catch (e) {
-          reject(new Error('导入失败：' + (e.message || '文件格式不合法')));
-        }
-      };
-      reader.onerror = function () { reject(new Error('导入失败：无法读取文件')); };
-      reader.readAsText(file);
-    });
+  async function readProjectFile(file, deserialize, limitSize = true) {
+    if (!/\.json$/i.test(file.name)) throw new Error('请选择 JSON 文件');
+    if (limitSize && file.size > 2 * 1024 * 1024) throw new Error('项目文件不能超过 2 MB');
+    var source;
+    try {
+      source = await file.text();
+    } catch {
+      throw new Error('无法读取文件');
+    }
+    try {
+      return await deserialize(source);
+    } catch (error) {
+      if (error instanceof SyntaxError) throw new Error('JSON 格式有误');
+      throw error;
+    }
   }
 
-  function pickImportFile() {
-    return new Promise(function (resolve) {
-      var input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json,application/json';
-      input.style.display = 'none';
-      document.body.appendChild(input);
-      function done() {
-        input.remove();
-        resolve(input.files[0] || null);
+  function bindProjectImport({ input, deserialize, applyProject, notice, limitSize }) {
+    var lastSelection = 0;
+    input.addEventListener('change', async function () {
+      var file = input.files[0];
+      input.value = '';
+      if (!file) return;
+      // 读取或检查底纹可能需要更久，较早选中的文件不能覆盖后选的文件。
+      var selection = ++lastSelection;
+      try {
+        var project = await readProjectFile(file, deserialize, limitSize);
+        if (selection !== lastSelection) return;
+        applyProject(project);
+        notice('项目已导入', 'success');
+      } catch (error) {
+        if (selection === lastSelection) notice('导入失败。' + error.message, 'error');
       }
-      input.addEventListener('change', done);
-      input.addEventListener('cancel', done); // 用户取消也须结算并移除节点
-      input.click();
     });
   }
 
@@ -205,14 +250,14 @@
     AUTOSAVE_KEY: AUTOSAVE_KEY,
     INSTANCE_KEY: INSTANCE_KEY,
     PREFS_KEY: PREFS_KEY,
-    scheduleAutosave: scheduleAutosave,
+    createAutosave: createAutosave,
     loadAutosave: loadAutosave,
     loadPrefs: loadPrefs,
     savePrefs: savePrefs,
     setupInstanceGuard: setupInstanceGuard,
     exportProject: exportProject,
-    importProject: importProject,
-    pickImportFile: pickImportFile,
+    bindProjectImport: bindProjectImport,
+    readProjectFile: readProjectFile,
     download: download,
     timestamp: timestamp,
   };

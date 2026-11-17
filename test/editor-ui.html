@@ -259,11 +259,55 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
         bitmap.close();
       }
     });
+    await test('导向项目可下载、导入并撤销，错误文件保留项目和撤销记录', async function () {
+      application.select(null);
+      var exportButton = query('#guidance-export-project');
+      var importButton = query('#guidance-import-project');
+      var file = query('#guidance-project-file');
+      assert(exportButton?.textContent === '导出项目 JSON' && importButton?.textContent === '导入项目 JSON',
+        '项目按钮用语与其他编辑器不一致');
+      var download, originalDownload = editorWindow.SignStorage.download, openPicker = file.click;
+      editorWindow.SignStorage.download = function (blob, name) { download = { blob: blob, name: name }; };
+      function submit(name, source) {
+        var selection = new editorWindow.DataTransfer();
+        selection.items.add(new editorWindow.File([source], name, { type: 'application/json' }));
+        file.files = selection.files;
+        file.dispatchEvent(new editorWindow.Event('change', { bubbles: true }));
+      }
+      try {
+        var original = state.serializeSign(application.state);
+        exportButton.click();
+        assert(download?.name.endsWith('.json') && await download.blob.text() === original, '下载内容与项目不同');
+        var pickerOpened = false;
+        file.click = function () { pickerOpened = true; };
+        importButton.click();
+        assert(pickerOpened && file.accept.includes('.json'), '未打开 JSON 文件选择器');
+        var imported = state.updateSignSettings(application.state, { backgroundColor: '#213C5C' });
+        submit('导向项目.JSON', state.serializeSign(imported));
+        await waitFor(function () { return state.serializeSign(application.state) === state.serializeSign(imported); });
+        for (var [name, source, message] of [
+          ['导向项目.txt', original, '请选择 JSON 文件'],
+          ['导向项目.json', '{', 'JSON 格式有误'],
+          ['导向项目.json', '{"version":2,"sign":' + JSON.stringify(imported) + '}', '只支持版本 1'],
+        ]) {
+          submit(name, source);
+          await waitFor(function () { return editorDocument.getElementById('toasts').textContent.includes(message); });
+          assert(state.serializeSign(application.state) === state.serializeSign(imported), '错误文件改动了当前项目');
+        }
+        assert(application.undo() && state.serializeSign(application.state) === original, '一次撤销应回到导入前');
+        assert(application.redo() && state.serializeSign(application.state) === state.serializeSign(imported), '重做未恢复导入结果');
+        application.undo();
+      } finally {
+        editorWindow.SignStorage.download = originalDownload;
+        file.click = openPicker;
+      }
+    });
     await test('窄窗口仍能横向滚动到右栏，浮动工具栏留在中栏', async function () {
       for (var width of [320, 375]) {
         frame.style.width = width + 'px';
         await waitFor(function () { return editorWindow.innerWidth === width; });
-        application.select(elements[4].id); application.fitSignDisplay();
+        application.select(elements[4].id);
+        await new Promise(function (resolve) { editorWindow.requestAnimationFrame(function () { editorWindow.requestAnimationFrame(resolve); }); });
         var toolbar = query('#element-toolbar').getBoundingClientRect();
         var center = query('#center-panel').getBoundingClientRect();
         assert(toolbar.left >= center.left && toolbar.right <= center.right, '浮动栏应留在中栏');

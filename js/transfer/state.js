@@ -38,6 +38,10 @@
     return typeof value === 'string' && Object.hasOwn(options, value) ? value : fallback;
   }
 
+  function isBoardPalette(value) {
+    return typeof value === 'string' && (core.isPalette(value) || /^custom-[\w-]{1,80}$/.test(value));
+  }
+
   function cleanLineText(value, maximumLength, fallback = '') {
     return typeof value === 'string'
       ? Array.from(value.replace(/[\u0000-\u001f]/g, '')).slice(0, maximumLength).join('')
@@ -72,7 +76,7 @@
   }
 
   function cleanBoard(mode, value = {}) {
-    const city = core.isPalette(value.city) ? value.city : 'chongqing';
+    const city = isBoardPalette(value.city) ? value.city : 'chongqing';
     const groupDirections = Object.fromEntries(Object.entries(defaultDirections[mode]).map(([group, direction]) =>
       [group, choice(value.directions?.[group], directions, direction)],
     ));
@@ -199,6 +203,10 @@
     if (value?.kind !== 'transfer-sign' || ![1, 2].includes(value.version)) {
       throw new Error('无法读取换乘标识项目');
     }
+    return restoreProject(value);
+  }
+
+  function restoreProject(value) {
     if (value.version === 2) return cleanProject(value);
     const lines = [0, 1].map(index => ({ ...value.lines?.[index], linePattern: value.linePattern }));
     return cleanProject({
@@ -211,9 +219,88 @@
     });
   }
 
+  function isRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function validPattern(value) {
+    if (!isRecord(value)) return false;
+    const cleaned = patterns.settings(value);
+    return ['enabled', 'source', 'size', 'opacity', 'image'].every(field =>
+      !Object.hasOwn(value, field) || value[field] === cleaned[field] ||
+      (field === 'source' && value.source === 'line-1-alternate' && cleaned.source === 'line-1'));
+  }
+
+  function validateLine(line, label, legacy = false) {
+    if (!isRecord(line) || line.name !== cleanLineText(line.name, 40) ||
+        ((!legacy || Object.hasOwn(line, 'color')) && !core.normalizeHex(line.color)) ||
+        (Object.hasOwn(line, 'englishName') && line.englishName !== cleanLineText(line.englishName, 80)) ||
+        (Object.hasOwn(line, 'largeName') && typeof line.largeName !== 'boolean')) {
+      throw new Error(label + '的名称或颜色有误');
+    }
+    if (Object.hasOwn(line, 'linePattern') && !validPattern(line.linePattern)) {
+      throw new Error(label + '的底纹有误');
+    }
+    if (legacy && Object.hasOwn(line, 'direction') && !choice(line.direction, directions, false)) {
+      throw new Error(label + '的箭头方向有误');
+    }
+  }
+
+  function validGroupSettings(value, options) {
+    return isRecord(value) && Object.entries(value).every(([arrangement, groups]) =>
+      Object.hasOwn(defaultAlignments, arrangement) && isRecord(groups) &&
+      Object.entries(groups).every(([group, setting]) => Object.hasOwn(defaultArrowPositions, group) && choice(setting, options, false)));
+  }
+
+  function validWidth(value) {
+    return Number.isInteger(value) && value >= minimumWidth && value <= maximumWidth;
+  }
+
+  function validateBoard(value, mode, lineCount) {
+    const name = modeNames[mode];
+    if (!isRecord(value)) throw new Error('缺少版式设置：' + name);
+    if (!choice(value.arrangement, arrangements[mode], false)) throw new Error(name + '的排列方式有误');
+    if (!validWidth(value.width)) throw new Error(name + '的宽度有误');
+    if (!isBoardPalette(value.city)) throw new Error(name + '的色板有误');
+    if (!isRecord(value.directions) || !Object.keys(defaultDirections[mode]).every(group => choice(value.directions[group], directions, false))) {
+      throw new Error(name + '的箭头方向有误');
+    }
+    if (!Array.isArray(value.lines) || value.lines.length !== lineCount) throw new Error(name + '缺少必要的线路资料或线路数量有误');
+    value.lines.forEach((line, index) => validateLine(line, name + '第 ' + (index + 1) + ' 条线路'));
+    if (Object.hasOwn(value, 'alignments') && !validGroupSettings(value.alignments, alignmentNames)) throw new Error(name + '的分组对齐方式有误');
+    if (Object.hasOwn(value, 'arrowPositions') && !validGroupSettings(value.arrowPositions, arrowPositionNames)) throw new Error(name + '的箭头位置有误');
+  }
+
+  function deserializeProject(source) {
+    let value;
+    try {
+      value = JSON.parse(source);
+    } catch {
+      throw new Error('JSON 格式有误');
+    }
+    if (!isRecord(value) || value.kind !== 'transfer-sign') throw new Error('请选择换乘标识项目');
+    if (![1, 2].includes(value.version)) throw new Error('换乘标识项目只支持版本 1 和 2');
+    if (!choice(value.mode, modeNames, false)) throw new Error('缺少版式选择或版式有误');
+    if (value.version === 2) {
+      validateBoard(value.boards?.guidance, 'guidance', 2);
+      validateBoard(value.boards?.separate, 'separate', 3);
+    } else {
+      if (!validWidth(value.width)) throw new Error('旧版项目的宽度有误');
+      if (![1, 2].includes(value.lineCount) || !Array.isArray(value.lines) || value.lines.length < value.lineCount || value.lines.length > 2) {
+        throw new Error('旧版项目缺少必要的线路资料或线路数量有误');
+      }
+      if (Object.hasOwn(value, 'direction') && !choice(value.direction, directions, false)) {
+        throw new Error('旧版项目的共用箭头方向有误');
+      }
+      value.lines.forEach((line, index) => validateLine(line, '旧版项目第 ' + (index + 1) + ' 条线路', true));
+      if (Object.hasOwn(value, 'linePattern') && !validPattern(value.linePattern)) throw new Error('旧版项目的底纹有误');
+    }
+    return restoreProject(value);
+  }
+
   global.TransferState = {
     create, board, replaceBoard, settings, changeLine, changeDirection, changeAlignment, changeArrowPosition,
-    displayLine, groups, deserialize, serialize: JSON.stringify,
+    displayLine, groups, deserialize, deserializeProject, serialize: JSON.stringify,
     arrangements, directions, alignmentNames, arrowPositionNames, modeNames, minimumWidth, maximumWidth,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

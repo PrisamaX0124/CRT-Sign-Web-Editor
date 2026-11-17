@@ -45,7 +45,12 @@
     if (!value || value.kind !== 'platform-sign' || [1,2,3].indexOf(value.version) < 0) throw new Error('请选择站台标识项目 JSON（版本 1–3）');
     if (!Array.isArray(value.stations) || value.stations.length < 1 || value.stations.length > 120) throw new Error('站点数量须为 1–120');
     var city = Core.isPalette(value.city) ? value.city : 'chongqing';
-    var ids = new Set(), stations = value.stations.map(function (s, i) { return station(s, i, city, ids); });
+    var ids = new Set(), stations = value.stations.map(function (record, index) {
+      if (!record || typeof record !== 'object' || Array.isArray(record)) {
+        throw new Error('第 ' + (index + 1) + ' 个站点的资料有误');
+      }
+      return station(record, index, city, ids);
+    });
     var sizes = {};
     MODES.forEach(function (mode) {
       if(mode==='vertical') {var verticalSize=value.sizes&&value.sizes.vertical||{},geometry=verticalGeometry(stations.length,value.verticalVariant,value.verticalHeightAuto===true?768:verticalSize.height);sizes.vertical={width:geometry.width,height:geometry.height};return;}

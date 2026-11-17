@@ -664,11 +664,11 @@
     } else {
       data = json;
     }
-    if (!isPlainObject(data)) throw new Error('项目文件不是有效的 JSON 对象');
-    var sign = isPlainObject(data.sign) ? data.sign : data;
-
-    if (!Array.isArray(sign.rows)) throw new Error('缺少 rows 数组');
-    if (sign.rows.length === 0) throw new Error('rows 不能为空');
+    if (!isPlainObject(data)) throw new Error('请选择导向标识项目');
+    var sign = Object.hasOwn(data, 'sign') ? data.sign : data;
+    if (!isPlainObject(sign) || !Array.isArray(sign.rows)) throw new Error('请选择包含标识牌行的导向标识项目');
+    if (Object.hasOwn(data, 'version') && data.version !== SCHEMA_VERSION) throw new Error('导向标识项目只支持版本 1');
+    if (sign.rows.length === 0) throw new Error('标识牌至少需要一行');
 
     var widthMode = sign.widthMode === 'dynamic' ? 'dynamic' : 'fixed';
     var width = Math.round(Number(sign.width));
@@ -689,9 +689,9 @@
       return final;
     }
 
-    var rows = sign.rows.map(function (row) {
+    var rows = sign.rows.map(function (row, index) {
       if (!isPlainObject(row) || !Array.isArray(row.elements)) {
-        throw new Error('存在无效的行');
+        throw new Error('第 ' + (index + 1) + ' 行的元素资料有误');
       }
       var elements = [];
       row.elements.forEach(function (el) {

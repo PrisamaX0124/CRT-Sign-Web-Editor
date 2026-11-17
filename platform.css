@@ -31,16 +31,10 @@
 .station-list-actions { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
 .station-list-actions .btn { margin: 0; padding: 8px; }
 .platform-preview { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; }
-.preview-toolbar strong { font-size: 13px; }
-#preview-dimensions { font-size: 11px; color: var(--text-dim); margin-left: 10px; }
-.history-actions { display: flex; align-items: center; gap: 6px; }
-#preview-zoom { border: 1px solid var(--border); border-radius: 5px; padding: 5px; background: var(--panel-bg); font-size: 11px; }
-#platform-preview-scroll { flex: 1; min-height: 0; overflow: auto; padding: 28px; background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 18px 18px; }
-#platform-paper { width: max-content; margin: 0 auto; box-shadow: 0 4px 28px rgba(0,0,0,.09); }
+#platform-preview-scroll { padding: 16px; background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 18px 18px; }
+#platform-paper { position: relative; box-shadow: 0 4px 28px rgba(0,0,0,.09); }
 #platform-svg { display: block; }
-#platform-svg [data-station-id] { cursor: pointer; }
-#platform-svg [data-element-key] { cursor: pointer; }
+:where(#platform-svg) :is([data-station-id], [data-element-key]) { cursor: pointer; }
 .platform-properties { min-width: 0; }
 .platform-properties .panel-header { min-height: 46px; }
 .platform-properties .panel-heading { gap: 8px; }
@@ -117,11 +111,6 @@
 .station-item-text small { margin-top: 2px; }
 .station-list-actions { padding: 8px 10px; }
 .platform-preview { position: relative; }
-.preview-toolbar { padding: 10px 16px; }
-.history-actions button { position: relative; }
-.history-actions .control-hint { top: calc(100% + 8px); bottom: auto; z-index: 61; }
-#platform-preview-scroll { display: flex; padding: 16px; }
-#platform-paper { position: relative; flex: none; margin: auto; }
 #element-multi-outlines { position: absolute; inset: 0; pointer-events: none; }
 .platform-element-outline { position: absolute; pointer-events: none; border: 1px dashed var(--selection); border-radius: 3px; background: var(--selection-soft); z-index: 10; }
 .platform-element-outline.selected { border: 2px solid var(--selection); background: transparent; }

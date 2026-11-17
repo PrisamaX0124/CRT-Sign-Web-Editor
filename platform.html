@@ -4,16 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 站台标识</title>
-  <link rel="stylesheet" href="style.css?v=eed32fb46d81">
-  <link rel="stylesheet" href="platform.css?v=2c460a9842b1">
+  <link rel="stylesheet" href="style.css?v=b6c8167f91cd">
+  <link rel="stylesheet" href="platform.css?v=652d04fe3cb3">
 </head>
 <body class="editor-page platform-page">
   <header class="editor-header">
     <div class="editor-header-content">
       <nav class="editor-navigation" aria-label="切换编辑器">
-        <a href="index.html">导向标识</a>
-        <a href="index.html?editor=transfer">换乘标识</a>
-        <a href="platform.html" aria-current="page">站台标识</a>
+        <button type="button" class="editor-switch" aria-expanded="false" aria-controls="editor-choices">
+          <span>站台标识编辑器</span>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="editor-choices" id="editor-choices" hidden>
+          <a href="index.html">
+            <span>导向标识</span>
+            <img src="assets/editor-previews/guidance.png?v=5ad1811fd030" width="384" height="152" alt="">
+          </a>
+          <a href="index.html?editor=transfer">
+            <span>换乘标识</span>
+            <img src="assets/editor-previews/transfer.png?v=fb719a33cf0f" width="384" height="152" alt="">
+          </a>
+          <a href="platform.html" aria-current="page">
+            <span>站台标识</span>
+            <img src="assets/editor-previews/platform.png" width="384" height="152" alt="">
+          </a>
+        </div>
       </nav>
       <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="有帮助？求 Star！（前往仓库，在新标签页打开）">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
@@ -45,53 +60,76 @@
     </aside>
     <main class="platform-preview editor-center">
       <div class="preview-toolbar">
-        <div><strong id="preview-title">全线吊板</strong><span id="preview-dimensions"></span></div>
-        <div class="history-actions">
-          <button id="undo" class="icon-btn" aria-label="撤销" aria-keyshortcuts="Control+Z Meta+Z">↶
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>Z</kbd><span>撤销</span></span>
-          </button>
-          <button id="redo" class="icon-btn" aria-label="重做" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z">↷
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>Shift</kbd><kbd>Z</kbd><span>重做</span></span>
-          </button>
-          <select id="preview-zoom" aria-label="预览缩放"><option value="fit">适合窗口</option><option value="1">100%</option><option value="0.5">50%</option><option value="0.25">25%</option></select>
+        <div class="preview-heading">
+          <strong id="preview-title">全线吊板</strong>
+          <span id="preview-dimensions" class="preview-dimensions"></span>
+        </div>
+        <div class="preview-toolbar-actions">
+          <div id="platform-edit-actions" class="clipboard-tools" role="toolbar" aria-label="站点剪贴板与选择">
+            <button type="button" data-edit-action="select-all" data-control-icon="select-all" aria-label="全选当前版式元素" aria-keyshortcuts="Control+A Meta+A">
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>A</kbd><span>全选</span></span>
+            </button>
+            <button type="button" data-edit-action="copy" data-control-icon="copy" aria-label="复制选中站点" aria-keyshortcuts="Control+C Meta+C" disabled>
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>C</kbd><span>复制</span></span>
+            </button>
+            <button type="button" data-edit-action="cut" data-control-icon="cut" aria-label="剪切选中站点" aria-keyshortcuts="Control+X Meta+X" disabled>
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>X</kbd><span>剪切</span></span>
+            </button>
+            <button type="button" data-edit-action="paste" data-control-icon="paste" aria-label="粘贴站点" aria-keyshortcuts="Control+V Meta+V">
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>V</kbd><span>粘贴</span></span>
+            </button>
+            <button type="button" data-edit-action="delete" data-control-icon="delete" aria-label="删除选中站点" aria-keyshortcuts="Delete Backspace" disabled>
+              <span class="control-hint" aria-hidden="true"><kbd>Del</kbd><span>删除站点</span></span>
+            </button>
+            <label class="clipboard-history" data-control-icon="history">
+              <select id="platform-clipboard-history" aria-label="粘贴历史，最多保留 20 条记录" disabled><option value="">粘贴历史（0/20）</option></select>
+              <span class="control-hint" aria-hidden="true">粘贴历史</span>
+            </label>
+          </div>
+          <div class="preview-zoom" id="platform-zoom" role="group" aria-label="画布位置和缩放"></div>
+          <div class="history-actions">
+            <button id="undo" class="icon-btn" aria-label="撤销" aria-keyshortcuts="Control+Z Meta+Z">↶
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>Z</kbd><span>撤销</span></span>
+            </button>
+            <button id="redo" class="icon-btn" aria-label="重做" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z">↷
+              <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>Shift</kbd><kbd>Z</kbd><span>重做</span></span>
+            </button>
+          </div>
         </div>
       </div>
-      <div id="platform-preview-scroll"><div id="platform-paper"><svg id="platform-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="站台标识牌实时预览"></svg><div id="element-hover-outline" class="platform-element-outline" hidden></div><div id="element-selection-outline" class="platform-element-outline selected" hidden></div><div id="element-multi-outlines"></div></div></div>
+      <div id="platform-preview-scroll" class="preview-zoom-viewport">
+        <div class="preview-zoom-stage">
+          <div id="platform-paper">
+            <svg id="platform-svg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="站台标识牌实时预览"></svg>
+            <div id="element-hover-outline" class="platform-element-outline" hidden></div>
+            <div id="element-selection-outline" class="platform-element-outline selected" hidden></div>
+            <div id="element-multi-outlines"></div>
+          </div>
+        </div>
+      </div>
       <div id="platform-element-toolbar" class="floating-toolbar" role="toolbar" aria-label="标识牌元素快捷操作" hidden inert>
         <span id="toolbar-element-label"></span>
         <div class="platform-tool-group" role="group" aria-label="站点管理"><button id="tool-current" title="设为本站">本站</button><button id="tool-up" title="站点前移" aria-label="站点前移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 12H8m5-5-5 5 5 5"/></svg><span>前移</span></button><button id="tool-down" title="站点后移" aria-label="站点后移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16M4 12h12m-5-5 5 5-5 5"/></svg><span>后移</span></button><button id="tool-delete" title="删除站点" aria-label="删除站点" data-control-icon="delete"></button></div>
         <div class="platform-tool-group nudge-tools" role="group" aria-label="位置微调"><span class="tool-group-label">微调</span><button data-nudge-x="-1" data-nudge-y="0" title="元素左移 1px" aria-label="元素左移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg></button><button data-nudge-x="1" data-nudge-y="0" title="元素右移 1px" aria-label="元素右移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="-1" title="元素上移 1px" aria-label="元素上移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="1" title="元素下移 1px" aria-label="元素下移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button><button id="tool-reset" title="复位元素微调" aria-label="复位元素微调"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button></div>
       </div>
       <footer class="editor-footer">
-        <div id="platform-edit-actions" class="clipboard-tools" role="toolbar" aria-label="站点剪贴板与选择">
-          <button type="button" data-edit-action="select-all" data-control-icon="select-all" aria-label="全选当前版式元素" aria-keyshortcuts="Control+A Meta+A">
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>A</kbd><span>全选</span></span>
-          </button>
-          <button type="button" data-edit-action="copy" data-control-icon="copy" aria-label="复制选中站点" aria-keyshortcuts="Control+C Meta+C" disabled>
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>C</kbd><span>复制</span></span>
-          </button>
-          <button type="button" data-edit-action="cut" data-control-icon="cut" aria-label="剪切选中站点" aria-keyshortcuts="Control+X Meta+X" disabled>
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>X</kbd><span>剪切</span></span>
-          </button>
-          <button type="button" data-edit-action="paste" data-control-icon="paste" aria-label="粘贴站点" aria-keyshortcuts="Control+V Meta+V">
-            <span class="control-hint" aria-hidden="true"><kbd>Ctrl / ⌘</kbd><kbd>V</kbd><span>粘贴</span></span>
-          </button>
-          <button type="button" data-edit-action="delete" data-control-icon="delete" aria-label="删除选中站点" aria-keyshortcuts="Delete Backspace" disabled>
-            <span class="control-hint" aria-hidden="true"><kbd>Del</kbd><span>删除站点</span></span>
-          </button>
-          <label class="clipboard-history" data-control-icon="history">
-            <select id="platform-clipboard-history" aria-label="粘贴历史，最多保留 20 条记录" disabled><option value="">粘贴历史（0/20）</option></select>
-            <span class="control-hint" aria-hidden="true">粘贴历史</span>
-          </label>
-        </div>
-        <div class="editor-footer-guidance">
-          <span id="save-status" role="status">本地自动保存</span>
-          <div class="shortcut-hints" aria-label="选择快捷键">
-            <span class="shortcut-hint"><kbd>Ctrl / ⌘</kbd><span class="shortcut-description">单击加选</span></span>
-            <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">单击范围选择</span></span>
-            <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
+        <div class="editor-footer-status">
+          <div class="project-save" id="platform-save">
+            <span role="status">本地自动保存</span>
+            <button type="button" hidden>备份项目 JSON</button>
           </div>
           <span id="platform-selection-status" class="selection-status" role="status"></span>
+        </div>
+        <div class="editor-footer-controls">
+          <details class="footer-shortcuts">
+            <summary>快捷键</summary>
+            <div class="shortcut-hints" aria-label="选择快捷键">
+              <span class="shortcut-hint"><kbd>Ctrl / ⌘</kbd><span class="shortcut-description">单击加选</span></span>
+              <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">单击范围选择</span></span>
+              <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
+              <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">滚轮缩放</span></span>
+            </div>
+          </details>
         </div>
       </footer>
     </main>
@@ -164,8 +202,8 @@
           <section class="panel-section platform-section">
             <h2 class="section-title">项目</h2>
             <div class="field-pair">
-              <button id="save-project" class="btn">保存项目</button>
-              <button id="import-project" class="btn">导入项目</button>
+              <button type="button" id="save-project" class="btn">导出项目 JSON</button>
+              <button type="button" id="import-project" class="btn">导入项目 JSON</button>
             </div>
             <button id="save-preset-shortcut" class="btn">存为预设</button>
             <input id="project-file" type="file" accept=".json,application/json" hidden>
@@ -222,13 +260,15 @@
   <dialog id="batch-dialog"><form method="dialog"><div class="batch-heading"><h2>批量编辑站点</h2><button value="cancel" class="icon-btn" aria-label="关闭批量编辑">×</button></div><p>每行一个站点：编号 | 中文站名 | 英文站名 | 换乘线路</p><label class="batch-label" for="batch-text">站点数据</label><textarea id="batch-text" rows="12" spellcheck="false"></textarea><p class="field-help">英文、换乘可留空。应用后按编号保留本站，支持撤销。</p><p id="batch-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="apply-batch">应用站点</button></div></form></dialog>
   <div id="platform-notice" role="status" hidden></div>
   <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button value="cancel" class="icon-btn" aria-label="关闭预设保存">×</button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="save-preset-confirm">保存预设</button></div></form></dialog>
+  <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
   <script src="js/editor-motion.js?v=ca1eb0979930"></script>
+  <script src="js/preview-zoom.js?v=714942225aa8"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
   <script src="js/palette-manager.js?v=public-939b5399500f"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
   <script src="js/exporters.js?v=public-56da7d254b51"></script>
-  <script src="js/platform/state.js?v=public-001363d6ae5d"></script>
+  <script src="js/platform/state.js?v=9498b91f4a81"></script>
   <script src="js/platform/reference.js?v=public-80b402bac929"></script>
   <script src="js/platform/vertical-reference.js?v=public-a036244575d0"></script>
   <script src="js/platform/route.js?v=public-b8986b777b72"></script>
@@ -238,7 +278,8 @@
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
   <script src="js/platform/clipboard.js?v=public-15d857755771"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
-  <script src="js/platform/patterns.js?v=3b04442c85b2"></script>
-  <script src="js/platform/main.js?v=75bab9155278"></script>
+  <script src="js/platform/patterns.js?v=921404baed81"></script>
+  <script src="js/storage.js?v=5156bc2ae677"></script>
+  <script src="js/platform/main.js?v=aa661adadaa5"></script>
 </body>
 </html>

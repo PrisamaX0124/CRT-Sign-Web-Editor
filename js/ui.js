@@ -28,7 +28,7 @@
     App.state = state;
     App.selection = normalizeSelection(state, selection);
     App.renderAll();
-    if (global.SignStorage) SignStorage.scheduleAutosave(state);
+    if (App.autosave) App.autosave.schedule();
   }
 
   function restoreHistory(from, to) {
@@ -69,7 +69,10 @@
       historyKey = key || null;
       historyTime = now;
       var selection = Object.assign({}, App.selection, { elementIds: App.selectedIds() });
-      if (options && options.selectNew) {
+      if (options && options.replaceProject) {
+        App.presetPreviewId = null;
+        selection = { elementIds: [], elementId: null, anchorId: null };
+      } else if (options && options.selectNew) {
         var previousIds = new Set(App.state.rows.flatMap(function (row) { return row.elements.map(function (el) { return el.id; }); }));
         var added = next.rows.flatMap(function (row) { return row.elements.map(function (el) { return el.id; }); }).filter(function (id) { return !previousIds.has(id); });
         selection = { elementIds: added, elementId: added[added.length - 1], anchorId: added[0] };
@@ -89,30 +92,12 @@
         selectedElementId: App.selection.elementId,
         selectedElementIds: App.selectedIds(),
       });
-      App.fitSignDisplay(false);
+      var dimensions = document.getElementById('guidance-preview-dimensions');
+      if (dimensions) dimensions.textContent = App.layout.width + ' × ' + App.layout.height + ' 像素';
       if (global.SignInteract) SignInteract.renderOverlay(App.layout, App.state);
+      App.previewZoom?.refresh(App.layout.width, App.layout.height);
       if (global.SignPanel) SignPanel.syncRightPanel();
       if (global.SignClipboard) SignClipboard.sync();
-    },
-
-    // 放大窄牌会使行高过大。覆盖层比牌面宽时，拖放指示线会偏移。
-    fitSignDisplay: function (positionToolbar = true) {
-      if (!App.layout) return;
-      var svg = document.getElementById('sign-svg');
-      var wrap = document.getElementById('canvas-wrap');
-      var area = document.getElementById('canvas-area');
-      var overlay = document.getElementById('sign-overlay');
-      if (!svg || !wrap) return;
-      var avail = area ? Math.min(area.clientWidth, 1600) : wrap.clientWidth;
-      if (avail > 0) {
-        svg.style.width = Math.min(avail, App.layout.width) + 'px';
-        wrap.style.width = svg.style.width;
-        if (overlay) {
-          overlay.style.width = svg.style.width;
-          overlay.style.height = svg.getBoundingClientRect().height + 'px';
-        }
-        if (positionToolbar && global.SignInteract) SignInteract.positionElementToolbar();
-      }
     },
 
     /** 选中元素（null = 取消选中，回到标识牌设置） */

@@ -61,31 +61,25 @@ test('批量背景色区分透明、混合值、失效选择，连续编辑不�
   assert.equal(application.state, before);
 });
 
-test('预览外层、图形与覆盖层共用显示宽度，窗口变化后仍按画布宽度计算', () => {
-  const context = { window: null, Date };
-  context.window = context;
-  const elements = {
-    'canvas-area': { clientWidth: 1400 },
-    'canvas-wrap': { style: {} },
-    'sign-svg': { style: {}, getBoundingClientRect: () => ({ height: 192 }) },
-    'sign-overlay': { style: {} },
+test('导向预览收到排版的实际宽高，覆盖层和缩放共用同一份排版', () => {
+  const layout = { width: 1400, height: 384 };
+  const graphic = {};
+  const calls = [];
+  const context = {
+    window: null,
+    document: { getElementById: () => graphic },
+    SignRender: { renderSignInto: node => { assert.equal(node, graphic); return layout; } },
+    SignInteract: { renderOverlay: layout => calls.push(layout) },
   };
-  context.document = { getElementById: name => elements[name] };
+  context.window = context;
   ['core', 'state', 'ui'].forEach(name => runInNewContext(readFileSync(new URL('../js/' + name + '.js', import.meta.url), 'utf8'), context));
   const application = context.App;
-  for (const width of [256, 512, 768, 1024, 1280, 1536, 2048]) {
-    application.layout = { width };
-    for (const available of [2400, 1400, 320, 1000]) {
-      elements['canvas-area'].clientWidth = available;
-      application.fitSignDisplay();
-      const expected = Math.min(available, 1600, width) + 'px';
-      assert.equal(elements['canvas-wrap'].style.width, expected);
-      assert.equal(elements['sign-svg'].style.width, expected);
-      assert.equal(elements['sign-overlay'].style.width, expected);
-      application.fitSignDisplay();
-      assert.equal(elements['canvas-wrap'].style.width, expected);
-    }
-  }
+  application.state = context.SignState.createSign();
+  application.measure = () => {};
+  application.previewZoom = { refresh: (width, height) => calls.push([width, height]) };
+  application.renderAll();
+  assert.equal(application.layout, layout);
+  assert.deepEqual(calls, [layout, [1400, 384]]);
 });
 
 test('Ctrl切换选择、Shift范围、Ctrl+Shift追加、普通单击及全选', () => {

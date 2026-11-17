@@ -452,8 +452,17 @@ test('serialize → deserialize 往返一致', () => {
 
 test('deserialize 拒绝非法结构', () => {
   assert.throws(() => S.deserializeSign('not json'), Error);
-  assert.throws(() => S.deserializeSign({ sign: { rows: 'x' } }), /rows/);
-  assert.throws(() => S.deserializeSign({ sign: { rows: [] } }), /rows/);
+  assert.throws(() => S.deserializeSign({ sign: { rows: 'x' } }), /导向标识项目/);
+  assert.throws(() => S.deserializeSign({ sign: { rows: [] } }), /至少需要一行/);
+});
+
+test('导向项目文件兼容未标版本的旧项目，并拒绝错误的版号或行结构', () => {
+  const sign = S.createSign();
+  assert.deepEqual(S.deserializeSign(JSON.stringify(sign)), sign);
+  assert.deepEqual(S.deserializeSign(S.serializeSign(sign)), sign);
+  assert.throws(() => S.deserializeSign(JSON.stringify({ version: 2, sign })), /只支持版本 1/);
+  assert.throws(() => S.deserializeSign('{"sign":{"rows":[{}]}}'), /第 1 行/);
+  assert.throws(() => S.deserializeSign('{"kind":"platform-sign","stations":[]}'), /导向标识项目/);
 });
 
 test('deserialize 宽容修补：未知元素剔除、缺失 props 补默认、颜色规范化', () => {

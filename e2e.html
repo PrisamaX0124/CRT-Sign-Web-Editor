@@ -1251,14 +1251,19 @@
       });
       var graphic = $('#sign-svg');
       var initialWidth = parseFloat(graphic.style.width);
+      function overlayMatches() {
+        var sign = graphic.getBoundingClientRect();
+        var overlay = $('#sign-overlay').getBoundingClientRect();
+        return Math.abs(overlay.width - sign.width) < 1 && Math.abs(overlay.height - sign.height) < 1;
+      }
       try {
         await resizeEditor(1100);
         var narrowWidth = parseFloat(graphic.style.width);
         ok('S36 窗口变窄后宽牌随画布缩小', narrowWidth < initialWidth);
-        ok('S36 覆盖层宽度与牌面一致', $('#sign-overlay').style.width === graphic.style.width);
+        ok('S36 覆盖层与牌面尺寸一致', overlayMatches());
         $('#left-collapse').click();
         var grew = await waitFor(function () { return parseFloat(graphic.style.width) > narrowWidth; });
-        ok('S36 收起侧栏后，宽牌随画布变宽', grew && $('#sign-overlay').style.width === graphic.style.width);
+        ok('S36 收起侧栏后，宽牌随画布变宽', grew && overlayMatches());
       } finally {
         if (!$('#left-expander').hidden) $('#left-expander').click();
         await resizeEditor(1280);

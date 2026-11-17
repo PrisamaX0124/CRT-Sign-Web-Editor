@@ -144,6 +144,14 @@
     return fills;
   }
 
+  async function validateImage(data) {
+    if (!data) return;
+    var image = new Image();
+    image.src = data;
+    try { await image.decode(); }
+    catch { throw new Error('底纹图片无法读取'); }
+  }
+
   async function readImage(file) {
     var format = (/\.(png|svg)$/i.exec(file.name) || [])[1];
     if (!format) throw new Error('请选择透明图片或矢量图（.png 或 .svg）');
@@ -293,5 +301,5 @@
     };
   }
 
-  global.PlatformPatterns = { settings: settings, metrics: metrics, bandMetrics: bandMetrics, draw: draw, init: init };
+  global.PlatformPatterns = { settings: settings, metrics: metrics, bandMetrics: bandMetrics, draw: draw, init: init, validateImage: validateImage };
 })(typeof window !== 'undefined' ? window : globalThis);

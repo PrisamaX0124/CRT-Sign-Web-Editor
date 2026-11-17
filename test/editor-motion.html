@@ -240,6 +240,114 @@
         await repaint(window);
       });
 
+      await test(editor.name + '：页眉用当前编辑器的大标题展开导航，键盘和鼠标都能收起', async function () {
+        const navigation = document.querySelector('.editor-navigation');
+        const toggle = navigation.querySelector('button');
+        const choices = toggle && document.getElementById(toggle.getAttribute('aria-controls'));
+        const modeTabs = document.querySelector('.editor-header .mode-tabs:not([hidden])');
+        assert(toggle && choices && !navigation.querySelector('select'), '应使用自定义按钮和链接');
+        assert(toggle.textContent.trim() === editor.name + '编辑器' && parseFloat(window.getComputedStyle(toggle).fontSize) >= 18,
+          '大标题应显示当前编辑器的全称');
+        assert(choices.hidden && toggle.getAttribute('aria-expanded') === 'false', '导航应默认收起');
+        const links = [...choices.querySelectorAll('a')];
+        assert(links.map(link => link.getAttribute('href')).join(',') === 'index.html,index.html?editor=transfer,platform.html' &&
+          links.map(link => link.textContent.trim()).join(',') === '导向标识,换乘标识,站台标识' &&
+          choices.querySelector('[aria-current="page"]').textContent.trim() === editor.name, '应保留三个入口的简称并标明当前页');
+        function key(target, key) {
+          target.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        }
+        for (const width of [1280, 1100]) {
+          frame.style.width = width + 'px';
+          await repaint(window);
+          const header = navigation.closest('.editor-header');
+          const before = header.getBoundingClientRect();
+          toggle.click();
+          assert(!choices.hidden && toggle.getAttribute('aria-expanded') === 'true', '点击标题应展开导航');
+          const opened = choices.getBoundingClientRect();
+          const title = toggle.getBoundingClientRect();
+          assert(opened.top >= title.bottom && opened.left >= before.left && opened.right <= before.right &&
+            header.getBoundingClientRect().height === before.height, '下拉菜单应在标题下方，且不挤动画布');
+          if (modeTabs) {
+            const tabs = modeTabs.getBoundingClientRect();
+            assert(opened.right <= tabs.left || opened.top >= tabs.bottom, '菜单展开后不应遮住版式选择');
+          }
+          key(toggle, 'ArrowDown');
+          assert(document.activeElement === links[0], '向下键应进入第一项');
+          key(links[0], 'ArrowUp');
+          assert(document.activeElement === links.at(-1), '向上键应移动到上一项');
+          key(document.activeElement, 'Escape');
+          assert(choices.hidden && document.activeElement === toggle, '退出后焦点应回到标题');
+          toggle.click();
+          (modeTabs?.querySelector('[aria-pressed="true"]') || header.querySelector('.editor-header-content')).dispatchEvent(
+            new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+          assert(choices.hidden, '点击菜单以外的位置应收起');
+          toggle.click();
+          header.querySelector('.editor-repository').focus();
+          assert(choices.hidden, '焦点离开导航时应收起');
+        }
+        frame.style.width = '1280px';
+        await repaint(window);
+      });
+
+      await test(editor.name + '：菜单右侧显示三种标识的示例，展开时菜单和选项依次出现', async function () {
+        const toggle = document.querySelector('.editor-switch');
+        const choices = document.querySelector('.editor-choices');
+        const links = [...choices.querySelectorAll('a')];
+        toggle.click();
+        try {
+          const menuMotion = animations(choices).find(animation => animation instanceof window.CSSAnimation);
+          const itemMotion = links.map(link => animations(link).find(animation => animation instanceof window.CSSAnimation));
+          const previews = links.map(link => link.querySelector('img'));
+          assert(previews.every(Boolean) && new Set(previews.map(preview => preview.src)).size === 3, '应有三张不同的标识牌预览');
+          if (reduced) {
+            assert(!menuMotion && itemMotion.every(animation => !animation), '减少动态效果时应直接显示菜单和选项');
+          } else {
+            assert(menuMotion && itemMotion.every(Boolean), '菜单和每个选项都应播放出现动画');
+            const delays = itemMotion.map(animation => animation.effect.getTiming().delay);
+            assert(delays[0] < delays[1] && delays[1] < delays[2], '选项应依次出现');
+            await finishAnimations([menuMotion, ...itemMotion]);
+          }
+          await Promise.all(previews.map(preview => preview.decode()));
+          assert(choices.getBoundingClientRect().width >= 300, '菜单应留出足够的预览宽度');
+          links.forEach((link, index) => {
+            const label = link.querySelector('span').getBoundingClientRect();
+            const image = previews[index].getBoundingClientRect();
+            assert(previews[index].naturalWidth > 200 && image.width >= 130 && image.left >= label.right,
+              '预览图应清楚显示在名称右侧');
+          });
+        } finally {
+          toggle.click();
+        }
+      });
+
+      await test(editor.name + '：导向预览显示黄底黑字，换乘预览的两种版式都显示红蓝线路色', async function () {
+        const [guidance, transfer] = document.querySelectorAll('.editor-choices img');
+        await Promise.all([guidance.decode(), transfer.decode()]);
+        const canvas = document.createElement('canvas');
+        canvas.width = guidance.naturalWidth;
+        canvas.height = guidance.naturalHeight;
+        const drawing = canvas.getContext('2d');
+        function countColor(left, width, color) {
+          const pixels = drawing.getImageData(left, 0, width, canvas.height).data;
+          let count = 0;
+          for (let index = 0; index < pixels.length; index += 4) {
+            if (pixels[index] === color[0] && pixels[index + 1] === color[1] &&
+                pixels[index + 2] === color[2] && pixels[index + 3] === 255) count++;
+          }
+          return count;
+        }
+        drawing.drawImage(guidance, 0, 0);
+        assert(countColor(0, canvas.width, [255, 215, 0]) > 10000 && countColor(0, canvas.width, [0, 0, 0]) > 1000,
+          '导向预览应显示黄色牌面和黑色箭头及文字');
+        drawing.clearRect(0, 0, canvas.width, canvas.height);
+        drawing.drawImage(transfer, 0, 0);
+        const halfWidth = canvas.width / 2;
+        for (const left of [0, halfWidth]) {
+          assert(countColor(left, halfWidth, [228, 0, 43]) > 30 && countColor(left, halfWidth, [0, 61, 165]) > 30,
+            '每种换乘版式都应显示 1 号线红色和 3 号线蓝色');
+        }
+      });
+
       await test(editor.name + '：仓库按钮缓慢扫光，光带微弱且不影响布局和点击，减少动态效果时关闭', async function () {
         const repository = document.querySelector('.editor-repository');
         const shine = window.getComputedStyle(repository, '::before');
@@ -277,16 +385,49 @@
         }
       });
 
-      await test(editor.name + '：底部的快捷键提示以圆角按键和操作说明显示', function () {
+      await test(editor.name + '：缩放和拖动锁定放在预览标题栏，底部只显示状态和快捷键入口', async function () {
         const visibleCenter = Array.from(document.querySelectorAll('.editor-center')).find(center => center.getClientRects().length);
-        const hint = visibleCenter?.querySelector('.editor-footer .shortcut-hint');
-        const key = hint?.querySelector('kbd');
-        assert(key && parseFloat(window.getComputedStyle(key).borderRadius) > 0, '快捷键应放在圆角标记里');
-        assert(hint.querySelector('.shortcut-description')?.textContent.trim(), '按键右边应显示操作说明');
+        const footer = visibleCenter.querySelector('.editor-footer');
+        const heading = visibleCenter.querySelector('.preview-toolbar');
+        const controls = heading?.querySelector('.preview-zoom');
+        const saveStatus = footer.querySelector('.project-save');
+        assert(controls?.querySelector('select') && !controls.querySelector('input[type="range"]'), '标题栏应使用缩放下拉菜单');
+        const position = controls.querySelector('button');
+        assert(controls.querySelectorAll('button').length === 1 && !position.textContent.trim() &&
+          position.querySelector('svg[aria-hidden="true"]')?.getBoundingClientRect().width > 0 && position.getAttribute('aria-label'),
+          '拖动和锁定应由一个带可读名称的图标按钮切换');
+        try {
+          for (const width of [1280, 1100, 375]) {
+            frame.style.width = width + 'px';
+            await repaint(window);
+            const bounds = footer.getBoundingClientRect();
+            const zoom = controls.getBoundingClientRect();
+            const status = saveStatus.getBoundingClientRect();
+            assert(bounds.height <= 42 && footer.scrollWidth <= footer.clientWidth + 1, '底部栏应保持一行高度并且没有横向溢出');
+            const titleBounds = heading.getBoundingClientRect();
+            assert(zoom.top >= titleBounds.top && zoom.bottom <= titleBounds.bottom && zoom.right <= titleBounds.right &&
+              heading.scrollWidth <= heading.clientWidth + 1, '画布控件应完整放在标题栏');
+            assert(status.top >= bounds.top && status.bottom <= bounds.bottom, '保存状态应留在底部栏');
+            const help = footer.querySelector('details');
+            const trigger = help?.querySelector('summary');
+            assert(trigger && !help.open, '快捷键说明应默认收起');
+            trigger.click();
+            const hint = help.querySelector('.shortcut-hint');
+            const key = hint.querySelector('kbd');
+            assert(help.open && key.getClientRects().length && parseFloat(window.getComputedStyle(key).borderRadius) > 0, '应能展开原有的快捷键提示');
+            assert(hint.querySelector('.shortcut-description')?.textContent.trim(), '按键右边应显示操作说明');
+            assert(hint.getBoundingClientRect().bottom < bounds.top && footer.getBoundingClientRect().height === bounds.height,
+              '展开提示不应增加底部栏高度');
+            trigger.click();
+          }
+        } finally {
+          frame.style.width = '1280px';
+          await repaint(window);
+        }
       });
 
       if (editor.path === 'index.html' || editor.path === 'platform.html') {
-        await test(editor.name + '：剪贴板按钮在画布底部居中，以图标显示并保留可读名称', async function () {
+        await test(editor.name + '：剪贴板与缩放同在标题栏，以图标显示并保留可读名称', async function () {
           const dock = document.querySelector('#edit-actions, #platform-edit-actions');
           const copy = dock.querySelector('[data-edit-action="copy"]');
           const cut = dock.querySelector('[data-edit-action="cut"]');
@@ -297,9 +438,10 @@
             frame.style.width = width + 'px';
             await repaint(window);
             const bounds = dock.getBoundingClientRect();
-            const preview = dock.closest('main').getBoundingClientRect();
-            assert(Math.abs(bounds.left + bounds.right - preview.left - preview.right) < 1 && preview.bottom - bounds.bottom < 48,
-              '工具栏应位于中栏底部并居中');
+            const heading = dock.closest('.preview-toolbar');
+            assert(heading && !dock.closest('.editor-footer'), '剪贴板应移到标题栏');
+            const zoom = heading.querySelector('.preview-zoom').getBoundingClientRect();
+            assert(bounds.right <= zoom.left && bounds.top < zoom.bottom && bounds.bottom > zoom.top, '剪贴板与缩放应同排');
             assert(dock.scrollWidth <= dock.clientWidth, '未打开提示时，工具栏宽度应只包括操作按钮');
             for (const button of dock.querySelectorAll('button[data-edit-action]')) {
               assert(button.getAttribute('aria-label') && window.getComputedStyle(button, '::before').maskImage !== 'none' && !button.querySelector('svg'),

@@ -64,28 +64,15 @@
       document.getElementById('right-panel-title').focus({ preventScroll: true });
     });
 
-    // 收展侧栏会改变画布宽度，但不会触发窗口尺寸变化。
-    if (window.ResizeObserver) {
-      new ResizeObserver(function () { App.fitSignDisplay(); })
-        .observe(document.getElementById('canvas-area'));
-    }
-    window.addEventListener('resize', function () { App.fitSignDisplay(); });
-  }
-
-  // 有些浏览器停用页面时不会执行延迟保存。
-  function flushAutosaveNow() {
-    if (App.state && global.SignStorage) {
-      try {
-        localStorage.setItem(SignStorage.AUTOSAVE_KEY, SignState.serializeSign(App.state));
-      } catch (e) { /* 忽略 */ }
-    }
-  }
-
-  function flushAutosaveOnExit() {
-    window.addEventListener('beforeunload', flushAutosaveNow);
-    window.addEventListener('pagehide', flushAutosaveNow);
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'hidden') flushAutosaveNow();
+    App.previewZoom = PreviewZoom.create({
+      viewport: document.getElementById('canvas-scroll'),
+      stage: document.getElementById('canvas-area'),
+      paper: document.getElementById('canvas-wrap'),
+      graphic: document.getElementById('sign-svg'),
+      controls: document.getElementById('guidance-zoom'),
+      addRow: document.getElementById('add-row-btn'),
+      alignTop: true,
+      onChange: SignInteract.positionElementToolbar,
     });
   }
 
@@ -111,7 +98,27 @@
       showLoading('正在加载 MiSans 与编号字体…');
       loadFonts().then(function (fontsReady) {
         App.measure = SignCore.createCanvasMeasurer();
-        App.state = SignStorage.loadAutosave() || SignState.createSign();
+        var restoredProject = SignStorage.loadAutosave();
+        App.state = restoredProject || SignState.createSign();
+        function serializeProject() { return SignState.serializeSign(App.state); }
+        App.exportProject = function () {
+          SignStorage.exportProject(serializeProject, 'sign-project-' + SignStorage.timestamp() + '.json', SignUI.toast);
+        };
+        SignStorage.bindProjectImport({
+          input: document.getElementById('guidance-project-file'),
+          deserialize: SignState.deserializeSign,
+          applyProject: function (project) { App.update(function () { return project; }, null, { replaceProject: true }); },
+          notice: SignUI.toast,
+          limitSize: false,
+        });
+        App.autosave = SignStorage.createAutosave({
+          storageKey: SignStorage.AUTOSAVE_KEY,
+          indicator: document.getElementById('guidance-save'),
+          serializeProject: serializeProject,
+          exportProject: App.exportProject,
+          delay: 500,
+          restored: Boolean(restoredProject),
+        });
         App.prefs = SignStorage.loadPrefs();
 
         SignInteract.init();
@@ -126,7 +133,6 @@
 
         // 字体全部就绪后再刷一帧，避免度量差异
         document.fonts.ready.then(function () { App.renderAll(); });
-        flushAutosaveOnExit();
       });
     });
   }

@@ -7,7 +7,7 @@ import { runInNewContext } from 'node:vm';
 const context = { atob };
 for (const path of [
   'js/core.js', 'js/icons.js', 'js/directions.js', 'assets/platform-patterns.js', 'js/platform/patterns.js',
-  'js/transfer/state.js', 'js/transfer/render.js',
+  'js/transfer/state.js', 'js/transfer/render.js', 'js/storage.js',
 ]) {
   const filename = fileURLToPath(new URL('../' + path, import.meta.url));
   runInNewContext(readFileSync(filename, 'utf8'), context, { filename });
@@ -24,6 +24,65 @@ const initial = state.create();
 const content = (scene, role) => scene.nodes.filter(node => node.attributes['data-role'] === role);
 const values = nodes => Array.from(nodes, node => node.text);
 const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
+
+test('换乘项目文件往返保留两种版式的尺寸、分组、线路和底纹', () => {
+  let project = state.settings(initial, { width: 480, arrangement: '1' });
+  project = state.changeLine(project, 'first', {
+    name: '环线', englishName: 'Loop Line', color: '#123456', largeName: true,
+    linePattern: { source: 'custom', image, opacity: 40 },
+  });
+  project = state.changeDirection(project, 'upper', 'right-up');
+  project = state.settings(project, { mode: 'separate', arrangement: '2+1', width: 960 });
+  project = state.changeAlignment(project, 'lower', 'left');
+  project = state.changeArrowPosition(project, 'upper', 'right');
+  project = state.changeLine(project, 'third', { name: '9', color: '#654321' });
+  const source = state.serialize(project);
+  assert.equal(state.serialize(state.deserializeProject(source)), source);
+});
+
+test('换乘项目文件可以读取旧版，也可以保留未安装的自定义色板和线路颜色', () => {
+  const legacy = { kind: 'transfer-sign', version: 1, mode: 'separate', lineCount: 1, width: 600, lines: [{ name: '5' }] };
+  const migrated = state.deserializeProject(JSON.stringify(legacy));
+  assert.equal(migrated.version, 2);
+  assert.equal(migrated.mode, 'separate');
+  assert.equal(migrated.boards.guidance.lines[0].name, '5');
+  const project = state.create();
+  project.boards.guidance.city = 'custom-local-palette';
+  const source = state.serialize(project);
+  assert.equal(state.serialize(state.deserializeProject(source)), source);
+  assert.equal(state.serialize(state.deserialize(source)), source);
+});
+
+for (const [name, makeSource, expected] of [
+  ['JSON 语法错误', () => '{', /JSON 格式有误/],
+  ['错误的项目类型', () => '{"kind":"platform-sign","version":2}', /请选择换乘标识项目/],
+  ['未支持的项目版本', () => '{"kind":"transfer-sign","version":3}', /只支持版本 1 和 2/],
+  ['缺少版式和线路字段', () => '{"kind":"transfer-sign","version":2,"mode":"separate"}', /缺少版式/],
+  ['线路字段不完整', project => { delete project.boards.separate.lines[2].color; }, /版式 B.*第 3 条线路/],
+  ['换乘宽度超出范围', project => { project.boards.guidance.width = 0; }, /版式 A.*宽度/],
+  ['分组方向错误', project => { project.boards.separate.directions.upper = ['left']; }, /版式 B.*方向/],
+  ['分组设置错误', project => { project.boards.separate.arrowPositions['1+2'].lower = 'top'; }, /版式 B.*箭头位置/],
+  ['自定义底纹图片错误', project => { project.boards.guidance.lines[0].linePattern.image = 'data:image/svg+xml,坏数据'; }, /版式 A.*底纹/],
+  ['旧项目缺少线路', () => '{"kind":"transfer-sign","version":1,"mode":"separate","width":768,"lineCount":2,"lines":[]}', /旧版项目.*线路/],
+  ['旧项目共用箭头方向无效', () => '{"kind":"transfer-sign","version":1,"mode":"guidance","width":768,"lineCount":1,"direction":"outside","lines":[{"name":"5"}]}', /旧版项目.*箭头方向/],
+  ['旧项目线路箭头方向无效', () => '{"kind":"transfer-sign","version":1,"mode":"separate","width":768,"lineCount":1,"lines":[{"name":"5","direction":42}]}', /第 1 条线路.*箭头方向/],
+]) {
+  test('拒绝换乘项目文件中的' + name, () => {
+    const project = state.create();
+    const source = makeSource(project) ?? state.serialize(project);
+    assert.throws(() => state.deserializeProject(source), expected);
+  });
+}
+
+test('项目文件在读取前检查扩展名和大小，读取失败时给出中文提示', async () => {
+  const { readProjectFile } = context.SignStorage;
+  const source = state.serialize(initial);
+  const file = { name: '换乘项目.JSON', size: source.length, text: async () => source };
+  assert.equal(state.serialize(await readProjectFile(file, state.deserializeProject)), source);
+  await assert.rejects(readProjectFile({ ...file, name: '换乘项目.txt' }, state.deserializeProject), /请选择 JSON 文件/);
+  await assert.rejects(readProjectFile({ ...file, size: 2 * 1024 * 1024 + 1 }, state.deserializeProject), /不能超过 2 MB/);
+  await assert.rejects(readProjectFile({ ...file, text: async () => { throw new Error('failed'); } }, state.deserializeProject), /无法读取文件/);
+});
 
 test('八向箭头可以顺转、逆转和绕回，折向箭头保留原方向', () => {
   const { canTurn, turn } = context.SignDirections;
@@ -156,6 +215,7 @@ test('旧存档的线路和共用底纹带到两个版式，之后可以逐条�
     linePattern: { enabled: true, source: 'custom', size: 127, opacity: 48, image },
   };
   const migrated = state.deserialize(JSON.stringify(legacy));
+  assert.equal(state.serialize(state.deserializeProject(JSON.stringify(legacy))), state.serialize(migrated));
   assert.equal(migrated.mode, 'separate');
   assert.equal(state.board(migrated).arrangement, '1');
   assert.equal(migrated.boards.guidance.arrangement, '1');
