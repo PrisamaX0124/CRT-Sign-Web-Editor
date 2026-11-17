@@ -15,6 +15,7 @@
   var Core = global.SignCore;
   var State = global.SignState;
   var Directions = global.SignDirections;
+  var Render = global.SignRender;
   var UI = global.SignUI;
   var App = global.App;
   var h = UI.h;
@@ -66,22 +67,26 @@
       graphic: svg,
       toggle: document.getElementById('guidance-alignment'),
       identifierAt: function (target) {
-        if (positionMode.getAttribute('aria-pressed') !== 'true') return null;
+        if (!freeMovementEnabled()) return null;
         return target.closest('g.element')?.getAttribute('data-element-id');
       },
       select: selectPositionElements,
-      preview: function (preview, selection, distance) {
-        var sign = State.shiftElementPositions(App.state, selection.identifiers, distance);
-        global.SignRender.renderSignInto(preview, sign, App.measure, { selectedElementIds: selection.identifiers });
+      rowDistance: function (selection, position) {
+        var target = Math.floor(position / selection.rowHeight);
+        return Core.clamp(target - selection.sourceRow, selection.firstRowDistance, selection.lastRowDistance);
       },
-      commit: function (selection, distance) {
-        App.update(function (state) { return State.shiftElementPositions(state, selection.identifiers, distance); });
+      preview: previewFreeMovement,
+      commit: function (selection, distance, rowDistance) {
+        if (!App.selectedIds().includes(selection.identifier)) App.select(selection.identifier);
+        var sign = Render.moveFreeElements(App.state, App.layout, selection.identifiers, distance, rowDistance);
+        App.update(function () { return sign; });
       },
     });
     positionMode.addEventListener('click', function () {
       cancelElementDrag();
       positionMovement.cancel();
-      positionMode.setAttribute('aria-pressed', String(positionMode.getAttribute('aria-pressed') !== 'true'));
+      positionMode.setAttribute('aria-pressed', String(!freeMovementEnabled()));
+      syncElementToolbar();
     });
     wrap.addEventListener('dragover', onPaletteDragOver);
     wrap.addEventListener('drop', onPaletteDrop);
@@ -149,21 +154,68 @@
   }
 
   function selectPositionElements(identifier) {
-    if (!App.selectedIds().includes(identifier)) App.select(identifier);
     var identifiers = App.selectedIds();
+    // 触摸期间重绘原图会移除指针按下的位置，浏览器可能就此停止发送拖动事件。
+    if (!identifiers.includes(identifier)) identifiers = [identifier];
     var selected = new Set(identifiers);
     var elements = App.layout.rows.flatMap(function (row) { return row.elements; });
     var boxes = elements.filter(function (element) { return selected.has(element.id); }).map(function (element) { return element.box; });
     if (!boxes.length) return null;
     var moving = global.ElementAlignment.selectionBounds(boxes);
     var canvasWidth = App.layout.width;
+    var selectedRows = App.layout.rows.map(function (row, index) {
+      return row.elements.some(function (element) { return selected.has(element.id); }) ? index : -1;
+    }).filter(function (index) { return index >= 0; });
     return {
+      identifier: identifier,
       identifiers: identifiers,
       moving: moving,
       others: elements.filter(function (element) { return !selected.has(element.id); }).map(function (element) { return element.box; }),
       canvasWidth: canvasWidth,
       limits: global.ElementAlignment.limitsWithinCanvas(boxes, canvasWidth),
+      rowHeight: App.state.rowHeight,
+      sourceRow: State.findElement(App.state, identifier).rowIndex,
+      firstRowDistance: -selectedRows[0],
+      lastRowDistance: App.layout.rows.length - 1 - selectedRows[selectedRows.length - 1],
     };
+  }
+
+  function freeMovementEnabled() {
+    return positionMode.getAttribute('aria-pressed') === 'true';
+  }
+
+  function previewFreeMovement(preview, selection, distance, rowDistance) {
+    var style = getComputedStyle(elementToolbar);
+    var duration = parseFloat(style.getPropertyValue('--motion-control-duration'));
+    var previousPositions = new Map();
+    var readElements = preview.firstElementChild ? preview : svg;
+    var selected = new Set(selection.identifiers);
+    if (duration > 0) {
+      readElements.querySelectorAll('g.element').forEach(function (node) {
+        var identifier = node.getAttribute('data-element-id');
+        if (!selected.has(identifier)) previousPositions.set(identifier, node.getCTM()?.e);
+      });
+    }
+    var moved = Render.moveFreeElements(App.state, App.layout, selection.identifiers, distance, rowDistance);
+    var next = State.applyPaddingAuto(moved);
+    var layout = Render.renderSignInto(preview, next, App.measure, { selectedElementIds: selection.identifiers });
+    var displayedScale = preview.getBoundingClientRect().width / layout.width;
+    if (previousPositions.size && displayedScale) {
+      preview.querySelectorAll('g.element').forEach(function (node) {
+        var previous = previousPositions.get(node.getAttribute('data-element-id'));
+        var offset = (previous - node.getCTM()?.e) / displayedScale;
+        if (Math.abs(offset) > 0.5 && typeof node.animate === 'function') {
+          node.animate([{ translate: offset + 'px 0px' }, { translate: '0px 0px' }], {
+            duration: duration, easing: style.getPropertyValue('--motion-enter').trim(),
+          });
+        }
+      });
+    }
+    var boxes = layout.rows.flatMap(function (row) { return row.elements; }).filter(function (element) {
+      return selected.has(element.id);
+    }).map(function (element) { return element.box; });
+    var actual = global.ElementAlignment.selectionBounds(boxes);
+    return Math.abs(actual.x - selection.moving.x - distance) < 0.01 && Math.abs(actual.width - selection.moving.width) < 0.01;
   }
 
   // ─── 选中元素的浮动操作栏（HTML，不参与SVG导出）──────────────
@@ -313,9 +365,10 @@
           return;
         }
         if (action.key === 'move-left' || action.key === 'move-right') {
+          if (freeMovementEnabled()) return;
           var direction = action.key === 'move-left' ? -1 : 1;
-          var ids = App.selectedIds();
-          App.update(function (st) { return State.moveElementsBy(st, ids, direction); });
+          var moved = Render.moveVisualElementsBy(App.state, App.layout, App.selectedIds(), direction);
+          App.update(function () { return moved; });
         }
       });
       groups[action.group].appendChild(btn);
@@ -364,8 +417,8 @@
       item.control.sync();
     });
     elementToolbar.querySelector('.toolbar-alignments').hidden = toolbarAlignments.every(function (item) { return item.control.node.hidden; });
-    elementToolbar.querySelector('[data-action="move-left"]').disabled = State.moveElementsBy(App.state, App.selectedIds(), -1) === App.state;
-    elementToolbar.querySelector('[data-action="move-right"]').disabled = State.moveElementsBy(App.state, App.selectedIds(), 1) === App.state;
+    elementToolbar.querySelector('[data-action="move-left"]').disabled = freeMovementEnabled() || Render.moveVisualElementsBy(App.state, App.layout, App.selectedIds(), -1) === App.state;
+    elementToolbar.querySelector('[data-action="move-right"]').disabled = freeMovementEnabled() || Render.moveVisualElementsBy(App.state, App.layout, App.selectedIds(), 1) === App.state;
     ['left', 'right'].forEach(function (side) {
       var values = App.paddingIds().map(function (paddingId) { return State.findElement(App.state, paddingId).element.props.padding[side]; });
       elementToolbar.querySelector('[data-action="' + side + '-minus"]').disabled = !values.some(function (v) { return v > 0; });
@@ -455,6 +508,12 @@
     var rowLayout = App.layout.rows[rowIndex];
     var slots = rowLayout.elements;
     var row = App.state.rows[rowIndex];
+    if (row.elements.some(element => element.props.positionOffset?.anchor)) {
+      var next = slots.findIndex(slot => x <= slot.box.x + slot.box.width / 2);
+      var last = slots[slots.length - 1].box;
+      return next < 0 ? { gap: slots.length, indicatorX: last.x + last.width }
+        : { gap: next, indicatorX: slots[next].box.x };
+    }
     var fixed = App.state.widthMode === 'fixed';
     var lane = fixed && align === 'right' ? 'right'
       : (fixed && align === 'center' ? 'center' : 'left');
@@ -579,7 +638,7 @@
   var elemDrag = null; // {elementId, rowId, pointerId, active, ghost, dx, dy, startX, startY, target}
 
   function onElementPointerDown(ev) {
-    if (positionMode.getAttribute('aria-pressed') === 'true') return;
+    if (freeMovementEnabled()) return;
     if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
     var g = ev.target.closest ? ev.target.closest('g.element') : null;
     if (!g) return; // 空白处按下 → 冒泡为取消选中（click 处理）

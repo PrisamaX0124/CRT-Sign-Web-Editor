@@ -381,10 +381,14 @@
             }
             pointer('pointerdown', source.node, source);
             pointer('pointermove', document, destination);
+            await frameReady();
             const overlay = document.getElementById('sign-overlay').getBoundingClientRect();
             near(overlay.width, bounds.width, '覆盖层宽度偏移');
             near(overlay.height, bounds.height, '覆盖层高度偏移');
-            assert(document.querySelector('.row-band.drop-ok')?.dataset.rowIndex === '1', '拖放指示没有指向第二行');
+            const preview = document.querySelector('.position-preview:not([hidden])');
+            assert(preview && items.every(identifier => preview.querySelector('g[data-element-id="' + identifier + '"]')?.dataset.rowId === app.state.rows[1].id),
+              '拖动预览中的选中元素没有吸附到第二行');
+            near(preview.getBoundingClientRect().width, bounds.width, '拖动预览宽度偏移');
             pointer('pointerup', document, destination);
             assert(items.every(identifier => state.findElement(app.state, identifier).rowIndex === 1), '多选拖动使用了错误的行坐标');
             app.undo();

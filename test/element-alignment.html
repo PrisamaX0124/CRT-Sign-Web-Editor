@@ -102,6 +102,9 @@
       zoom.dispatchEvent(new editor.Event('change'));
     }
     function position(row) { return application.layout.rows[row].elements[0].box; }
+    function boxFor(identifier) {
+      return application.layout.rows.flatMap(row => row.elements).find(element => element.id === identifier).box;
+    }
     function start(movement) {
       const box = position(0);
       const scale = graphic.getBoundingClientRect().width / application.layout.width;
@@ -109,15 +112,13 @@
         { x: box.x + box.width / 2, y: box.y + box.height / 2 }, movement, scale);
     }
 
-    await test('导向标识斜拖时只横向吸附，预览和导出的元素都留在原行', async () => {
+    await test('自由移动默认开启，同一行内可吸附到牌面中心，预览、撤销和导出一致', async () => {
       setup();
-      assert(positionMode && snap, '找不到移动位置或吸附开关');
-      positionMode.click();
+      assert(positionMode.textContent.includes('自由移动') && positionMode.getAttribute('aria-pressed') === 'true' && snap, '自由移动未默认开启');
       const original = application.state;
       const box = position(0);
       const centered = (application.layout.width - box.width) / 2;
-      const bottom = application.layout.height - box.height;
-      const movement = start({ x: centered + 3, y: bottom - 4 });
+      const movement = start({ x: centered + 3, y: 20 });
       movement.move();
       await nextFrame(editor);
       const vertical = guide(editor, 'vertical');
@@ -147,15 +148,34 @@
       near(position(0).x, box.x, '恢复排版后未回到原位');
     });
 
-    await test('导向标识只向下拖过行边界时不启动移动，旧档有纵向偏移也会回到原行', async () => {
+    await test('向下拖动会使整个元素吸附到另一行，目标行内其他元素平滑让位', async () => {
       setup();
+      application.select(null);
+      const source = graphic.querySelector('g[data-element-id="' + first.id + '"]');
       const original = application.state;
-      const movement = start({ x: 0, y: position(1).y + 30 });
+      const targetRow = original.rows[1].id;
+      const movement = start({ x: 0, y: position(1).y });
       movement.move();
       await nextFrame(editor);
-      assert(query('.position-preview').hasAttribute('hidden'), '仅纵向拖动不应显示移动预览');
+      const moved = query('.position-preview g.element.selected');
+      const stationary = query('.position-preview g.element[data-element-id="' + second.id + '"]');
+      assert(moved?.dataset.rowId === targetRow && stationary?.dataset.rowId === targetRow, '预览元素应完整落进目标行');
+      assert(application.state === original, '松手前不应修改项目');
+      assert(source.isConnected, '原来接收触摸的元素在松手前被重绘');
+      if (!editor.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        assert(stationary.getAnimations().length > 0, '目标行元素没有平滑让位');
+      }
       movement.drop();
-      assert(application.state === original, '纵向拖动修改了项目');
+      const firstBox = boxFor(first.id), secondBox = boxFor(second.id);
+      near(firstBox.y, secondBox.y, '两项应完整留在同一行');
+      assert(firstBox.x + firstBox.width <= secondBox.x, '松手后两个元素重叠');
+      application.undo();
+      assert(application.state === original, '一次撤销应恢复原行和位置');
+    });
+
+    await test('旧项目的纵向偏移被忽略，横向位置保留', () => {
+      setup();
+      const original = application.state;
       const previous = state.updateElementProps(original, first.id, { positionOffset: { x: 32, y: original.rowHeight / 2 } });
       const restored = state.deserializeSign(state.serializeSign(previous));
       application.update(() => restored);
@@ -216,7 +236,7 @@
       setup();
       const neighbor = position(1);
       const edge = neighbor.x + neighbor.width;
-      const movement = start({ x: edge + 3, y: neighbor.y });
+      const movement = start({ x: edge + 3, y: 0 });
       movement.move();
       await nextFrame(editor);
       near(parseFloat(guide(editor, 'vertical').style.left), edge / application.layout.width * 100, '竖线未穿过相邻元素右边缘');
@@ -231,13 +251,13 @@
       reorder.drop();
       assert(application.state.rows[0].elements.length === 0 && application.state.rows[1].elements.length === 2, '退出移动位置后无法换行排序');
       assert(application.layout.rows[1].elements.every(element => element.box.y === application.layout.rows[1].y), '换行应将整个元素放进目标行');
+      positionMode.click();
     });
 
 
     await test('导向标识的两个开关有图标，关闭吸附拖过边缘后仍可选中元素', async () => {
       setup();
       assert(positionMode.querySelector('svg[aria-hidden="true"] path') && snap.querySelector('svg[aria-hidden="true"] path'), '开关缺少图标');
-      positionMode.click();
       snap.click();
       const zoom = query('#guidance-zoom select');
       zoom.value = 'fit';
@@ -272,6 +292,56 @@
         box.y + box.height <= application.layout.height), '有元素被拖出了画布');
       near(after[1].x - after[0].x, before[1].x - before[0].x, '保持原水平间距');
       near(after[1].y - after[0].y, before[1].y - before[0].y, '保持原竖直间距');
+    });
+
+    await test('改长双语站名时保住右侧箭头，文字和线路编号不会与它重叠', () => {
+      const line = state.createElement('number-line', { paddingAuto: false });
+      const name = state.createElement('bilingual-text', { textZh: '礼嘉', paddingAuto: false });
+      const arrow = state.createElement('arrow', { direction: 'right', paddingAuto: false });
+      let sign = state.updateSignSettings(state.createSign(), { width: 900 });
+      for (const element of [line, name, arrow]) sign = state.addElement(sign, sign.rows[0].id, element);
+      application.update(() => sign);
+      const nameBox = boxFor(name.id), arrowBox = boxFor(arrow.id);
+      const arrowStart = application.layout.width - arrowBox.width;
+      application.update(project => {
+        const withArrow = state.updateElementProps(project, arrow.id, { positionOffset: { x: arrowStart - arrowBox.x } });
+        return state.updateElementProps(withArrow, name.id, { positionOffset: { x: arrowStart - nameBox.width - 20 - nameBox.x } });
+      });
+      application.select(name.id);
+      const input = query('#right-panel-body input[placeholder="中文文本"]');
+      input.value = '礼嘉 北碚方向新增文字测试站点';
+      input.dispatchEvent(new editor.Event('input', { bubbles: true }));
+      const resized = boxFor(name.id), arrowAfter = boxFor(arrow.id), lineAfter = boxFor(line.id);
+      assert(resized.width > nameBox.width, '没有通过属性栏改长站名');
+      near(arrowAfter.x + arrowAfter.width, application.layout.width, '右侧箭头应留在牌面右边');
+      assert(lineAfter.x + lineAfter.width <= resized.x + 0.01 && resized.x + resized.width <= arrowAfter.x + 0.01, '改长站名后元素重叠');
+      const drawing = new editor.DOMParser().parseFromString(editor.SignExporters.buildExportSVGString(application.state, application.measure, {}), 'image/svg+xml');
+      const previewTransforms = [...graphic.querySelectorAll('g.element')].map(element => element.getAttribute('transform'));
+      const exportTransforms = [...drawing.querySelectorAll('g.element')].map(element => element.getAttribute('transform'));
+      assert(previewTransforms.join('|') === exportTransforms.join('|'), '文字变长后的预览和导出位置不同');
+    });
+
+    await test('自由移动时关闭左右按钮，切回排序后只交换相邻元素原来的位置', () => {
+      const leading = state.createElement('space', { widthRatio: 0.5 });
+      const nearby = state.createElement('space', { widthRatio: 0.8, positionOffset: { x: 30 } });
+      const trailing = state.createElement('space', { widthRatio: 0.5, positionOffset: { x: 220 } });
+      let sign = state.updateSignSettings(state.createSign(), { width: 400, rowHeight: 100 });
+      for (const element of [leading, nearby, trailing]) sign = state.addElement(sign, sign.rows[0].id, element);
+      application.update(() => sign);
+      application.select(leading.id);
+      const left = query('[data-action="move-left"]'), right = query('[data-action="move-right"]');
+      assert(left.disabled && right.disabled, '自由移动时左右按钮仍可用');
+      positionMode.click();
+      assert(!right.disabled, '关闭自由移动后无法向右排列');
+      const box = boxFor(trailing.id);
+      right.click();
+      near(boxFor(nearby.id).x, 0, '相邻元素应交换到左侧');
+      near(boxFor(leading.id).x, 110, '选中元素应换到右侧');
+      near(boxFor(trailing.id).x, box.x, '相邻元素以外的位置也变了');
+      application.undo();
+      near(boxFor(leading.id).x, 0, '撤销后选中元素应回到原位置');
+      positionMode.click();
+      assert(left.disabled && right.disabled, '重新启用自由移动后按钮仍可用');
     });
 
     const platform = await open('../platform.html');

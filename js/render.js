@@ -581,6 +581,109 @@
     return slots;
   }
 
+  function positionAnchor(anchor, canvasWidth, elementWidth) {
+    if (anchor === 'right') return canvasWidth - elementWidth;
+    if (anchor === 'center') return (canvasWidth - elementWidth) / 2;
+    return 0;
+  }
+
+  function recordPosition(element, box, canvasWidth) {
+    const tolerance = Math.max(6, Math.min(24, canvasWidth * 0.025));
+    const right = positionAnchor('right', canvasWidth, box.width);
+    const center = positionAnchor('center', canvasWidth, box.width);
+    const anchor = Math.abs(box.x) <= tolerance ? 'left' : box.x >= right - tolerance ? 'right'
+      : Math.abs(box.x - center) <= tolerance ? 'center' : 'left';
+    const distance = box.x - positionAnchor(anchor, canvasWidth, box.width);
+    return { ...element, props: { ...element.props, positionOffset: { anchor, x: anchor === 'right' ? Math.min(distance, 0) : distance } } };
+  }
+
+  function spaceElementsInOrder(elements, width) {
+    let remaining = elements.reduce((total, slot) => total + slot.box.width, 0);
+    const usableWidth = Math.max(width, remaining);
+    let left = 0;
+    for (const slot of elements) {
+      // 右边必须留出后面所有元素的宽度，前面的文字变长时才不会盖住右侧的图形。
+      slot.box.x = Core.clamp(slot.box.x, left, usableWidth - remaining);
+      left = slot.box.x + slot.box.width;
+      remaining -= slot.box.width;
+    }
+  }
+
+  function rowEntries(row, layout) {
+    return row.elements.map((element, index) => ({ element, box: layout.elements[index].box }));
+  }
+
+  function anchorExistingPositions(sign, layout) {
+    let changed = false;
+    const rows = sign.rows.map((row, index) => {
+      if (!row.elements.some(element => element.props.positionOffset && !element.props.positionOffset.anchor)) return row;
+      changed = true;
+      const entries = rowEntries(row, layout.rows[index]).sort((first, second) => first.box.x - second.box.x);
+      return { ...row, elements: entries.map(({ element, box }) => recordPosition(element, box, layout.width)) };
+    });
+    return changed ? { ...sign, rows } : sign;
+  }
+
+  function moveFreeElements(sign, layout, identifiers, distance, rowDistance) {
+    if ((!distance && !rowDistance) || !Number.isFinite(distance) || !Number.isInteger(rowDistance)) return sign;
+    const selected = new Set(identifiers);
+    if (rowDistance && sign.rows.some((row, index) =>
+      !sign.rows[index + rowDistance] && row.elements.some(element => selected.has(element.id)))) return sign;
+    const moving = sign.rows.map(() => []);
+    const stationary = sign.rows.map((row, index) => {
+      return rowEntries(row, layout.rows[index]).filter(entry => {
+        if (!selected.has(entry.element.id)) return true;
+        moving[index + rowDistance].push({ element: entry.element, box: { ...entry.box, x: entry.box.x + distance }, moved: true });
+        return false;
+      });
+    });
+    const rows = sign.rows.map((row, index) => {
+      if (!moving[index].length && stationary[index].length === row.elements.length) return row;
+      const entries = moving[index].concat(stationary[index]).sort((first, second) =>
+        first.box.x + first.box.width / 2 - second.box.x - second.box.width / 2);
+      return { ...row, elements: entries.map(({ element, box, moved }) =>
+        !moved && element.props.positionOffset?.anchor ? element : recordPosition(element, box, layout.width)) };
+    });
+    return rows.some((row, index) => row !== sign.rows[index]) ? { ...sign, rows } : sign;
+  }
+
+  function moveVisualElementsBy(sign, layout, identifiers, direction) {
+    if (direction !== -1 && direction !== 1) return sign;
+    const standard = global.SignState.moveElementsBy(sign, identifiers, direction);
+    const selected = new Set(identifiers);
+    const rows = sign.rows.map((row, index) => {
+      if (!row.elements.some(element => element.props.positionOffset)) return standard.rows[index];
+      const entries = rowEntries(row, layout.rows[index]).sort((first, second) => first.box.x - second.box.x);
+      const start = direction < 0 ? 1 : entries.length - 2;
+      const stop = direction < 0 ? entries.length : -1;
+      if (entries.length < 2) return row;
+      let changed = false;
+      for (let position = start; position !== stop; position -= direction) {
+        const neighbor = position + direction;
+        if (!selected.has(entries[position].element.id) || selected.has(entries[neighbor].element.id)) continue;
+        let end = position;
+        while (selected.has(entries[end - direction]?.element.id)) end -= direction;
+        const first = Math.min(position, end), last = Math.max(position, end);
+        const groupStart = entries[first].box.x;
+        const groupEnd = entries[last].box.x + entries[last].box.width;
+        const other = entries[neighbor];
+        const distance = direction < 0 ? other.box.x - groupStart : other.box.x + other.box.width - groupEnd;
+        const group = entries.slice(first, last + 1).map(entry => ({
+          element: entry.element, box: { ...entry.box, x: entry.box.x + distance }, moved: true,
+        }));
+        const exchanged = { element: other.element, box: { ...other.box, x: direction < 0 ? groupEnd - other.box.width : groupStart }, moved: true };
+        const replacement = direction < 0 ? group.concat(exchanged) : [exchanged].concat(group);
+        entries.splice(Math.min(first, neighbor), replacement.length, ...replacement);
+        position = end;
+        changed = true;
+      }
+      if (!changed) return row;
+      return { ...row, elements: entries.map(({ element, box, moved }) =>
+        !moved && element.props.positionOffset?.anchor ? element : recordPosition(element, box, layout.width)) };
+    });
+    return rows.some((row, index) => row !== sign.rows[index]) ? { ...sign, rows } : sign;
+  }
+
   /** 完整布局：每行 y、每元素 x/width */
   function layoutSign(sign, measure) {
     var h = sign.rowHeight;
@@ -590,15 +693,22 @@
     var rows = sign.rows.map(function (row, ri) {
       var elements = layoutRowElements(row, h, measure, width, alignEnabled);
       var top = ri * h;
+      const placed = row.elements.some(element => element.props.positionOffset?.anchor);
+      const boxWidths = elements.map(slot => Math.ceil(Math.max(slot.width, 1)));
+      const total = boxWidths.reduce((sum, boxWidth) => sum + boxWidth, 0);
+      const scale = placed && total > width ? width / total : 1;
       elements.forEach(function (slot, index) {
         var position = row.elements[index].props.positionOffset;
+        const boxWidth = boxWidths[index] * scale;
+        slot.scale = scale;
         slot.box = {
-          x: Math.floor(slot.x) + (position?.x || 0),
-          y: top,
-          width: Math.ceil(Math.max(slot.width, 1)),
-          height: h,
+          x: (position?.anchor ? positionAnchor(position.anchor, width, boxWidth) : Math.floor(slot.x)) + (position?.x || 0),
+          y: top + h * (1 - scale) / 2,
+          width: boxWidth,
+          height: h * scale,
         };
       });
+      if (placed) spaceElementsInOrder(elements, width);
       var contentWidth = elements.reduce(function (acc, s) { return acc + s.width; }, 0);
       return { id: row.id, y: top, height: h, elements: elements, contentWidth: contentWidth };
     });
@@ -886,8 +996,10 @@
       for (var ei = 0; ei < row.elements.length; ei++) {
         var el = row.elements[ei];
         var rendered = renderElement(el, sign.rowHeight, measure, { clean: options.clean });
-        var box = rowLayout.elements[ei].box;
-        rendered.node.setAttribute('transform', 'translate(' + box.x + ',' + box.y + ')');
+        var slot = rowLayout.elements[ei], box = slot.box;
+        var transform = 'translate(' + box.x + ',' + box.y + ')';
+        if (slot.scale !== 1) transform += ' scale(' + slot.scale + ')';
+        rendered.node.setAttribute('transform', transform);
         if (!options.clean && (options.selectedElementId === el.id || (options.selectedElementIds || []).indexOf(el.id) >= 0)) {
           rendered.node.setAttribute('class', 'element selected');
         }
@@ -941,6 +1053,9 @@
     elementMetrics: elementMetrics,
     computeElementWidth: computeElementWidth,
     computeRowWidth: computeRowWidth,
+    anchorExistingPositions: anchorExistingPositions,
+    moveFreeElements: moveFreeElements,
+    moveVisualElementsBy: moveVisualElementsBy,
     computeSignWidth: computeSignWidth,
     layoutSign: layoutSign,
     rowFrameRects: rowFrameRects,

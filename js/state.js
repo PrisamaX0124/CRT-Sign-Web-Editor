@@ -334,37 +334,20 @@
     return Number.isFinite(value?.x) ? value.x : 0;
   }
 
-  function changeElementPositions(sign, identifiers, getPosition) {
+  function resetElementPositions(sign, identifiers) {
     const selected = new Set(identifiers);
     const rows = sign.rows.map(row => {
       let changed = false;
       const elements = row.elements.map(element => {
-        if (!selected.has(element.id)) return element;
-        const stored = element.props.positionOffset;
-        const previous = horizontalOffset(stored);
-        const position = getPosition(previous);
-        if (position === previous && (position || !stored)) return element;
+        if (!selected.has(element.id) || !element.props.positionOffset) return element;
         changed = true;
         const props = { ...element.props };
-        if (position) props.positionOffset = { x: position };
-        else delete props.positionOffset;
+        delete props.positionOffset;
         return { ...element, props };
       });
       return changed ? { ...row, elements } : row;
     });
     return rows.some((row, index) => row !== sign.rows[index]) ? { ...sign, rows } : sign;
-  }
-
-  function shiftElementPositions(sign, identifiers, distance) {
-    if (!Number.isFinite(distance) || distance === 0) return sign;
-    return changeElementPositions(sign, identifiers, previous => {
-      const position = previous + distance;
-      return Number.isFinite(position) ? position : previous;
-    });
-  }
-
-  function resetElementPositions(sign, identifiers) {
-    return changeElementPositions(sign, identifiers, () => 0);
   }
 
   function deleteElements(sign, ids) {
@@ -643,7 +626,9 @@
     var savedAuto = isPlainObject(el.props) && el.props.paddingAuto === true;
     var props = Object.assign(Core.deepClone(defaults), isPlainObject(el.props) ? el.props : {});
     const position = horizontalOffset(props.positionOffset);
-    if (position) props.positionOffset = { x: position };
+    const anchor = props.positionOffset?.anchor;
+    if (['left', 'center', 'right'].includes(anchor)) props.positionOffset = { anchor, x: position };
+    else if (position) props.positionOffset = { x: position };
     else delete props.positionOffset;
     props.padding = sanitizePadding(props.padding);
     props.paddingAuto = el.type === 'space' ? false : savedAuto;
@@ -779,7 +764,6 @@
     adjustElementPadding: adjustElementPadding,
     updateElementProps: updateElementProps,
     updateElementsProps: updateElementsProps,
-    shiftElementPositions: shiftElementPositions,
     resetElementPositions: resetElementPositions,
     deleteElements: deleteElements,
     moveElementsBy: moveElementsBy,

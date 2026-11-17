@@ -2162,6 +2162,8 @@
 
     function start() {
       runWhenReady(async function () {
+        var movementMode = $('#guidance-position-mode');
+        if (movementMode.getAttribute('aria-pressed') === 'true') movementMode.click();
         if (new URLSearchParams(location.search).get('scenario') === 'multi') {
           await s57_multiSelectionAndAlignment();
           await s58_elementClipboard();

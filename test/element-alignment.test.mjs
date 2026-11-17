@@ -16,6 +16,87 @@ const canvasWidth = 400;
 const moving = { x: 0, width: 40 };
 const limits = { left: -Infinity, right: Infinity };
 
+test('右侧箭头贴住原边缘，文字变长时在左侧腾出空间', () => {
+  let sign = SignState.updateSignSettings(SignState.createSign(), { width: 400, rowHeight: 100 });
+  const line = SignState.createElement('space', { widthRatio: 0.6 });
+  const text = SignState.createElement('space', { widthRatio: 1.3, positionOffset: { x: 120 } });
+  const arrow = SignState.createElement('space', { widthRatio: 0.5, positionOffset: { x: 160 } });
+  for (const element of [line, text, arrow]) sign = SignState.addElement(sign, sign.rows[0].id, element);
+  const measure = () => 0;
+  const prepared = SignRender.anchorExistingPositions(sign, SignRender.layoutSign(sign, measure));
+  const longer = SignState.updateElementProps(prepared, text.id, { widthRatio: 2.5 });
+  const [first, name, last] = SignRender.layoutSign(longer, measure).rows[0].elements.map(element => element.box);
+  assert.equal(first.x, 0);
+  assert.equal(last.x + last.width, 400);
+  assert.ok(first.x + first.width <= name.x && name.x + name.width <= last.x);
+  const crowded = SignState.updateElementProps(prepared, text.id, { widthRatio: 4 });
+  const crowdedRow = SignRender.layoutSign(crowded, measure).rows[0];
+  assert.ok(crowdedRow.elements[0].scale < 1);
+  assert.equal(crowdedRow.elements.at(-1).box.x + crowdedRow.elements.at(-1).box.width, 400);
+  const beyondEdge = SignState.updateElementProps(sign, arrow.id, { positionOffset: { x: 240 } });
+  const repaired = SignRender.anchorExistingPositions(beyondEdge, SignRender.layoutSign(beyondEdge, measure));
+  assert.deepEqual({ ...repaired.rows[0].elements.at(-1).props.positionOffset }, { anchor: 'right', x: 0 });
+});
+
+test('居中和贴右的位置经保存恢复后，随画布宽度改变继续对齐', () => {
+  let sign = SignState.updateSignSettings(SignState.createSign(), { width: 400, rowHeight: 100 });
+  const centered = SignState.createElement('space', { widthRatio: 1, positionOffset: { anchor: 'center', x: 0 } });
+  const right = SignState.createElement('space', { widthRatio: 0.5, positionOffset: { anchor: 'right', x: 0 } });
+  for (const element of [centered, right]) sign = SignState.addElement(sign, sign.rows[0].id, element);
+  const restored = SignState.deserializeSign(SignState.serializeSign(sign));
+  const wider = SignState.updateSignSettings(restored, { width: 600 });
+  const elements = SignRender.layoutSign(wider, () => 0).rows[0].elements;
+  assert.equal(elements[0].box.x + elements[0].box.width / 2, 300);
+  assert.equal(elements[1].box.x + elements[1].box.width, 600);
+});
+
+test('自由拖动吸附到目标行，为移动的元素让位，原状态保持不变', () => {
+  let sign = SignState.addRow(SignState.updateSignSettings(SignState.createSign(), { width: 400, rowHeight: 100 }));
+  const first = SignState.createElement('space', { widthRatio: 1 });
+  const second = SignState.createElement('space', { widthRatio: 1 });
+  sign = SignState.addElement(sign, sign.rows[0].id, first);
+  sign = SignState.addElement(sign, sign.rows[1].id, second);
+  const measure = () => 0;
+  const layout = SignRender.layoutSign(sign, measure);
+  assert.equal(SignRender.moveFreeElements(sign, layout, [first.id, second.id], 0, 1), sign);
+  const moved = SignRender.moveFreeElements(sign, layout, [first.id], 0, 1);
+  const rows = SignRender.layoutSign(moved, measure).rows;
+  assert.equal(sign.rows[0].elements[0].id, first.id);
+  assert.equal(rows[0].elements.length, 0);
+  assert.deepEqual(Array.from(rows[1].elements, element => [element.box.x, element.box.y]), [[0, 100], [100, 100]]);
+});
+
+test('左右移动按钮交换视觉相邻的元素，其他元素的位置不变', () => {
+  let sign = SignState.updateSignSettings(SignState.createSign(), { width: 400, rowHeight: 100 });
+  const first = SignState.createElement('space', { widthRatio: 0.5 });
+  const second = SignState.createElement('space', { widthRatio: 0.8, positionOffset: { x: 30 } });
+  const last = SignState.createElement('space', { widthRatio: 0.5, positionOffset: { x: 220 } });
+  for (const element of [first, second, last]) sign = SignState.addElement(sign, sign.rows[0].id, element);
+  const measure = () => 0;
+  const initial = SignRender.layoutSign(sign, measure);
+  const moved = SignRender.moveVisualElementsBy(sign, initial, [first.id], 1);
+  const elements = SignRender.layoutSign(moved, measure).rows[0].elements;
+  assert.deepEqual(Array.from(elements, element => element.id), [second.id, first.id, last.id]);
+  assert.deepEqual(Array.from(elements, element => element.box.x), [0, 110, 350]);
+});
+
+test('左右移动按钮把连续多选看作整组，保留组内空隙和远处元素的位置', () => {
+  let sign = SignState.updateSignSettings(SignState.createSign(), { width: 400, rowHeight: 100 });
+  const positions = [0, 70, 190, 350];
+  const widths = [0.5, 0.8, 0.6, 0.5];
+  const elements = widths.map((widthRatio, index) => SignState.createElement('space', {
+    widthRatio, positionOffset: { anchor: 'left', x: positions[index] },
+  }));
+  for (const element of elements) sign = SignState.addElement(sign, sign.rows[0].id, element);
+  const measure = () => 0;
+  const before = SignRender.layoutSign(sign, measure);
+  const moved = SignRender.moveVisualElementsBy(sign, before, [elements[0].id, elements[1].id], 1);
+  const actual = SignRender.layoutSign(moved, measure).rows[0].elements;
+  assert.deepEqual(Array.from(actual, element => element.box.x), [0, 100, 170, 350]);
+  const reversed = SignRender.moveVisualElementsBy(sign, before, [elements[1].id, elements[2].id], -1);
+  assert.deepEqual(Array.from(SignRender.layoutSign(reversed, measure).rows[0].elements, element => element.box.x), [0, 120, 200, 350]);
+});
+
 test('旧项目的跨行位置回到所属行，横向偏移保留在排版和存档中', () => {
   let sign = SignState.addRow(SignState.createSign());
   const upper = SignState.createElement('space', { positionOffset: { x: 31.5, y: sign.rowHeight / 2 } });
@@ -124,8 +205,9 @@ function createMovement() {
     paper, graphic, toggle,
     identifierAt: () => identifier,
     select: () => identifier && { canvasWidth, moving, others: [], limits },
+    rowDistance: (selection, position) => position >= 120 ? 1 : 0,
     preview: (graphic, selection, movement) => previews.push(movement),
-    commit: (selection, movement) => commits.push(movement),
+    commit: (selection, distance, rows) => commits.push({ distance, rows }),
   });
   const [preview, guideLayer] = paper.children;
   const [guide] = guideLayer.children;
@@ -166,19 +248,19 @@ test('先达到拖动距离才显示预览，多次移动只绘制一帧，松�
   assert.equal(movement.commits.length, 0);
   movement.pointer('pointerup', 224, 106);
   assert.equal(movement.commits.length, 1);
-  assert.equal(movement.commits[0], 198);
+  assert.deepEqual(movement.commits[0], { distance: 198, rows: 0 });
   assert.equal(movement.guide.hidden, true);
   assert.equal(movement.preview.getAttribute('hidden'), '');
 });
 
-test('上下拖动不启动移动预览，也不修改项目', () => {
+test('只向下拖动可以吸附到另一行，无需横向移动', () => {
   const movement = createMovement();
   movement.pointer('pointerdown', 26, 39);
   movement.pointer('pointermove', 26, 180);
   movement.frame();
   movement.pointer('pointerup', 26, 180);
-  assert.equal(movement.previews.length, 0);
-  assert.equal(movement.commits.length, 0);
+  assert.equal(movement.previews.length, 1);
+  assert.deepEqual(movement.commits, [{ distance: 0, rows: 1 }]);
   assert.equal(movement.guide.hidden, true);
 });
 
@@ -259,7 +341,7 @@ test('导向标识整体移动保留所属行和组内间距，位置随项目�
   const emptyMeasurement = () => 0;
   const initialLayout = SignRender.layoutSign(original, emptyMeasurement);
   const identifiers = [first.id, second.id, '找不到的元素'];
-  const shifted = SignState.shiftElementPositions(original, identifiers, 31.5);
+  const shifted = SignRender.moveFreeElements(original, initialLayout, identifiers, 31.5, 0);
   const restored = SignState.deserializeSign(SignState.serializeSign(shifted));
   const layout = SignRender.layoutSign(restored, emptyMeasurement);
   for (const [index, row] of layout.rows.entries()) {
@@ -274,9 +356,9 @@ test('导向标识整体移动保留所属行和组内间距，位置随项目�
   const reset = SignState.resetElementPositions(shifted, identifiers);
   assert.equal(SignState.serializeSign(reset), SignState.serializeSign(original));
   assert.equal(SignState.resetElementPositions(original, identifiers), original);
-  assert.equal(SignState.shiftElementPositions(original, [], 6), original);
-  assert.equal(SignState.shiftElementPositions(original, identifiers, 0), original);
-  assert.equal(SignState.shiftElementPositions(original, identifiers, NaN), original);
+  assert.equal(SignRender.moveFreeElements(original, initialLayout, [], 6, 0), original);
+  assert.equal(SignRender.moveFreeElements(original, initialLayout, identifiers, 0, 0), original);
+  assert.equal(SignRender.moveFreeElements(original, initialLayout, identifiers, NaN, 0), original);
 });
 
 test('导向标识旧项目照常打开，导入时忽略无效位置并保留有效坐标', () => {

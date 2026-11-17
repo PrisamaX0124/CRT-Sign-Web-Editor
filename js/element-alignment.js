@@ -96,7 +96,7 @@
       if (!bounds.width || !bounds.height) return;
       session = {
         identifier, pointer: event.pointerId, pointerType: event.pointerType, startBounds: bounds,
-        startX: event.clientX,
+        startX: event.clientX, startY: event.clientY,
       };
       if (event.pointerType === 'mouse') event.preventDefault();
     }
@@ -108,20 +108,22 @@
       const scale = bounds.width / canvasWidth;
       const initial = session.startBounds;
       const anchorX = bounds.left + (session.startX - initial.left) * (bounds.width / initial.width);
-      return alignMovement(moving, others, canvasWidth, (point.clientX - anchorX) / scale, scale, limits, enabled);
+      const rowDistance = options.rowDistance(session.selection, (point.clientY - bounds.top) / scale);
+      return { ...alignMovement(moving, others, canvasWidth, (point.clientX - anchorX) / scale, scale, limits, enabled), rowDistance };
     }
 
     function draw() {
       frame = null;
       const movement = movementAt(session.point);
       if (!movement) { cancel(); return; }
-      if (movement.distance !== session.previousDistance) {
-        options.preview(preview, session.selection, movement.distance);
+      if (movement.distance !== session.previousDistance || movement.rowDistance !== session.previousRowDistance) {
         preview.removeAttribute('hidden');
         paper.dataset.movingElements = 'true';
+        session.guideFits = options.preview(preview, session.selection, movement.distance, movement.rowDistance) !== false;
       }
       session.previousDistance = movement.distance;
-      guide.hidden = movement.guide === null;
+      session.previousRowDistance = movement.rowDistance;
+      guide.hidden = movement.guide === null || !session.guideFits;
       if (!guide.hidden) guide.style.left = movement.guide / session.selection.canvasWidth * 100 + '%';
     }
 
@@ -132,7 +134,7 @@
     function move(event) {
       if (session?.pointer !== event.pointerId) return;
       if (!session.selection) {
-        if (Math.abs(event.clientX - session.startX) <= 5) return;
+        if (Math.hypot(event.clientX - session.startX, event.clientY - session.startY) <= 5) return;
         session.selection = options.select(session.identifier);
         if (!session.selection) { cancel(); return; }
         if (event.isTrusted) paper.setPointerCapture(event.pointerId);
@@ -146,7 +148,7 @@
       const { selection } = session;
       const movement = selection && event.type === 'pointerup' && movementAt(event);
       cancel();
-      if (movement && movement.distance) options.commit(selection, movement.distance);
+      if (movement && (movement.distance || movement.rowDistance)) options.commit(selection, movement.distance, movement.rowDistance);
     }
 
     toggle.addEventListener('click', () => {

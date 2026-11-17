@@ -53,7 +53,10 @@
 
     /** 状态变更入口：pureFn(sign) → 新 sign；continuous用于显式结束的指针会话。 */
     update: function (pureFn, key, options) {
-      var next = pureFn(App.state);
+      var before = App.layout && global.SignRender?.anchorExistingPositions
+        ? SignRender.anchorExistingPositions(App.state, App.layout) : App.state;
+      var next = pureFn(before);
+      if (before !== App.state && JSON.stringify(next) === JSON.stringify(before)) return;
       if (global.SignState && SignState.applyPaddingAuto) {
         // 相邻自动内边距：每次变更后按相邻关系重算自动侧（幂等，随当次更新落盘/撤销）
         next = SignState.applyPaddingAuto(next);
@@ -137,7 +140,7 @@
 
     elementOrder: function () {
       if (App.layout) return App.layout.rows.flatMap(function (row) {
-        return row.elements.slice().sort(function (a, b) { return a.x - b.x; }).map(function (slot) { return slot.id; });
+        return row.elements.slice().sort(function (a, b) { return (a.box?.x ?? a.x) - (b.box?.x ?? b.x); }).map(function (slot) { return slot.id; });
       });
       return App.state.rows.flatMap(function (row) { return row.elements.map(function (el) { return el.id; }); });
     },
