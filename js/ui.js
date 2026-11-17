@@ -172,21 +172,15 @@
       if (ids.length) App.update(function (st) { return SignState.deleteElements(st, ids); });
     },
 
-    backgroundColorTargets: function () {
-      return App.selectedIds().filter(function (elementId) {
-        return SignState.findElement(App.state, elementId).element.type !== 'exit';
-      });
-    },
-
     backgroundColorValue: function () {
-      var values = App.backgroundColorTargets().map(function (elementId) {
+      var values = App.selectedIds().map(function (elementId) {
         return SignState.findElement(App.state, elementId).element.props.backgroundColor;
       });
       return values.every(function (value) { return value === values[0]; }) ? values[0] : undefined;
     },
 
     setBackgroundColor: function (value) {
-      var elementIds = App.backgroundColorTargets();
+      var elementIds = App.selectedIds();
       if (!elementIds.length) return;
       if (value !== null && !SignCore.isHexColor(value)) return;
       var color = value === null ? null : SignCore.normalizeHex(value);

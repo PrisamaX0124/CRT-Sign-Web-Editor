@@ -782,16 +782,14 @@
       layout.appendChild(field('左右内边距（行高比例）', grid));
     }
     root.appendChild(layout);
-    if (App.backgroundColorTargets().length) {
-      var colors = panelSection('元素颜色', 'colors');
-      colors.appendChild(field('元素背景色', buildColorPicker({
-        value: App.backgroundColorValue(), scope: '元素背景色', nullable: true,
-        getValue: App.backgroundColorValue,
-        isMixed: function () { return App.backgroundColorValue() === undefined; },
-        onChange: App.setBackgroundColor,
-      })));
-      root.appendChild(colors);
-    }
+    var colors = panelSection('元素颜色', 'colors');
+    colors.appendChild(field('元素背景色', buildColorPicker({
+      value: App.backgroundColorValue(), scope: '元素背景色', nullable: true,
+      getValue: App.backgroundColorValue,
+      isMixed: function () { return App.backgroundColorValue() === undefined; },
+      onChange: App.setBackgroundColor,
+    })));
+    root.appendChild(colors);
     var del = h('button', { class: 'btn', text: '删除选中元素', 'data-control-icon': 'delete' });
     del.addEventListener('click', App.deleteSelection);
     root.appendChild(del);
@@ -835,9 +833,7 @@
       else content.appendChild(node);
     });
 
-    if (el.type !== 'exit') {
-      colors.appendChild(buildBackgroundPicker(el, live));
-    }
+    colors.appendChild(buildBackgroundPicker(el, live));
     if (el.type !== 'space') {
       layout.appendChild(buildPaddingEditor(el, live));
     }

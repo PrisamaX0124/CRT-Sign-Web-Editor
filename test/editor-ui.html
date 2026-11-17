@@ -65,7 +65,7 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
     await test('导向标识使用统一的浏览器标签页标题', function () {
       assert(editorDocument.title === 'CRT标识编辑器 - 导向标识');
     });
-    await test('从左栏添加出口时，缩略图和牌面都没有底色，属性可以编辑编号', function () {
+    await test('新建出口默认透明，可独立编辑编号和背景色，支持透明与撤销重做', function () {
       var previous = application.state;
       try {
         var card = query('[aria-label="添加出口"]');
@@ -80,12 +80,21 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
         assert(!query('#right-panel-body').textContent.includes('固定为黄色'));
         change(query('#right-panel-body input[placeholder^="编号"]'), 'C');
         assert(properties(exit).code === 'C' && query('#sign-svg .element.selected').textContent === 'C出口Exit');
+        var picker = query('[data-scope="元素背景色"]');
+        assert(picker, '出口缺少元素背景色设置');
+        change(picker.querySelector('.hex-input'), '#126684');
+        assert(properties(exit).backgroundColor === '#126684' && query('#sign-svg .element.selected rect[fill="#126684"]'));
+        assert(query('[data-scope="元素背景色"]') === picker, '改色时背景色控件被重建');
+        picker.querySelector('.cp-null-btn').click();
+        assert(properties(exit).backgroundColor === null && !query('#sign-svg .element.selected rect:not(.hitbox)'));
+        assert(application.undo() && properties(exit).backgroundColor === '#126684');
+        assert(application.redo() && properties(exit).backgroundColor === null && properties(exit).code === 'C');
       } finally {
         application.update(function () { return previous; });
         application.select(null);
       }
     });
-    await test('旧预设的缩略图和牌面透出底色，并保留出口编号', function () {
+    await test('预设缩略图和应用后的牌面保留出口编号与背景色', function () {
       var previous = application.state;
       var storage = editorWindow.localStorage;
       var key = editorWindow.SignPresets.KEY;
@@ -95,12 +104,12 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
         storage.setItem(key, JSON.stringify([{ id: 'older-preset', name: '旧预设', elements: [exit] }]));
         query('#palette-tab-presets').click();
         var card = query('[aria-label="预览预设：旧预设"]');
-        assert(!card.querySelector('rect[fill="#F7D917"]'), '旧预设的缩略图有黄色底色');
+        assert(card.querySelector('rect[fill="#F7D917"]'), '预设的缩略图丢失背景色');
         card.click();
         query('.preset-apply-new-row').click();
         var applied = application.state.rows.at(-1).elements[0];
-        assert(applied.props.code === 'D' && applied.props.backgroundColor === null);
-        assert(!query('#sign-svg .sign-row:last-child .element rect:not(.hitbox)'));
+        assert(applied.props.code === 'D' && applied.props.backgroundColor === '#F7D917');
+        assert(query('#sign-svg .sign-row:last-child .element rect[fill="#F7D917"]'));
       } finally {
         if (savedPresets === null) storage.removeItem(key);
         else storage.setItem(key, savedPresets);
@@ -179,24 +188,24 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
       assert(query('#sign-svg').style.width === query('#canvas-wrap').style.width);
       application.update(function (sign) { return state.updateSignSettings(sign, { widthMode: 'fixed', width: 1280 }); });
     });
-    await test('混合选择可批量改色、设为透明和撤销，出口始终透明', function () {
+    await test('混合选择包含出口，可批量改色、设为透明和撤销', function () {
       application.selectMany(elements.map(function (element) { return element.id; }));
       var panel = query('.batch-properties'), picker = query('[data-scope="元素背景色"]');
       assert(picker, '缺少批量背景色');
       change(picker.querySelector('.hex-input'), '#123456');
-      elements.forEach(function (element) { assert(properties(element).backgroundColor === (element.type === 'exit' ? null : '#123456')); });
+      elements.forEach(function (element) { assert(properties(element).backgroundColor === '#123456'); });
       assert(!panel.textContent.includes('固定黄色'));
       assert(query('.batch-properties') === panel);
       application.undo(); assert(properties(elements[0]).backgroundColor === null && application.selectedIds().length === elements.length);
       application.redo(); assert(picker.querySelector('.hex-input').value === '#123456');
-      picker.querySelector('.cp-null-btn').click(); assert(properties(elements[2]).backgroundColor === null);
+      picker.querySelector('.cp-null-btn').click(); assert(properties(elements[2]).backgroundColor === null && properties(elements[3]).backgroundColor === null);
       application.update(function (sign) { return state.updateElementProps(sign, elements[0].id, { backgroundColor: '#445566' }); });
       assert(picker.querySelector('.hex-input').placeholder === '不同');
       assert(!picker.querySelector('.cp-null-btn').classList.contains('active'), '混合值不能显示为透明');
       picker.querySelector('.cp-null-btn').click(); assert(picker.querySelector('.cp-null-btn').classList.contains('active'));
       assert(application.state.backgroundColor === '#FFFFFF');
       application.selectMany([elements[3].id, state.createElement('exit').id]);
-      assert(!query('[data-scope="元素背景色"]'), '出口不应提供背景色编辑');
+      assert(query('[data-scope="元素背景色"]'), '单独选择出口时也应提供背景色编辑');
     });
     await test('右栏对齐按钮直接切换，混合值不选中，四向内边距直接显示', function () {
       application.select(elements[4].id);
@@ -232,31 +241,36 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
       pointer('pointerdown', trigger, 100); pointer('pointermove', editorDocument, -100); pointer('pointerup', editorDocument, -100);
       assert(trigger.querySelector('.padding-current').textContent === '0');
     });
-    await test('矢量和图片导出保留尺寸、其他元素颜色与出口透明底色', async function () {
+    await test('矢量和图片导出保留出口自选背景色，设为透明时透出行底色', async function () {
       application.selectMany(elements.map(function (element) { return element.id; })); application.setBackgroundColor('#2468AC');
       application.update(function (sign) {
         return state.updateRowSettings(sign, sign.rows[0].id, { backgroundColor: '#183450' });
       });
+      application.select(elements[3].id);
       var fonts = await editorWindow.SignExporters.ensureFontData(application.state);
-      var source = editorWindow.SignExporters.buildExportSVGString(application.state, application.measure, fonts);
-      assert(source.includes('#2468AC') && !source.includes('#F7D917'));
-      assert(source.includes('>出口</text>') && source.includes('>Exit</text>'));
-      assert(!source.includes('padding-current') && !source.includes('element-toolbar'));
-      var image = await editorWindow.SignExporters.rasterizePNG(source, application.layout);
-      var bitmap = await editorWindow.createImageBitmap(image);
-      try {
-        assert(bitmap.width === application.layout.width && bitmap.height === application.layout.height);
-        var canvas = editorDocument.createElement('canvas');
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
-        var canvasContext = canvas.getContext('2d');
-        canvasContext.drawImage(bitmap, 0, 0);
-        var row = application.layout.rows[0];
-        var exitPosition = row.elements[3];
-        var pixel = canvasContext.getImageData(Math.floor(exitPosition.x) + 1, row.y + 1, 1, 1).data;
-        assert(Array.from(pixel).join(',') === '24,52,80,255', '图片中的出口应透出行底色');
-      } finally {
-        bitmap.close();
+      for (var [color, expectedPixel] of [[null, '24,52,80,255'], ['#126684', '18,102,132,255']]) {
+        application.setBackgroundColor(color);
+        var source = editorWindow.SignExporters.buildExportSVGString(application.state, application.measure, fonts);
+        assert(source.includes('#2468AC') && source.includes('>出口</text>') && source.includes('>Exit</text>'));
+        var drawing = new editorWindow.DOMParser().parseFromString(source, 'image/svg+xml');
+        var background = drawing.querySelectorAll('g.element')[3].querySelector('rect');
+        assert((background?.getAttribute('fill') ?? null) === color, '矢量文件中的出口背景色有误');
+        assert(!source.includes('padding-current') && !source.includes('element-toolbar'));
+        var image = await editorWindow.SignExporters.rasterizePNG(source, application.layout);
+        var bitmap = await editorWindow.createImageBitmap(image);
+        try {
+          assert(bitmap.width === application.layout.width && bitmap.height === application.layout.height);
+          var canvas = editorDocument.createElement('canvas');
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          var canvasContext = canvas.getContext('2d');
+          canvasContext.drawImage(bitmap, 0, 0);
+          var box = application.layout.rows[0].elements[3].box;
+          var pixel = canvasContext.getImageData(Math.floor(box.x) + 1, Math.floor(box.y) + 1, 1, 1).data;
+          assert(Array.from(pixel).join(',') === expectedPixel, '图片中的出口背景色有误');
+        } finally {
+          bitmap.close();
+        }
       }
     });
     await test('导向项目可下载、导入并撤销，错误文件保留项目和撤销记录', async function () {

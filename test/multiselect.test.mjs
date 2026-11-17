@@ -17,10 +17,10 @@ function harness() {
 }
 const plain = value => JSON.parse(JSON.stringify(value));
 
-test('批量背景色覆盖所有可设色类型，跳过出口并保留未选中元素', () => {
+test('批量设置背景色包含出口，未选中的元素保持原色', () => {
   const { A: application, S: state } = harness();
-  const editableTypes = ['arrow', 'bilingual-text', 'small-bilingual-text', 'big-number', 'number-line', 'text-line', 'entrance', 'space', 'icon'];
-  const elements = editableTypes.concat('exit', 'icon').map(type => state.createElement(type));
+  const editableTypes = ['arrow', 'bilingual-text', 'small-bilingual-text', 'big-number', 'number-line', 'text-line', 'entrance', 'space', 'icon', 'exit'];
+  const elements = editableTypes.concat('icon').map(type => state.createElement(type));
   let sign = state.createSign();
   elements.forEach(element => { sign = state.addElement(sign, sign.rows[0].id, element); });
   application.state = state.applyPaddingAuto(sign);
@@ -29,7 +29,6 @@ test('批量背景色覆盖所有可设色类型，跳过出口并保留未选�
   assert.equal(application.backgroundColorValue(), null);
   application.setBackgroundColor('#123456');
   editableTypes.forEach((type, index) => assert.equal(state.findElement(application.state, elements[index].id).element.props.backgroundColor, '#123456', type));
-  assert.equal(state.findElement(application.state, elements[9].id).element.props.backgroundColor, null);
   assert.equal(state.findElement(application.state, elements[10].id).element.props.backgroundColor, null);
   assert.equal(application.backgroundColorValue(), '#123456');
   assert.equal(application.state.backgroundColor, '#FFFFFF');
@@ -41,8 +40,10 @@ test('批量背景色覆盖所有可设色类型，跳过出口并保留未选�
   assert.equal(application.backgroundColorValue(), null);
   assert.equal(state.findElement(application.state, elements[9].id).element.props.backgroundColor, null);
   application.selectMany([elements[9].id]);
+  application.setBackgroundColor('#abc');
+  assert.equal(application.backgroundColorValue(), '#AABBCC');
   const fixed = application.state;
-  application.setBackgroundColor('#ABCDEF');
+  application.setBackgroundColor('无效颜色');
   assert.equal(application.state, fixed);
 });
 

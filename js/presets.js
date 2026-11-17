@@ -20,18 +20,9 @@
       if (!raw) return [];
       var data = JSON.parse(raw);
       if (!Array.isArray(data)) return [];
-      var presets = data.filter(function (preset) {
+      return data.filter(function (preset) {
         return preset && typeof preset.name === 'string' && Array.isArray(preset.elements);
       });
-      // 旧预设里的出口底色来自当时的固定设置。
-      presets.forEach(function (preset) {
-        preset.elements.forEach(function (element) {
-          if (element?.type === 'exit' && element.props?.backgroundColor) {
-            element.props.backgroundColor = null;
-          }
-        });
-      });
-      return presets;
     } catch (e) {
       return [];
     }

@@ -633,9 +633,7 @@
     props.padding = sanitizePadding(props.padding);
     props.paddingAuto = el.type === 'space' ? false : savedAuto;
     if (props.color !== undefined) props.color = sanitizeColor(props.color, '#000000');
-    if (el.type === 'exit') {
-      props.backgroundColor = null;
-    } else if (props.backgroundColor !== undefined && props.backgroundColor !== null) {
+    if (props.backgroundColor !== undefined && props.backgroundColor !== null) {
       props.backgroundColor = sanitizeColor(props.backgroundColor, null);
     }
     if (props.elementAlign !== 'center' && props.elementAlign !== 'right') props.elementAlign = 'left';

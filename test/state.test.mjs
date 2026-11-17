@@ -497,38 +497,40 @@ test('新建出口时背景透明', () => {
   assert.equal(exit.props.backgroundColor, null);
 });
 
-test('打开旧项目时清除出口底色，保留出口文字和其他元素颜色', () => {
+test('项目导入保留显式出口背景色，规范颜色并兼容透明的旧出口', () => {
   const project = S.deserializeSign({
     rows: [{ id: 'row', elements: [
-      { id: 'exit', type: 'exit', props: { code: 'C', align: 'right', color: '#222222', backgroundColor: '#F7D917' } },
+      { id: 'exit', type: 'exit', props: { code: 'C', align: 'right', color: '#222222', backgroundColor: '#abc' } },
       { id: 'entrance', type: 'entrance', props: { backgroundColor: '#F7D917' } },
+      { id: 'transparent-exit', type: 'exit', props: { code: 'D' } },
+      { id: 'invalid-exit', type: 'exit', props: { code: 'E', backgroundColor: '无效颜色' } },
     ] }],
   });
-  const [exit, entrance] = project.rows[0].elements;
-  assert.equal(exit.props.backgroundColor, null);
+  const [exit, entrance, transparent, invalid] = project.rows[0].elements;
+  assert.equal(exit.props.backgroundColor, '#AABBCC');
   assert.equal(exit.props.code, 'C');
   assert.equal(exit.props.align, 'right');
   assert.equal(exit.props.color, '#222222');
   assert.equal(entrance.props.backgroundColor, '#F7D917');
+  assert.equal(transparent.props.backgroundColor, null);
+  assert.equal(invalid.props.backgroundColor, null);
   assert.deepEqual(S.deserializeSign(S.serializeSign(project)), project);
 });
 
-test('粘贴旧版出口时清除底色并保留编号', () => {
+test('复制粘贴出口保留选定的背景色和编号', () => {
   const project = S.createSign();
-  const clipboard = JSON.stringify({
-    kind: 'jr-sign-elements', version: 1,
-    rows: [{ offset: 0, elements: [
-      { id: 'exit', type: 'exit', props: { code: 'D', backgroundColor: '#F7D917' } },
-    ] }],
-  });
+  const original = S.createElement('exit', { code: 'D', backgroundColor: '#F7D917' });
+  const source = S.addElement(project, project.rows[0].id, original);
+  const clipboard = S.serializeElements(source, [original.id]);
   const pasted = S.pasteElements(project, clipboard, project.rows[0].id);
   const [exit] = pasted.rows[0].elements;
-  assert.equal(exit.props.backgroundColor, null);
+  assert.equal(exit.props.backgroundColor, '#F7D917');
   assert.equal(exit.props.code, 'D');
+  assert.notEqual(exit.id, original.id);
   assert.equal(project.rows[0].elements.length, 0);
 });
 
-test('读取旧预设时只清除出口底色，应用时保留其他元素颜色', () => {
+test('读取和应用预设时保留出口背景色和其他元素颜色', () => {
   const stored = JSON.stringify([{
     id: 'older-preset', name: '旧预设', elements: [
       { id: 'exit', type: 'exit', props: { code: 'E', backgroundColor: '#F7D917' } },
@@ -539,7 +541,7 @@ test('读取旧预设时只清除出口底色，应用时保留其他元素颜�
   const browser = { SignCore: Core, SignState: S, localStorage: { getItem: () => stored } };
   runInNewContext(readFileSync(filename, 'utf8'), browser, { filename });
   const [exit, entrance] = browser.SignPresets.materialize('older-preset');
-  assert.equal(exit.props.backgroundColor, null);
+  assert.equal(exit.props.backgroundColor, '#F7D917');
   assert.equal(exit.props.code, 'E');
   assert.notEqual(exit.id, 'exit');
   assert.equal(entrance.props.backgroundColor, '#F7D917');
