@@ -558,19 +558,22 @@
         }
         bitmap.close();
       }
-      restore();var before=S.serialize(A.state),downloads=[],old=A.download;
+      restore();var before=S.serialize(A.state),downloads=[],old=A.download, previousScale=$('png-scale').value;
       A.download=function(blob,name){downloads.push({blob:blob,name:name});};
       try {
         input('png-scale','4','change');$('export-png').click();await waitFor(function(){return downloads.length===1;});
         var image=await w.createImageBitmap(downloads[0].blob);assert(image.width===3072&&image.height===768);image.close();
         assert(S.serialize(A.state)===before,'高清导出不应修改标识牌尺寸或状态');
         assert($('platform-notice').textContent.includes('3072 × 768'),'导出提示应显示实际 PNG 尺寸');
-      } finally { A.download=old;$('png-scale').value='1'; }
+      } finally { A.download=old;$('png-scale').value=previousScale; }
     });
-    await test('真实 PNG/SVG/项目按钮均生成可用文件，项目可以往返', async function () {
+    await test('真实 PNG 默认导出 2 倍尺寸，SVG 和项目按钮可正常导出', async function () {
       var downloads = [], old = A.download; A.download = function (blob, name) { downloads.push({ blob: blob, name: name }); };
       try { $('export-svg').click(); await waitFor(function () { return downloads.length === 1; }); $('export-png').click(); await waitFor(function () { return downloads.length === 2; }); $('save-project').click(); assert(downloads.length === 3);
         assert(downloads[0].name.endsWith('.svg') && downloads[0].blob.size > 1000); assert(downloads[1].name.endsWith('.png') && downloads[1].blob.size > 1000); assert(JSON.stringify(S.deserialize(await downloads[2].blob.text())) === JSON.stringify(A.state));
+        var size = A.state.sizes[A.state.mode], image = await w.createImageBitmap(downloads[1].blob);
+        try { assert(image.width === 2 * size.width && image.height === 2 * size.height, '默认 PNG 应为 2 倍尺寸'); }
+        finally { image.close(); }
       } finally { A.download = old; }
     });
     await test('文件选择导入项目恢复版式、尺寸、站点，非法文件不覆盖当前项目', async function () {
@@ -839,12 +842,13 @@
     await test('自定义底纹：导入矢量图和透明图片，坏文件保留已选纹样，项目与预设可载回', async function () {
       restore(); A.deselect();
       $('line-pattern-enabled').click();
+      assert($('line-pattern-import').textContent === '上传底纹');
       var artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">' +
         '<rect width="30" height="40" fill="white"/><script>window.linePatternScriptRan=true;</' + 'script></svg>';
       chooseFile('line-pattern-file', new w.File([artwork], '纹样.svg', { type: 'image/svg+xml' }));
       await waitFor(function () { return A.state.linePattern.source === 'custom'; });
       var image = A.state.linePattern.image;
-      assert($('line-pattern-import').textContent === '更换图片');
+      assert($('line-pattern-import').textContent === '更换底纹');
       $('line-pattern-enabled').click();
       assert(!A.state.linePattern.enabled && A.state.linePattern.image === image);
       $('line-pattern-enabled').click();

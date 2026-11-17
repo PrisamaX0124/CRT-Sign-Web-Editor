@@ -217,7 +217,7 @@
           </div>
         </div>
         <div class="field-pair">
-          <button type="button" class="btn" id="line-pattern-import" aria-describedby="line-pattern-file-help">上传图片</button>
+          <button type="button" class="btn" id="line-pattern-import" aria-describedby="line-pattern-file-help">上传底纹</button>
           <button type="button" class="btn" id="line-pattern-clear" data-control-icon="delete" hidden>移除图片</button>
         </div>
         <input id="line-pattern-file" type="file" accept=".png,.svg,image/png,image/svg+xml" hidden>
@@ -291,7 +291,7 @@
       field('size-value').textContent = pattern.size + '%';
       field('opacity-value').textContent = pattern.opacity + '%';
       field('values').hidden = !design && pattern.source !== 'custom';
-      field('import').textContent = pattern.image ? '更换图片' : '上传图片';
+      field('import').textContent = pattern.image ? '更换底纹' : '上传底纹';
       field('clear').hidden = !pattern.image;
       field('credit').hidden = !design;
       field('status').textContent = pattern.source === 'automatic'

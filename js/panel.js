@@ -661,7 +661,7 @@
     // 导出前按需加载实际使用的内嵌字体，加载期间按钮保持忙碌态，
     // 避免慢网络下「点了没反应」；失败由导出函数 toast 错误。
     function exportButton(text, run) {
-      var btn = h('button', { class: 'btn btn-primary', text: text });
+      var btn = h('button', { type: 'button', class: 'btn', text: text });
       btn.addEventListener('click', function () {
         if (btn.disabled) return;
         var original = btn.textContent;
@@ -672,18 +672,19 @@
       });
       return btn;
     }
-    root.appendChild(exportButton('⬇ 导出 SVG', function () {
-      return SignExporters.exportSVGFile(App.state, App.measure);
-    }));
     var imageActions = h('div', { class: 'image-upload-pair' });
     var downloadImage = exportButton('⬇ 导出 PNG', function () {
       return SignExporters.exportPNGFile(App.state, App.measure);
     });
+    downloadImage.classList.add('btn-primary');
     imageActions.appendChild(downloadImage);
     global.ImageUploadDialog.addButton(downloadImage, function () {
       return SignExporters.createImage(App.state, App.measure).then(function (result) { return result.image; });
     });
     root.appendChild(imageActions);
+    root.appendChild(exportButton('⬇ 导出 SVG', function () {
+      return SignExporters.exportSVGFile(App.state, App.measure);
+    }));
 
     root.appendChild(h('div', { class: 'divider' }));
     root.appendChild(h('div', { class: 'section-title', text: '项目' }));

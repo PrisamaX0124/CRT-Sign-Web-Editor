@@ -228,9 +228,10 @@
           assert(colorChannels(appearance.backgroundColor)[3] === 0 && appearance.boxShadow === 'none', '仓库按钮应无底色和阴影');
           const border = colorChannels(appearance.borderTopColor);
           const text = colorChannels(appearance.color);
+          const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
           assert(appearance.borderTopStyle === 'solid' && parseFloat(appearance.borderTopWidth) > 0 &&
             border[3] >= 40 && border[3] <= 100 && border[2] > border[0], '仓库按钮应有淡蓝灰色描边');
-          assert(text[3] === 255 && text[2] > text[0] && text[2] < 150, '文字应略带蓝灰色并保持清楚');
+          assert(text[3] === 255 && text[2] > text[0] && (dark ? text[0] > 150 : text[2] < 150), '文字应随主题切换并保持清楚');
           const left = navigation.getBoundingClientRect();
           const right = repository.getBoundingClientRect();
           assert(left.left >= 0 && left.right < right.left && right.right <= width + 1, '两组入口应在页眉左右且完整显示');
@@ -454,14 +455,19 @@
           await repaint(window);
         });
 
-        await test(editor.name + (editor.path === 'index.html' ? '：删除用红色垃圾桶，清空用白色圆形叉号' : '：删除按钮使用白底红色垃圾桶'), async function () {
+        await test(editor.name + '的删除按钮随主题切换，保留红色垃圾桶', async function () {
           const guide = editor.path === 'index.html';
+          const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
           select();
           const remove = document.querySelector(guide ? '#right-panel-body [data-control-icon="delete"]' : '#station-delete');
-          assert(remove && window.getComputedStyle(remove).backgroundColor === 'rgb(255, 255, 255)', '删除按钮应为白底');
+          assert(remove, '缺少删除按钮');
+          const background = window.getComputedStyle(remove).backgroundColor;
+          const channels = background.match(/\d+/g).slice(0, 3).map(Number);
+          assert(dark ? Math.max(...channels) < 100 : background === 'rgb(255, 255, 255)', '删除按钮底色应随主题切换');
           const trash = window.getComputedStyle(remove, '::before');
           const trashIcon = trash.maskImage;
-          assert(trash.backgroundColor === 'rgb(255, 56, 60)' && trashIcon !== 'none', '删除应使用系统红垃圾桶');
+          const [red, green, blue] = trash.backgroundColor.match(/\d+/g).map(Number);
+          assert(red > green && red > blue && trashIcon !== 'none', '删除应使用红色垃圾桶');
           deselect();
           if (!guide) return;
           const clear = document.querySelector('#right-panel-body [data-control-icon="clear"]');
@@ -576,7 +582,7 @@
         deselect();
       });
 
-      await test(editor.name + '：色板展开时跟随内容高度，快速开合后保持可用', async function () {
+      await test(editor.name + '的右栏色板每行八个色块，快速开合后保持可用', async function () {
         deselect();
         if (editor.path.includes('transfer')) select();
         const button = document.querySelector(editor.palette);
@@ -591,6 +597,9 @@
         button.click();
         await finishAnimations(animations(options));
         assert(!options.hidden && options.getBoundingClientRect().height > 30 && options.querySelector('.cp-swatch'), '再次展开后应完整显示色块');
+        const swatches = Array.from(options.querySelectorAll('.cp-swatch'), swatch => swatch.getBoundingClientRect());
+        assert(swatches.length > 8 && swatches.slice(0, 8).every(swatch => swatch.top === swatches[0].top) &&
+          swatches[8].top > swatches[0].top, '右侧栏每排应有八个色块');
         button.click();
         await finishAnimations(animations(options));
         assert(window.getComputedStyle(options).display === 'none', '收起后应释放占用空间');

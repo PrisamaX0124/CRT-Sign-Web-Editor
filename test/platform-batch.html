@@ -141,9 +141,12 @@
       return openRequest.call(this, method, address, ...options);
     };
 
-    await test('默认使用当前版式并选中全部站点，可全选、取消全选和手动选择', async () => {
+    await test('批量入口有图标，沿用当前版式和 2 倍尺寸，可调整站点选择', async () => {
+      const trigger = find('#open-batch-generation');
+      assert(editor.getComputedStyle(trigger, '::before').maskImage !== 'none', '批量生成按钮缺少图标');
       open();
       assert(control('layout').value === 'station', '默认版式应为本站吊板');
+      assert(control('scale').value === '2', '批量导出应沿用默认的 2 倍尺寸');
       assert(control('direction').selectedOptions[0].textContent.includes('首站'), '当前方向应前往首站');
       assert(control('station-count').textContent.includes('3 / 3'), '默认应选中全部站点');
       const inputs = all('#batch-generation-stations input');

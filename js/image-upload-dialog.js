@@ -12,7 +12,7 @@
     dialog.setAttribute('aria-labelledby', 'image-upload-heading');
     dialog.innerHTML = `
       <header class="image-upload-heading">
-        <h2 id="image-upload-heading">上传图片</h2>
+        <h2 id="image-upload-heading">上传到图床</h2>
         <button type="button" class="icon-btn" aria-label="关闭图片上传">×</button>
       </header>
       <label class="image-upload-field">
@@ -224,8 +224,10 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn';
-    button.textContent = '上传图片';
+    button.dataset.controlIcon = 'upload';
     button.dataset.openImageUpload = '';
+    button.title = '上传到图床…';
+    button.setAttribute('aria-label', button.title);
     button.setAttribute('aria-haspopup', 'dialog');
     button.addEventListener('click', () => {
       if (!windowControls) windowControls = createDialog();

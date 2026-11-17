@@ -319,8 +319,10 @@
     await test('第三条线路可上传自己的底纹，损坏文件或切换选择时不会覆盖其他线路', async () => {
       const artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="4" cy="4" r="3" fill="white"/></svg>';
       line('third');
+      assert(element('#line-pattern-import').textContent === '上传底纹', '应显示上传底纹');
       chooseFile('纹样.svg', artwork, 'image/svg+xml');
       await waitFor(() => element('#line-pattern-source').value === 'custom');
+      assert(element('#line-pattern-import').textContent === '更换底纹', '已有底纹时应显示更换底纹');
       assert(element('#transfer-sign').querySelectorAll('pattern image[href^="data:image/png"]').length === 1, '图片铺到了其他色带');
       chooseFile('损坏.png', '无法打开的图片', 'image/png');
       await waitFor(() => element('#transfer-status').textContent.includes('导入失败'));

@@ -5,10 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 导向标识</title>
-  <link rel="stylesheet" href="style.css?v=df1145d95c86">
+  <link rel="stylesheet" href="style.css?v=49c897879d3a">
   <link rel="stylesheet" href="platform.css?v=652d04fe3cb3">
   <link rel="stylesheet" href="transfer.css?v=67436dc29216">
-  <link rel="stylesheet" href="image-upload.css?v=7510603becc0">
+  <link rel="stylesheet" href="image-upload.css?v=2d9a1dc337a4">
 </head>
 <body class="editor-page">
 
@@ -282,7 +282,9 @@
         </section>
       </div>
       <div class="transfer-export">
-        <button type="button" class="btn btn-primary" id="transfer-export-image">导出 PNG</button>
+        <div class="image-upload-pair">
+          <button type="button" class="btn btn-primary" id="transfer-export-image">导出 PNG</button>
+        </div>
         <button type="button" class="btn" id="transfer-export-vector">导出 SVG</button>
         <button type="button" class="btn" id="transfer-export-project">导出项目 JSON</button>
         <button type="button" class="btn" id="transfer-import-project">导入项目 JSON</button>
@@ -311,9 +313,9 @@
   <script src="js/storage.js?v=5156bc2ae677"></script>
   <script src="js/exporters.js?v=a4522744c2b1"></script>
   <script src="js/image-upload.js?v=7a2caa6e67ea"></script>
-  <script src="js/image-upload-dialog.js?v=4141c1eb4394"></script>
+  <script src="js/image-upload-dialog.js?v=0349bbf99982"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
-  <script src="js/panel.js?v=c4b0f8dc9561"></script>
+  <script src="js/panel.js?v=7dba347f55be"></script>
   <script src="js/interact.js?v=cc637cbff293"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
@@ -329,7 +331,7 @@
   <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
   <script src="js/main.js?v=e412c4bd5878"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
-  <script src="js/platform/patterns.js?v=921404baed81"></script>
+  <script src="js/platform/patterns.js?v=cc2c94583c53"></script>
   <script src="js/transfer/state.js?v=6892c96cc48e"></script>
   <script src="js/transfer/render.js?v=2e7d9e52f7ae"></script>
   <script src="js/transfer/main.js?v=ed82329306dc"></script>

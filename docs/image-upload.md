@@ -1,6 +1,6 @@
 # 上传图片并复制地址
 
-1. 在「导出 PNG」旁点「上传图片」，选择 ImgBB、Freeimage.host 或「两家同时上传」。首次默认选 ImgBB，之后沿用上次选择。
+1. 在「导出 PNG」旁点「上传到图床…」图标，选择 ImgBB、Freeimage.host 或「两家同时上传」。首次默认选 ImgBB，之后沿用上次选择。
 2. 展开「图床设置」，填入密钥。ImgBB 要先登录官网，再在接口页点「Get API key」。Freeimage.host 的公开密钥在官方接口页，并需要填写你信任的 HTTPS 转发地址。可只用 ImgBB。[ImgBB 官方接口页](https://api.imgbb.com/) · [Freeimage.host 官方接口页](https://freeimage.host/api)
 3. 点「上传并复制图片地址」。上传使用原尺寸 PNG，ImgBB 上限为 32 MB。第一条成功返回的原图地址会尝试自动复制。每条地址旁都有「复制」，上传失败的一家可以单独「重试」。游戏里可以使用 ImgBB 的 `i.ibb.co` 地址或 Freeimage.host 的 `iili.io` 地址。
 

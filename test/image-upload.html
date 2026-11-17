@@ -97,6 +97,21 @@
   try {
     keys.forEach(name => localStorage.removeItem(name));
     for (const { name, address, graphic } of editors) {
+      await test(name + '的上传图标紧邻 PNG，空心 SVG 按钮单独排在下方', async () => {
+        await open(address);
+        const uploadButton = find('[data-open-image-upload]');
+        const downloadButton = uploadButton.previousElementSibling;
+        const vectorButton = uploadButton.parentElement.nextElementSibling;
+        assert(uploadButton.getAttribute('aria-label') === '上传到图床…' && uploadButton.title === '上传到图床…', '上传图标应有可读名称和提示');
+        assert(!uploadButton.textContent.trim() && editor.getComputedStyle(uploadButton, '::before').maskImage !== 'none', '上传按钮应以图标显示');
+        const upload = uploadButton.getBoundingClientRect();
+        const download = downloadButton.getBoundingClientRect();
+        assert(downloadButton.textContent.includes('导出 PNG') && downloadButton.classList.contains('btn-primary'), 'PNG 应保留主按钮样式');
+        assert(Math.abs(download.top - upload.top) < 1 && download.right <= upload.left && download.width > 3 * upload.width, 'PNG 和上传图标应同排，PNG 应占大部分宽度');
+        const vector = vectorButton.getBoundingClientRect();
+        assert(vectorButton.textContent.includes('导出 SVG') && !vectorButton.classList.contains('btn-primary') &&
+          vector.top >= upload.bottom && Math.abs(vector.width - (upload.right - download.left)) < 1, 'SVG 应使用下面一整排的空心按钮');
+      });
       await test(name + '从导出区上传原尺寸图片，自动复制 ImgBB 原图地址', async () => {
         await open(address);
         const exportButton = find('[data-open-image-upload]').previousElementSibling;

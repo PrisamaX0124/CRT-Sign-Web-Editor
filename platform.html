@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 站台标识</title>
-  <link rel="stylesheet" href="style.css?v=df1145d95c86">
+  <link rel="stylesheet" href="style.css?v=49c897879d3a">
   <link rel="stylesheet" href="platform.css?v=32f5abbaebb5">
-  <link rel="stylesheet" href="image-upload.css?v=7510603becc0">
+  <link rel="stylesheet" href="image-upload.css?v=2d9a1dc337a4">
 </head>
 <body class="editor-page platform-page">
   <header class="editor-header">
@@ -194,12 +194,12 @@
           <section class="panel-section platform-section" id="line-pattern-section"></section>
           <section class="panel-section platform-section">
             <h2 class="section-title">导出</h2>
-            <div class="field"><label for="png-scale">PNG 图片尺寸</label><select id="png-scale"><option value="1">原尺寸（1 倍）</option><option value="2">2 倍尺寸</option><option value="4">4 倍尺寸</option></select></div>
-            <div class="field-pair">
+            <div class="field"><label for="png-scale">PNG 图片尺寸</label><select id="png-scale"><option value="1">原尺寸（1 倍）</option><option value="2" selected>2 倍尺寸</option><option value="4">4 倍尺寸</option></select></div>
+            <div class="image-upload-pair">
               <button id="export-png" class="btn btn-primary">导出 PNG</button>
             </div>
-            <button id="export-svg" class="btn btn-primary">导出 SVG</button>
-            <button type="button" id="open-batch-generation" class="btn">批量生成</button>
+            <button id="export-svg" class="btn">导出 SVG</button>
+            <button type="button" id="open-batch-generation" class="btn" data-control-icon="batch-generate">批量生成</button>
           </section>
           <section class="panel-section platform-section">
             <h2 class="section-title">项目</h2>
@@ -344,7 +344,7 @@
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
   <script src="js/exporters.js?v=54135fa606d4"></script>
   <script src="js/image-upload.js?v=7a2caa6e67ea"></script>
-  <script src="js/image-upload-dialog.js?v=4141c1eb4394"></script>
+  <script src="js/image-upload-dialog.js?v=0349bbf99982"></script>
   <script src="js/platform/state.js?v=9498b91f4a81"></script>
   <script src="js/platform/reference.js?v=public-80b402bac929"></script>
   <script src="js/platform/vertical-reference.js?v=public-a036244575d0"></script>
@@ -355,7 +355,7 @@
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
   <script src="js/platform/clipboard.js?v=public-15d857755771"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
-  <script src="js/platform/patterns.js?v=921404baed81"></script>
+  <script src="js/platform/patterns.js?v=cc2c94583c53"></script>
   <script src="js/storage.js?v=5156bc2ae677"></script>
   <script src="vendor/zip.min.js?v=2.25.0"></script>
   <script src="js/platform/batch.js?v=724d7c263f95"></script>

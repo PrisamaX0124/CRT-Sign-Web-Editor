@@ -76,6 +76,10 @@ dialog.pm-dialog { width: min(860px, calc(100vw - 32px)); height: min(660px, cal
   --danger: #a83737;
   --danger-fill: #a83737;
   --delete-red: #ff383c;
+  --delete-background: #fff;
+  --delete-hover-background: #fff1f1;
+  --delete-text: #321e20;
+  --delete-border: #ebbbbb;
   --clear-red: #e9152d;
   --ok: #3c6650;
   --panel-width: 260px;
@@ -981,6 +985,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   gap: 5px;
   margin-top: 8px;
 }
+.editor-right .cp-swatches { grid-template-columns: repeat(8, minmax(0, 1fr)); }
 .cp-city-select {
   flex: 1;
   min-width: 0;
@@ -1626,6 +1631,11 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
     --selection: #aebfda;
     --selection-soft: #aebfda14;
     --danger: #ee9292;
+    --delete-red: #ff8388;
+    --delete-background: #352629;
+    --delete-hover-background: #4a2b31;
+    --delete-text: #ffb7bc;
+    --delete-border: #6a454a;
   }
   .palette-card, .preset-card { background: var(--surface-soft); }
   .modal { background: var(--panel-bg); }
@@ -1666,12 +1676,18 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a9 9 0 1 1-2.26-6.26L21 8m0-5v5h-5'/%3E%3C/svg%3E");
 }
 [data-control-icon="turn-counterclockwise"]::before { transform: scaleX(-1); }
+[data-control-icon="upload"] {
+  --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 16V4m-5 5 5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4'/%3E%3C/svg%3E");
+}
+[data-control-icon="batch-generate"] {
+  --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='7' y='3' width='13' height='13' rx='2'/%3E%3Cpath d='M4 7v12a2 2 0 0 0 2 2h12M13.5 6.5v6m-3-3h6'/%3E%3C/svg%3E");
+}
 button[data-control-icon="delete"] {
   --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 10v7m4-7v7'/%3E%3C/svg%3E");
   --control-ink: var(--delete-red);
-  --action-surface: #fff;
-  --action-text: #321e20;
-  --action-border: #ebbbbb;
+  --action-surface: var(--delete-background);
+  --action-text: var(--delete-text);
+  --action-border: var(--delete-border);
 }
 button[data-control-icon="clear"] {
   --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Cpath fill='white' d='M452.8 24.8C315.2 39.2 176.8 127.2 96 251.2c-51.2 77.6-74.4 160-73.6 260.8 0 136 46.4 249.6 138.4 343.2 97.6 99.2 211.2 146.4 351.2 147.2 72.8 0 92.8-3.2 152-24 202.4-69.6 336-249.6 337.6-454.4 1.6-90.4-10.4-141.6-51.2-228-45.6-96-129.6-179.2-224-224-96-44.8-171.2-57.6-273.6-47.2z m-24 336.8L512 443.2l83.2-81.6c45.6-44.8 88.8-81.6 96-81.6 17.6 0 52.8 35.2 52.8 52.8 0 7.2-36.8 50.4-81.6 96L580.8 512l81.6 83.2C707.2 640.8 744 681.6 744 686.4c0 20.8-20 50.4-37.6 54.4-24 6.4-45.6-8-124.8-85.6-35.2-34.4-67.2-63.2-69.6-63.2-2.4 0-30.4 24-60.8 53.6C374.4 720.8 344.8 744 328 744c-19.2 0-48-30.4-48-50.4 0-9.6 34.4-50.4 81.6-98.4L443.2 512 361.6 428.8C316.8 383.2 280 340 280 332.8c0-17.6 35.2-52.8 52.8-52.8 7.2 0 50.4 36.8 96 81.6z'/%3E%3C/svg%3E");
@@ -1679,7 +1695,7 @@ button[data-control-icon="clear"] {
   --action-text: #fff;
   --action-border: var(--clear-red);
 }
-button[data-control-icon="delete"]:enabled:hover { --action-surface: #fff1f1; --action-border: var(--delete-red); }
+button[data-control-icon="delete"]:enabled:hover { --action-surface: var(--delete-hover-background); --action-border: var(--delete-red); }
 button[data-control-icon="clear"]:enabled:hover {
   --action-surface: color-mix(in srgb, var(--clear-red) 90%, black);
   --action-border: var(--action-surface);
