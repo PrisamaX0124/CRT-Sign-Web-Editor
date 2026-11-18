@@ -35,12 +35,26 @@
 }
 .station-item { display: flex; align-items: center; width: 100%; padding: 12px 10px; gap: 10px; border: 1px solid transparent; border-radius: 6px; text-align: left; margin: 3px 0; min-height: 64px; }
 .station-item:hover { background: var(--surface-soft); }
-.station-item[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.station-item:has(.station-select[aria-pressed="true"]) { border-color: var(--accent); }
+.station-item:has(.station-current:disabled) { background: var(--accent-soft); }
+.station-select { display: flex; flex: 1; min-width: 0; align-items: center; gap: 7px; text-align: left; }
+.station-current {
+  flex: none; width: 28px; height: 28px; border-radius: 5px; --control-icon-size: 17px;
+  color: var(--text-dim); opacity: 0; pointer-events: none;
+  transition: opacity var(--motion-control-duration) var(--motion-enter);
+}
+.station-item:hover .station-current, .station-item:has(:focus-visible) .station-current, .station-current:disabled {
+  opacity: 1; pointer-events: auto;
+}
+.station-current:enabled:hover { background: var(--control-bg); color: var(--text); }
+.station-current:disabled { background: var(--accent); color: var(--accent-text); cursor: default; }
+@media (hover: none) {
+  .station-item:has(.station-select[aria-pressed="true"]) .station-current { opacity: 1; pointer-events: auto; }
+}
 .station-item-code { min-width: 30px; height: 30px; padding: 0 3px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--border); color: var(--text-dim); font-size: 12px; }
 .station-item-text { flex: 1; min-width: 0; }
 .station-item-text strong { display: block; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .station-item-text small { display: block; font-size: 10px; color: var(--text-dim); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.station-item-tag { font-size: 10px; color: var(--accent); flex: none; }
 .station-list-actions { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
 .station-list-actions .btn { margin: 0; padding: 8px; }
 .platform-preview { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -98,11 +112,20 @@
 .line-pattern-adjustment .icon-btn { display: grid; place-items: center; width: 36px; height: 36px; flex: none; }
 .line-pattern-adjustment svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 #current-station-label { color: var(--accent); font-size: 11px; }
-#transfer-colors:not(:empty) { display: grid; gap: 8px; margin-bottom: 10px; }
+#transfer-count { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+.transfer-add-number { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-bottom: 6px; }
+.transfer-add-number input { min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--control-bg); }
+.transfer-add-number .btn { margin: 0; white-space: nowrap; }
+#add-text-transfer { margin-bottom: 10px; }
+#transfer-colors:not(:empty) { display: grid; gap: 8px; margin-bottom: 8px; }
 .transfer-color { display: grid; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
 .transfer-color-label { color: var(--text); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
-.text-transfer-fields { display: grid; gap: 8px; }
-.text-transfer-fields .field { margin: 0; }
+.transfer-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.transfer-remove { width: 28px; height: 28px; border-radius: 5px; --control-icon-size: 16px; }
+.transfer-color .field { margin: 0; }
+#transfer-bulk { margin-top: 10px; font-size: 11px; color: var(--text-dim); }
+#transfer-bulk summary { cursor: pointer; }
+#transfer-bulk .field { margin: 6px 0 0; }
 #move-selection { margin-bottom: 8px; }
 #font-scale-label { float: right; }
 #batch-dialog { margin: auto; width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 24px; background: var(--panel-bg); color: var(--text); border: 1px solid var(--border); border-radius: 12px; overflow: auto; }

@@ -30,7 +30,9 @@
     input.dispatchEvent(new frame.contentWindow.Event(event, { bubbles: true }));
   }
   function mode(value) { editor.querySelector('[data-mode="' + value + '"]').click(); }
-  function reset() { app.deselect(); app.update(() => project); }
+  function tab(name) { editor.querySelector('[data-property-tab-button="' + name + '"]').click(); }
+  function icon(control, name) { return control.dataset.controlIcon === name && control.title && !control.textContent.trim(); }
+  function reset() { app.deselect(); app.update(() => project); tab('edit'); }
   async function test(name, run) {
     const result = document.createElement('li');
     try {
@@ -58,12 +60,12 @@
       assert(editor.title === 'CRT标识编辑器 - 站台标识', '站台标识网页标题有误');
     });
 
-    await test('整牌设置按尺寸、线路、牌面颜色、底纹、导出和项目排列，共用一处滚动区', function () {
-      const sections = Array.from(element('property-settings').children, section => section.querySelector('h2').textContent);
-      assert(sections.join('、') === '尺寸与排版、线路与行车方向、牌面颜色、线路底纹、导出、项目', '整牌设置的分组或顺序有误');
-      assert(!editor.querySelector('[data-property-view]') && !visible('return-to-settings'), '标题处应只显示标识牌设置');
-      element('export-png').scrollIntoView({ block: 'nearest' });
-      assert(element('property-scroll').scrollTop > 0 && visible('import-project'), '导出与项目应能在同一面板内滚到');
+    await test('整牌设置将常用线路控件放在首签，项目另有标签，图片导出固定', function () {
+      assert(visible('line-number') && visible('line-color-picker') && visible('hanging-length') && !visible('return-to-settings'), '首签应直接显示线路和尺寸');
+      tab('appearance');
+      assert(visible('line-pattern-enabled') && visible('palette-city') && !visible('line-number'), '外观应包含牌面配色与底纹');
+      tab('project');
+      assert(visible('import-project') && visible('export-png') && !element('property-scroll').contains(element('export-png')), '项目应可见，图片导出应在滚动区以外');
     });
 
     await test('三种版式只显示适用的尺寸和行车设置，自定义尺寸可直接输入', function () {
@@ -79,7 +81,9 @@
       app.undo();
       assert(app.state.sizes.route.width === 948, '一次撤销应恢复拖动前的自定义宽度');
       mode('station');
-      assert(visible('hanging-length') && visible('show-station-direction'), '本站吊板缺少短边或行车提示设置');
+      assert(visible('hanging-length'), '本站吊板缺少排版尺寸设置');
+      tab('edit');
+      assert(visible('show-station-direction'), '本站吊板缺少行车提示设置');
       mode('vertical');
       assert(!visible('hanging-length') && visible('vertical-variant') && visible('output-height') && element('output-width').readOnly, '纵向版式应直接显示尺寸且锁定宽度');
       change('vertical-variant', 'double');
@@ -90,13 +94,14 @@
       element('export-png').scrollIntoView({ block: 'nearest' });
       app.select(project.currentId);
       assert(element('property-heading').textContent === '站点属性', '选中站点后的标题有误');
-      assert(visible('station-properties') && visible('transfer-properties') && visible('element-properties') && visible('station-management'), '缺少站点相关分组');
-      assert(!visible('line-number') && !visible('export-png') && element('property-scroll').scrollTop === 0, '站点侧栏应从顶部显示相关属性');
+      assert(visible('station-properties') && visible('transfer-properties') && visible('element-properties') && visible('station-management'), '站点首签应显示内容、换乘、位置与站点操作');
+      assert(!visible('line-number') && visible('export-png') && element('property-scroll').scrollTop === 0, '站点侧栏应从顶部显示相关属性及固定导出区');
       element('return-to-settings').click();
       assert(!app.selectedKey && visible('line-number') && editor.activeElement === element('property-heading'), '返回时应清除选择并恢复键盘焦点');
     });
 
     await test('双语名称、换乘颜色和底纹修改保留原有输入框及展开状态', function () {
+      tab('appearance');
       element('line-pattern-enabled').click();
       const patternSource = element('line-pattern-source');
       change('line-pattern-source', 'line-10');
@@ -113,6 +118,52 @@
       assert(editor.activeElement === name && !palette.hidden && name.isConnected, '文字编辑时应保留焦点、输入框和已展开的色板');
       const station = app.state.stations.find(station => station.id === project.currentId);
       assert(station.transfers[1].nameZh === '郊区线' && station.en === 'Updated Station', '相邻字段的修改应一并保存');
+    });
+
+    await test('独立添加数字和文字线路，按线路修改编号、保存配色、删除及撤销', function () {
+      app.select(project.currentId);
+      assert(visible('new-transfer-number') && visible('add-number-transfer') && visible('add-text-transfer'), '首签应有单独的数字和文字线路入口');
+      const transfers = () => app.state.stations.find(station => station.id === project.currentId).transfers;
+      const submitNumber = number => {
+        change('new-transfer-number', number, 'input');
+        element('add-number-transfer').click();
+      };
+      submitNumber('10');
+      const row = element('transfer-colors').lastElementChild;
+      const input = row.querySelector('[data-transfer-field="number"]');
+      assert(input.value === '10' && transfers().at(-1).color === frame.contentWindow.SignCore.lineColorFor('10', 'chongqing').bg, '添加应自动匹配当前城市线路色');
+      const color = row.querySelector('.cp-native');
+      color.value = '#13579b';
+      color.dispatchEvent(new frame.contentWindow.Event('input', { bubbles: true }));
+      input.value = '6';
+      input.dispatchEvent(new frame.contentWindow.Event('change', { bubbles: true }));
+      assert(transfers().at(-1).number === '6' && transfers().at(-1).color === '#13579B' && row === element('transfer-colors').lastElementChild, '修改编号应保留自定义颜色及原控件');
+      row.querySelector('[data-control-icon="delete"]').click();
+      assert(transfers().length === 2, '应只删除本条换乘线路');
+      app.undo();
+      assert(transfers().at(-1).number === '6', '应可撤销删除');
+      element('add-text-transfer').click();
+      assert(transfers().at(-1).type === 'text' && editor.activeElement.dataset.transferField === 'nameZh', '文字线路应直接进入中文名编辑');
+      submitNumber('11'); submitNumber('12');
+      assert(transfers().length === 6 && element('add-number-transfer').disabled && element('add-text-transfer').disabled, '达到六条后两个入口均应停用');
+    });
+
+    await test('左栏与浮动栏使用同款本站单图标，站点操作保留清楚的动作图标', function () {
+      const first = project.stations[0].id;
+      const action = editor.querySelector('[data-id="' + first + '"] .station-current');
+      const current = editor.querySelector('[data-id="' + project.currentId + '"] .station-current');
+      const win = frame.contentWindow;
+      assert(action && icon(action, 'locate') && icon(element('tool-current'), 'locate'), '本站快捷按钮应是有提示的定位单图标');
+      assert(win.getComputedStyle(action).pointerEvents === 'none' && win.getComputedStyle(current).pointerEvents === 'auto', '默认仅当前本站显示定位图标');
+      assert(!editor.querySelector('.station-item-tag'), '本站卡片应去掉额外文字');
+      action.focus();
+      assert(win.getComputedStyle(action).pointerEvents === 'auto', '键盘聚焦时应显示定位按钮');
+      action.click();
+      assert(app.state.currentId === first && action.disabled && editor.activeElement === action.previousElementSibling, '左栏应设为本站并把焦点留在同一卡片');
+      app.select(project.currentId);
+      element('tool-current').click();
+      assert(app.state.currentId === project.currentId, '浮动按钮应把选中的站点设为本站');
+      assert(['station-up', 'station-down', 'station-delete'].every(id => element(id).dataset.controlIcon), '前移、后移和删除都应有图标');
     });
 
     await test('单独选中行车提示只显示位置，多选可同时微调、复位和撤销', function () {

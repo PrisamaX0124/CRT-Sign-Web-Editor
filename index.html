@@ -5,10 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 导向标识</title>
-  <link rel="stylesheet" href="style.css?v=8eb3ef9d5065">
-  <link rel="stylesheet" href="platform.css?v=76363eff8333">
-  <link rel="stylesheet" href="transfer.css?v=0e850b4f5451">
-  <link rel="stylesheet" href="image-upload.css?v=2d9a1dc337a4">
+  <link rel="stylesheet" href="style.css?v=8e9342a18028">
+  <link rel="stylesheet" href="platform.css?v=e3421f531c96">
+  <link rel="stylesheet" href="transfer.css?v=5ffa0b585f03">
+  <link rel="stylesheet" href="image-upload.css?v=39bea1cc93e6">
 </head>
 <body class="editor-page">
 
@@ -139,15 +139,25 @@
     <!-- ══ 右栏：属性 / 导出 ══ -->
     <button id="right-expander" class="expander expander-right" title="展开属性面板" hidden>⟨</button>
     <aside id="right-panel" class="side-panel editor-right">
-      <div class="panel-header">
-        <div class="panel-heading">
-          <button class="icon-btn" id="close-element-btn" title="返回标识牌设置" aria-label="返回标识牌设置" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          <span class="panel-title" id="right-panel-title" tabindex="-1">标识牌设置</span>
+      <div class="panel-header property-header">
+        <div class="property-heading-row">
+          <div class="panel-heading">
+            <button class="icon-btn" id="close-element-btn" title="返回标识牌设置" aria-label="返回标识牌设置" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <span class="panel-title" id="right-panel-title" tabindex="-1">标识牌设置</span>
+          </div>
+          <button class="icon-btn collapse-btn" id="right-collapse" title="收起属性面板">⟩</button>
         </div>
-        <button class="icon-btn collapse-btn" id="right-collapse" title="收起属性面板">⟩</button>
+        <div class="property-tabs" role="tablist" aria-labelledby="right-panel-title"></div>
       </div>
       <div class="panel-body" id="right-panel-body">
         <!-- panel.js 填充：标识牌设置 / 元素属性 / 预设预览 -->
+      </div>
+      <div class="image-export" role="group" aria-label="图片导出">
+        <div class="image-export-primary">
+          <button type="button" class="btn btn-primary" id="guidance-export-png">导出 PNG</button>
+          <select id="guidance-png-scale" aria-label="PNG 倍率" title="PNG 倍率"><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select>
+        </div>
+        <div class="image-export-secondary"><button type="button" class="btn" id="guidance-export-svg">导出 SVG</button></div>
       </div>
       <input type="file" id="guidance-project-file" accept=".json,application/json" hidden>
     </aside>
@@ -157,7 +167,11 @@
   <div id="transfer-editor" class="editor-workspace" hidden>
     <aside class="platform-stations editor-left" id="transfer-content" aria-labelledby="transfer-content-heading">
       <h2 class="platform-panel-title" id="transfer-content-heading">线路与元素</h2>
-      <div class="panel-body">
+      <div class="library-tabs" aria-label="内容与预设">
+        <button type="button" data-transfer-library="elements" aria-pressed="true">线路</button>
+        <button type="button" data-transfer-library="presets" aria-pressed="false">预设</button>
+      </div>
+      <div class="panel-body" id="transfer-element-library">
         <section class="platform-section transfer-section">
           <h3 class="section-title" id="transfer-arrangement-heading">线路分组</h3>
           <div id="transfer-arrangements" role="group" aria-labelledby="transfer-arrangement-heading"></div>
@@ -167,6 +181,7 @@
           <div id="transfer-groups"></div>
         </section>
       </div>
+      <div class="panel-body" id="transfer-preset-list" hidden></div>
     </aside>
     <main class="platform-preview editor-center" id="transfer-preview" aria-label="换乘标识预览">
       <div class="preview-toolbar">
@@ -218,17 +233,18 @@
       </footer>
     </main>
     <aside class="platform-properties editor-right" id="transfer-properties" aria-labelledby="transfer-heading">
-      <header class="panel-header">
+      <header class="panel-header property-header">
         <div class="panel-heading">
           <button type="button" class="icon-btn" id="transfer-return" title="返回标识牌设置" aria-label="返回标识牌设置" hidden>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <h1 class="panel-title" id="transfer-heading" tabindex="-1">标识牌设置</h1>
         </div>
+        <div class="property-tabs" role="tablist" aria-labelledby="transfer-heading"></div>
       </header>
       <div class="panel-body" id="transfer-property-scroll">
         <div id="transfer-settings">
-          <section class="platform-section transfer-section transfer-output-settings">
+          <section class="platform-section transfer-section transfer-output-settings" data-property-tab="edit">
             <h2 class="section-title">颜色与尺寸</h2>
             <div class="field">
               <label for="transfer-palette">城市配色</label>
@@ -243,7 +259,7 @@
           </section>
         </div>
         <div id="transfer-line-properties" hidden>
-          <section class="platform-section transfer-section">
+          <section class="platform-section transfer-section" data-property-tab="edit">
             <h2 class="section-title">线路信息</h2>
             <div class="field">
               <label for="transfer-line-name">线路编号或名称</label>
@@ -262,34 +278,40 @@
               <div id="transfer-line-color-picker"></div>
             </div>
           </section>
-          <section class="platform-section transfer-section" id="line-pattern-section"></section>
+          <section class="platform-section transfer-section" id="line-pattern-section" data-property-tab="appearance"></section>
         </div>
         <div id="transfer-arrow-properties" hidden>
-          <section class="platform-section transfer-section">
+          <section class="platform-section transfer-section" data-property-tab="edit">
             <h2 class="section-title" id="transfer-direction-heading">箭头方向</h2>
             <div class="palette-grid direction-grid" id="transfer-directions" role="group" aria-labelledby="transfer-direction-heading"></div>
           </section>
         </div>
         <div id="transfer-label-properties" hidden>
-          <section class="platform-section transfer-section">
+          <section class="platform-section transfer-section" data-property-tab="edit">
             <h2 class="section-title">文字中的线路</h2>
             <div id="transfer-label-lines"></div>
           </section>
         </div>
-        <section class="platform-section transfer-section" id="transfer-group-placement" hidden>
+        <section class="platform-section transfer-section" id="transfer-group-placement" data-property-tab="layout" hidden>
           <div id="transfer-group-alignment"><h2 class="section-title">本组对齐</h2></div>
           <div id="transfer-group-arrow-position"><h2 class="section-title">箭头位置</h2></div>
         </section>
+        <section class="panel-section platform-section" data-property-tab="project">
+          <div class="field-pair">
+            <button type="button" class="btn" id="transfer-export-project">导出项目 JSON</button>
+            <button type="button" class="btn" id="transfer-import-project">导入项目 JSON</button>
+          </div>
+          <div id="transfer-preset-actions"></div>
+        </section>
       </div>
-      <div class="transfer-export">
-        <div class="image-upload-pair">
+      <div class="image-export" role="group" aria-label="图片导出">
+        <div class="image-export-primary">
           <button type="button" class="btn btn-primary" id="transfer-export-image">导出 PNG</button>
+          <select id="transfer-png-scale" aria-label="PNG 倍率" title="PNG 倍率"><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select>
         </div>
-        <button type="button" class="btn" id="transfer-export-vector">导出 SVG</button>
-        <button type="button" class="btn" id="transfer-export-project">导出项目 JSON</button>
-        <button type="button" class="btn" id="transfer-import-project">导入项目 JSON</button>
-        <input type="file" id="transfer-project-file" accept=".json,application/json" hidden>
+        <div class="image-export-secondary"><button type="button" class="btn" id="transfer-export-vector">导出 SVG</button></div>
       </div>
+      <input type="file" id="transfer-project-file" accept=".json,application/json" hidden>
     </aside>
   </div>
 
@@ -305,18 +327,19 @@
   <script src="js/state.js?v=35104c24617e"></script>
   <script src="js/render.js?v=016de8532237"></script>
   <script src="js/editor-motion.js?v=46757705e313"></script>
+  <script src="js/property-tabs.js?v=c86bbaf97d42"></script>
   <script src="js/preview-zoom.js?v=acec1aa66512"></script>
   <script src="js/element-alignment.js?v=fb06e19d0663"></script>
-  <script src="js/ui.js?v=ec9b8418cab6"></script>
+  <script src="js/ui.js?v=ba88dad55ced"></script>
   <script src="js/clipboard.js?v=public-1c7f4d30022d"></script>
   <script src="js/presets.js?v=0150088dc5b0"></script>
   <script src="js/storage.js?v=5156bc2ae677"></script>
-  <script src="js/exporters.js?v=a4522744c2b1"></script>
+  <script src="js/exporters.js?v=f439220b937f"></script>
   <script src="js/image-upload.js?v=7a2caa6e67ea"></script>
-  <script src="js/image-upload-dialog.js?v=3c9316d202eb"></script>
+  <script src="js/image-upload-dialog.js?v=95e0fd6ff5d6"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
-  <script src="js/panel.js?v=7dba347f55be"></script>
-  <script src="js/interact.js?v=40f13aea64e7"></script>
+  <script src="js/panel.js?v=8845e99124e9"></script>
+  <script src="js/interact.js?v=e279e60a71e2"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = 'CRT标识编辑器 - 换乘标识';
@@ -334,6 +357,6 @@
   <script src="js/platform/patterns.js?v=cc2c94583c53"></script>
   <script src="js/transfer/state.js?v=6892c96cc48e"></script>
   <script src="js/transfer/render.js?v=8acbb655c2a3"></script>
-  <script src="js/transfer/main.js?v=a695bdc72e4b"></script>
+  <script src="js/transfer/main.js?v=64145aaac166"></script>
 </body>
 </html>

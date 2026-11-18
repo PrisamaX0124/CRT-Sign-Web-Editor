@@ -10,6 +10,7 @@
   const palettePicker = global.SignColorPicker;
   const createElement = global.SignUI.h;
   const storageKey = 'public-transfer-sign-project-v1';
+  const presetKey = 'public-transfer-sign-presets-v1';
   const element = identifier => document.getElementById(identifier);
   const vector = element('transfer-sign');
   const preview = element('transfer-preview');
@@ -17,6 +18,7 @@
   const toolbar = element('transfer-element-toolbar');
   const turnButtons = toolbar.querySelectorAll('[data-turn-step]');
   const propertyScroll = element('transfer-property-scroll');
+  const propertyTabs = global.PropertyTabs.create(propertyScroll);
   const heading = element('transfer-heading');
   const settingsPanel = element('transfer-settings');
   const groupPlacement = element('transfer-group-placement');
@@ -35,7 +37,10 @@
   const redoButton = element('transfer-redo');
   const exportImage = element('transfer-export-image');
   const exportVector = element('transfer-export-vector');
+  const pngScale = element('transfer-png-scale');
   const projectFile = element('transfer-project-file');
+  const presetList = element('transfer-preset-list');
+  const libraryButtons = workspace.querySelectorAll('[data-transfer-library]');
   const status = element('transfer-status');
   const panels = {
     line: element('transfer-line-properties'),
@@ -74,6 +79,84 @@
       if (saved) return state.deserialize(saved);
     } catch {
       notice('未能恢复本地项目，已打开默认标识牌');
+    }
+  }
+
+  function readPresets() {
+    try {
+      const records = JSON.parse(localStorage.getItem(presetKey) || '[]');
+      if (!Array.isArray(records)) throw new Error();
+      return records.filter(record => typeof record?.id === 'string' && typeof record.name === 'string' && typeof record.project === 'string');
+    } catch {
+      notice('无法读取本机换乘预设');
+      return null;
+    }
+  }
+
+  function writePresets(records) {
+    try {
+      localStorage.setItem(presetKey, JSON.stringify(records));
+      return true;
+    } catch {
+      notice('无法保存换乘预设，请检查浏览器存储空间');
+      return false;
+    }
+  }
+
+  function renderPresets() {
+    const cards = (readPresets() || []).map(record => {
+      let project;
+      try { project = state.deserialize(record.project); }
+      catch { /* 保留删除入口，便于清理无法载入的旧预设。 */ }
+      const load = createElement('button', { type: 'button', class: 'preset-load', 'aria-label': '载入预设 ' + record.name });
+      if (project) {
+        const thumbnail = document.createElementNS(global.SignCore.SVG_NS, 'svg');
+        drawing.draw(thumbnail, drawing.layout(project, App.measure), true);
+        thumbnail.removeAttribute('width');
+        thumbnail.removeAttribute('height');
+        thumbnail.setAttribute('aria-hidden', 'true');
+        load.append(thumbnail);
+      }
+      load.append(createElement('strong', { text: record.name }));
+      load.addEventListener('click', () => {
+        if (!project) { notice('无法载入此换乘预设'); return; }
+        App.update(() => project, null, { replaceProject: true });
+        propertyTabs.show('edit');
+        notice('已载入预设「' + record.name + '」');
+      });
+      const remove = createElement('button', { type: 'button', class: 'preset-remove', 'data-control-icon': 'delete', 'aria-label': '删除预设 ' + record.name });
+      remove.addEventListener('click', async () => {
+        if (!await global.SignUI.confirmDialog('确定要删除预设「' + record.name + '」吗？', '删除预设', '删除', 'delete')) return;
+        const records = readPresets();
+        if (records && writePresets(records.filter(item => item.id !== record.id))) {
+          renderPresets();
+          workspace.querySelector('[data-transfer-library="presets"]').focus();
+        }
+      });
+      return createElement('div', { class: 'platform-preset' }, [load, remove]);
+    });
+    presetList.replaceChildren(...(cards.length ? cards : [createElement('p', { class: 'preset-empty', text: '在「项目」中保存当前标识牌。' })]));
+  }
+
+  function selectLibrary(name) {
+    const showPresets = name === 'presets';
+    const changed = presetList.hidden === showPresets;
+    const elements = element('transfer-element-library');
+    elements.hidden = showPresets;
+    presetList.hidden = !showPresets;
+    for (const button of libraryButtons) button.setAttribute('aria-pressed', String(button.dataset.transferLibrary === name));
+    if (showPresets) renderPresets();
+    if (changed) global.EditorMotion.reveal(showPresets ? presetList : elements, showPresets ? 1 : -1);
+  }
+
+  async function savePreset() {
+    const project = state.serialize(App.state);
+    const name = await global.SignUI.promptDialog('为这个换乘标识预设起个名字：', '保存为预设', '', '如：贴柱式换乘牌');
+    if (name === null) return;
+    const records = readPresets();
+    if (records && writePresets(records.concat({ id: global.SignCore.uuid(), name: name.slice(0, 80), project }))) {
+      selectLibrary('presets');
+      notice('预设「' + name.slice(0, 80) + '」已保存');
     }
   }
 
@@ -352,7 +435,10 @@
     backButton.hidden = !selected;
     for (const [kind, panel] of Object.entries(panels)) panel.hidden = selected?.kind !== kind;
     const title = selected ? targetTitle(selected) : '标识牌设置';
-    if (heading.textContent !== title) heading.textContent = title;
+    if (heading.textContent !== title) {
+      heading.textContent = title;
+      heading.title = title;
+    }
     for (const target of vector.querySelectorAll('[data-transfer-element]')) {
       target.setAttribute('aria-pressed', String(target.dataset.transferElement === selected?.key));
     }
@@ -366,6 +452,7 @@
       host.hidden = !group;
       if (group) select.value = group.arrowPosition;
     }
+    propertyTabs.sync(selected?.kind || 'settings');
     const panelSelection = selected?.key || '';
     if (previousPanelSelection !== undefined && panelSelection !== previousPanelSelection) {
       const direction = !selected ? -1 : previousPanelSelection ? 0 : 1;
@@ -538,13 +625,14 @@
 
   async function exportSign(format) {
     const project = App.state;
+    const scale = Number(pngScale.value);
     exportImage.disabled = exportVector.disabled = true;
     notice('正在导出…');
     try {
       const { layout, source } = await prepareExport(project);
       const file = format === 'svg'
         ? new Blob([source], { type: 'image/svg+xml;charset=utf-8' })
-        : await global.SignExporters.rasterizePNG(source, layout);
+        : await global.SignExporters.rasterizePNG(source, layout, scale);
       const storage = global.SignStorage;
       storage.download(file, descriptions[project.mode] + '-' + storage.timestamp() + '.' + format);
       notice('已导出 ' + format.toUpperCase());
@@ -588,13 +676,16 @@
   });
   backButton.addEventListener('click', () => { select(); heading.focus(); });
   element('transfer-tool-edit').addEventListener('click', () => {
+    propertyTabs.show('edit');
     const target = selected.kind === 'line' ? lineName : selected.kind === 'arrow'
       ? directionPicker.querySelector('[aria-pressed="true"]') : labelLines.firstElementChild;
     target.focus();
   });
   element('transfer-tool-pattern').addEventListener('click', () => {
     const line = selectedLine();
-    if (line) changePattern({ enabled: !line.linePattern.enabled });
+    if (!line) return;
+    changePattern({ enabled: !line.linePattern.enabled });
+    if (!line.linePattern.enabled) propertyTabs.show('appearance');
   });
   for (const button of turnButtons) {
     button.addEventListener('click', () => {
@@ -619,13 +710,18 @@
   undoButton.addEventListener('click', () => restore('undo', 'redo'));
   redoButton.addEventListener('click', () => restore('redo', 'undo'));
   exportImage.addEventListener('click', () => exportSign('png'));
-  global.ImageUploadDialog.addButton(exportImage, async () => {
+  global.ImageUploadDialog.addButton(exportVector, async () => {
     const { layout, source } = await prepareExport(App.state);
     return global.SignExporters.rasterizePNG(source, layout);
   });
   exportVector.addEventListener('click', () => exportSign('svg'));
   element('transfer-export-project').addEventListener('click', exportProject);
   element('transfer-import-project').addEventListener('click', () => projectFile.click());
+  element('transfer-preset-actions').append(global.SignUI.presetSaveButton(savePreset, {
+    id: 'transfer-save-preset', class: 'btn', title: '将两种版式保存为预设',
+  }));
+  for (const button of libraryButtons) button.addEventListener('click', () => selectLibrary(button.dataset.transferLibrary));
+  global.addEventListener('storage', event => { if (event.key === presetKey && !presetList.hidden) renderPresets(); });
   global.SignStorage.bindProjectImport({
     input: projectFile,
     deserialize: readProject,

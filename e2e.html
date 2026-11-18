@@ -37,6 +37,7 @@
     function $(sel) { return frame.contentDocument.querySelector(sel); }
     function $$(sel) { return Array.prototype.slice.call(frame.contentDocument.querySelectorAll(sel)); }
     function W() { return frame.contentWindow; }
+    function propertyTab(name) { $('#right-panel [data-property-tab-button="' + name + '"]').click(); }
 
     function rectOf(el) {
       var r = el.getBoundingClientRect();
@@ -365,12 +366,9 @@
 
     async function s11_clearSign() {
       var w = W();
-      // 触发 UI 按钮
-      var btns = $$('#right-panel-body .btn');
-      var clearBtn = btns.filter(function (b) { return b.textContent.indexOf('清空标识牌') !== -1; })[0];
       w.App.select(null);
-      clearBtn = $$('#right-panel-body .btn').filter(function (b) { return b.textContent.indexOf('清空标识牌') !== -1; })[0];
-      clearBtn.click();
+      propertyTab('project');
+      $('#right-panel-body [data-control-icon="clear"]').click();
       var modal = $('.modal-mask');
       ok('S11 清空需确认', !!modal);
       await modalAct('ok');
@@ -1159,11 +1157,8 @@
     // 点导出 → 按钮忙碌禁用 → 完成后恢复可用且真实产出下载 blob。
     async function s35_exportButtonFeedback() {
       var w = W();
-      w.App.select(null); // 回标识牌设置面板（导出按钮所在处）
-      var btn = $$('#right-panel-body button').filter(function (b) {
-        return b.textContent.indexOf('导出 SVG') !== -1;
-      })[0];
-      ok('S35 设置面板有导出 SVG 按钮', !!btn);
+      var btn = $('#guidance-export-svg');
+      ok('S35 右栏底部有导出 SVG 按钮', !!btn?.getClientRects().length);
       if (!btn) return;
       var captured = null;
       var origDl = w.SignStorage.download;
@@ -1172,11 +1167,11 @@
       };
       btn.click();
       ok('S35 点击后按钮立即进入忙碌态',
-        btn.disabled && btn.textContent.indexOf('⏳') !== -1,
+        btn.disabled && btn.textContent === '正在导出…',
         'disabled=' + btn.disabled + ' text=' + btn.textContent);
       await waitFor(function () { return !btn.disabled; }, 10000); // 等实际使用的字体准备与导出完成
       w.SignStorage.download = origDl;
-      ok('S35 导出完成后按钮恢复可用', !btn.disabled && btn.textContent === '⬇ 导出 SVG',
+      ok('S35 导出完成后按钮恢复可用', !btn.disabled && btn.textContent === '导出 SVG',
         'disabled=' + btn.disabled + ' text=' + btn.textContent);
       ok('S35 导出真实产出 SVG blob',
         !!captured && captured.type.indexOf('image/svg') !== -1 && captured.name.indexOf('.svg') !== -1,
@@ -1199,7 +1194,7 @@
         w.SignStorage.download = function (blob, name) { downloads.push({ blob: blob, name: name }); };
         w.SignUI.toast = function (message, type) { if (type === 'error') errors.push(message); };
         for (var format of ['SVG', 'PNG']) {
-          var btn = $$('#right-panel-body button').filter(function (b) { return b.textContent.indexOf('导出 ' + format) !== -1; })[0];
+          var btn = $('#guidance-export-' + format.toLowerCase());
           btn.click();
           ok('S53 ' + format + '按钮立即进入忙碌态', btn.disabled);
           await waitFor(function () { return !btn.disabled; }, 20000);
@@ -1390,7 +1385,8 @@
       w.App.select(el.id);
       var back = $('#close-element-btn');
       ok('S42 返回按钮位于标题左侧', back.getBoundingClientRect().left < $('#right-panel-title').getBoundingClientRect().left);
-      ok('S42 属性按内容、排版、颜色分组', $$('#right-panel-body .panel-section').length === 3);
+      ok('S42 属性按内容、排版、颜色分组', $$('#right-panel-body .element-properties .panel-section').length === 3);
+      propertyTab('layout');
       var bold = $('#right-panel-body button[aria-label="加粗"]');
       ok('S42 加粗为带图形的按钮', !!bold && !!bold.querySelector('svg'));
       if (bold) {
@@ -1407,6 +1403,7 @@
       ok('S42 元素颜色与背景颜色有明确作用范围', !!color && !!bg);
       var padding = $('#right-panel-body .padding-editor');
       ok('S42 内边距直接展开，四个方向均可编辑', !!padding && padding.tagName === 'DIV' && padding.querySelectorAll('input[type="number"]').length === 4);
+      propertyTab('edit');
       if (color && bg) {
         var signBg = w.App.state.backgroundColor;
         typeInto(color.querySelector('.hex-input'), '#123456');
@@ -1446,6 +1443,7 @@
         pixels.value = '777'; pixels.dispatchEvent(new w.Event('change', { bubbles: true }));
         ok('S43 精确输入 777 像素，滑条标示自定义宽度', w.App.state.width === 777 && pixels.value === '777' && units.getAttribute('aria-valuetext').includes('777'));
       }
+      propertyTab('appearance');
       var frameColor = $('#right-panel-body .color-picker[data-scope="灰框颜色"]');
       ok('S43 灰框颜色可调', !!frameColor);
       if (frameColor) {
@@ -1456,6 +1454,7 @@
         ok('S43 每行灰框采用指定深灰', $$('#sign-svg .sign-frame').every(function (r) { return r.getAttribute('fill') === '#333333'; }) && w.App.state.frameColor === '#333333');
         ok('S43 灰框改色不改背景且项目往返保持', w.App.state.backgroundColor === bg && S.deserializeSign(S.serializeSign(w.App.state)).frameColor === '#333333');
       }
+      propertyTab('edit');
     }
 
     // 把系统暗色规则临时作为普通规则应用，验证全部编辑器表面及牌面隔离。
@@ -1764,6 +1763,7 @@
         });
       });
       var ids = w.App.state.rows.map(function (row) { return row.id; });
+      propertyTab('appearance');
       var select = $('#right-panel-body .row-bg-select');
       var hex = $('#right-panel-body .color-picker[data-scope="当前行背景色"] .hex-input');
       ok('S54 多行设置可选择行并独立改背景色', !!select && !!hex);
@@ -1782,7 +1782,9 @@
         w.App.state.rows[0].backgroundColor === '#112233' &&
         w.App.state.rows[1].backgroundColor === '#445566' &&
         w.App.state.rows[2].backgroundColor === null);
+      propertyTab('edit');
       typeInto($('#right-panel-body .color-picker[data-scope="标识牌背景色"] .hex-input'), '#778899');
+      propertyTab('appearance');
       var bgs = $$('#sign-svg .row-bg');
       ok('S54 默认背景仅影响未单独设置的行',
         bgs.map(function (bg) { return bg.getAttribute('fill'); }).join(',') === '#112233,#445566,#778899');
@@ -1884,6 +1886,7 @@
       function move(x, opts) { pointer('pointermove', w.document, x, 100, opts); }
       function end(x, opts) { pointer('pointerup', w.document, x, 100, opts); }
       ['toolbar', 'panel'].forEach(function (source) {
+        if (source === 'panel') propertyTab('layout');
         ['left', 'right'].forEach(function (side) {
           var selector = source === 'toolbar' ? '#element-toolbar [data-padding="' + side + '"] .padding-trigger'
             : '#right-panel-body [data-padding="' + side + '"] .padding-trigger';

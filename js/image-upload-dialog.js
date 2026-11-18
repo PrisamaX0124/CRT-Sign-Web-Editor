@@ -220,20 +220,20 @@
     };
   }
 
-  function addButton(downloadButton, createImage) {
+  function addButton(anchor, createImage) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn';
     button.dataset.controlIcon = 'upload';
     button.dataset.openImageUpload = '';
-    button.title = '上传到图床…';
-    button.setAttribute('aria-label', button.title);
+    button.title = '上传原尺寸 PNG 到图床';
+    button.textContent = '上传图床';
     button.setAttribute('aria-haspopup', 'dialog');
     button.addEventListener('click', () => {
       if (!windowControls) windowControls = createDialog();
       windowControls.open(createImage);
     });
-    downloadButton.after(button);
+    anchor.after(button);
   }
 
   global.ImageUploadDialog = { addButton };

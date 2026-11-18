@@ -97,28 +97,30 @@
   try {
     keys.forEach(name => localStorage.removeItem(name));
     for (const { name, address, graphic } of editors) {
-      await test(name + '的上传图标紧邻 PNG，空心 SVG 按钮单独排在下方', async () => {
+      await test(name + '的 PNG 倍率与主按钮同排，SVG 与上传入口在下方', async () => {
         await open(address);
         const uploadButton = find('[data-open-image-upload]');
-        const downloadButton = uploadButton.previousElementSibling;
-        const vectorButton = uploadButton.parentElement.nextElementSibling;
-        assert(uploadButton.getAttribute('aria-label') === '上传到图床…' && uploadButton.title === '上传到图床…', '上传图标应有可读名称和提示');
-        assert(!uploadButton.textContent.trim() && editor.getComputedStyle(uploadButton, '::before').maskImage !== 'none', '上传按钮应以图标显示');
+        const footer = uploadButton.closest('.image-export');
+        const downloadButton = footer.querySelector('.image-export-primary button');
+        const scale = footer.querySelector('.image-export-primary select').getBoundingClientRect();
+        const vectorButton = uploadButton.previousElementSibling;
+        assert(uploadButton.textContent === '上传图床' && uploadButton.title.includes('原尺寸'), '上传按钮应有可读名称和原尺寸提示');
+        assert(editor.getComputedStyle(uploadButton, '::before').maskImage !== 'none', '上传按钮应有上传图标');
         const upload = uploadButton.getBoundingClientRect();
         const download = downloadButton.getBoundingClientRect();
         assert(downloadButton.textContent.includes('导出 PNG') && downloadButton.classList.contains('btn-primary'), 'PNG 应保留主按钮样式');
-        assert(Math.abs(download.top - upload.top) < 1 && download.right <= upload.left && download.width > 3 * upload.width, 'PNG 和上传图标应同排，PNG 应占大部分宽度');
+        assert(Math.abs(download.top - scale.top) < 1 && download.right <= scale.left, 'PNG 和倍率应同排');
         const vector = vectorButton.getBoundingClientRect();
         assert(vectorButton.textContent.includes('导出 SVG') && !vectorButton.classList.contains('btn-primary') &&
-          vector.top >= upload.bottom && Math.abs(vector.width - (upload.right - download.left)) < 1, 'SVG 应使用下面一整排的空心按钮');
+          vector.top >= download.bottom && Math.abs(vector.top - upload.top) < 1 && vector.right <= upload.left, 'SVG 和上传应在第二排并列');
       });
       await test(name + '从导出区上传原尺寸图片，自动复制 ImgBB 原图地址', async () => {
         await open(address);
-        const exportButton = find('[data-open-image-upload]').previousElementSibling;
-        assert(exportButton.textContent.includes('导出 PNG'), '上传按钮应紧邻下载按钮');
+        const exportArea = find('[data-open-image-upload]').closest('.image-export');
+        assert(exportArea.querySelector('.image-export-primary button').textContent.includes('导出 PNG'), '下载和上传应在同一个固定导出区');
         assert(find('#image-upload-provider').value === 'imgbb', '应默认选择 ImgBB');
         assert(key('imgbb').value === '', '打开页面后应重新填写临时密钥');
-        if (find('#png-scale')) find('#png-scale').value = '4';
+        exportArea.querySelector('select').value = '4';
         setValue(key('imgbb'), '假密钥');
         const originalProject = editor.App.state;
         click('#start-image-upload');

@@ -460,6 +460,12 @@
     });
   }
 
+  function presetSaveButton(onClick, attributes) {
+    var button = h('button', Object.assign({ type: 'button', text: '存为预设', 'data-control-icon': 'preset' }, attributes));
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
   global.SignUI = {
     h: h,
     $: $,
@@ -471,5 +477,6 @@
     toast: toast,
     confirmDialog: confirmDialog,
     promptDialog: promptDialog,
+    presetSaveButton: presetSaveButton,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

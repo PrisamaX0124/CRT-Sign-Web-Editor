@@ -609,6 +609,7 @@
       if (editor.path !== 'index.html') {
         await test(editor.name + '：底纹开关的圆点与设置面板一起过渡', async function () {
           if (editor.path.includes('transfer')) select();
+          document.querySelector('[data-property-tab-button="appearance"]').click();
           const button = document.getElementById('line-pattern-enabled');
           const options = document.getElementById('line-pattern-controls');
           button.getBoundingClientRect();

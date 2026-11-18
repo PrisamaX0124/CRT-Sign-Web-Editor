@@ -35,6 +35,9 @@
 #transfer-return { flex: none; display: grid; place-items: center; }
 #transfer-return svg { width: 18px; height: 18px; }
 #transfer-property-scroll { padding: 0 16px 16px; }
+#transfer-property-scroll > [data-property-tab="project"] { margin-top: 12px; }
+#transfer-preset-actions { margin-top: 8px; }
+#transfer-preset-list:not([hidden]) { display: grid; align-content: start; gap: 8px; }
 .transfer-section { padding-block: 15px; }
 .transfer-section + .transfer-section { border-top: 1px solid var(--border); }
 #transfer-group-placement {
@@ -105,7 +108,5 @@
 #transfer-directions .direction-card { cursor: pointer; }
 #transfer-directions .direction-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-text); }
 #transfer-directions .card-icon { background: transparent; }
-.transfer-export { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
-.transfer-export .btn { margin: 0; }
 
 #transfer-properties { width: 304px; }

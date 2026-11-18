@@ -16,7 +16,7 @@
 (async function () {
   const frame = document.getElementById('editor');
   const results = document.getElementById('results');
-  const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-transfer-sign-project-v1'];
+  const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-transfer-sign-project-v1', 'public-transfer-sign-presets-v1'];
   const savedStorage = storageKeys.map(key => [key, localStorage.getItem(key)]);
   let editor, page, guideArrows;
 
@@ -45,6 +45,7 @@
     assert(control, '找不到控件 ' + selector);
     return control;
   }
+  function propertyTab(name) { click('#transfer-properties [data-property-tab-button="' + name + '"]'); }
   function input(selector, value, type = 'input') {
     const control = element(selector);
     control.value = value;
@@ -164,6 +165,7 @@
     await test('点选色带、文字和箭头，选框、属性面板与浮动工具栏跟随选择', async () => {
       select('line:first');
       assert(element('[data-transfer-element="line:first"]').getAttribute('aria-pressed') === 'true', '色带没有选框');
+      propertyTab('appearance');
       assert(isVisible('#transfer-element-toolbar') && isVisible('#line-pattern-section'), '缺少浮动工具栏或独立底纹');
       click('#transfer-tool-edit');
       assert(page.activeElement === element('#transfer-line-name'), '浮动工具栏未将焦点移到线路名');
@@ -286,6 +288,7 @@
 
     await test('两条色带分别设置底纹，1 号线只显示放大后的那一种纹样', () => {
       line('first');
+      propertyTab('appearance');
       click('#line-pattern-enabled');
       assert(element('#line-pattern-status').textContent.includes('1号线'), '未自动匹配 1 号线');
       assert(element('#line-pattern-built-in').querySelectorAll('[value^="line-1"]:not([value="line-10"])').length === 1, '仍有两种 1 号线纹样');
@@ -319,6 +322,7 @@
     await test('第三条线路可上传自己的底纹，损坏文件或切换选择时不会覆盖其他线路', async () => {
       const artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="4" cy="4" r="3" fill="white"/></svg>';
       line('third');
+      propertyTab('appearance');
       assert(element('#line-pattern-import').textContent === '上传底纹', '应显示上传底纹');
       chooseFile('纹样.svg', artwork, 'image/svg+xml');
       await waitFor(() => element('#line-pattern-source').value === 'custom');
@@ -564,10 +568,12 @@
           assert(modes.top >= navigation.bottom || (modes.left >= navigation.right && modes.right <= repository.left), '版式按钮和入口重叠');
           assert(toolbar.left >= preview.left && toolbar.right <= preview.right, '浮动工具栏应留在中栏');
         }
-        frame.style.height = '420px';
+        frame.style.height = '360px';
         await new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
         select('line:first');
+        propertyTab('appearance');
         if (element('#line-pattern-enabled').getAttribute('aria-checked') !== 'true') click('#line-pattern-enabled');
+        input('#line-pattern-source', 'line-1', 'change');
         const patternOptions = element('#line-pattern-controls');
         patternOptions.getBoundingClientRect();
         await Promise.allSettled(patternOptions.getAnimations().map(animation => animation.finished));
@@ -595,8 +601,9 @@
         element('#transfer-preview-title').textContent === '版式 A', '切换后留下了旧分组的线路列表');
       mode('separate');
       select('label:lower');
-      assert(isVisible('#transfer-group-alignment') && element('#transfer-label-lines [data-select-line="third"]'),
-        '切回时未还原文字属性');
+      assert(isVisible('#transfer-label-lines [data-select-line="third"]'), '切回时未还原文字属性');
+      propertyTab('layout');
+      assert(isVisible('#transfer-group-alignment'), '排版签应显示本组对齐');
     });
 
     await test('换乘两个版式的四个斜向箭头在牌面与方向选项中均匀留白', () => {
@@ -806,6 +813,7 @@
         editor.App.update(project => state.changeArrowPosition(state.changeAlignment(project, 'upper', 'right'), 'upper', 'right'));
         line('third', '17');
         direction('lower', 'right-up');
+        propertyTab('project');
         click('#transfer-export-project');
         const source = editor.TransferState.serialize(editor.App.state);
         assert(download && /^换乘标识项目-\d{8}-\d{6}\.json$/.test(download.name), '导出文件名不正确');
@@ -819,6 +827,7 @@
         const file = element('#transfer-project-file');
         let opened = false;
         file.click = () => { opened = true; };
+        propertyTab('project');
         click('#transfer-import-project');
         assert(opened && file.hidden && file.accept.includes('.json'), '未使用隐藏的 JSON 文件选择控件');
         chooseFile(download.name, source, 'application/json', '#transfer-project-file');
@@ -915,6 +924,33 @@
       assert(editor.App.state.boards.guidance.width === 530, '重做未恢复导入的项目');
       click('#transfer-redo');
       assert(editor.App.state.boards.separate.lines[0].name === '后改的线路', '重做丢失了导入后的线路修改');
+    });
+    await test('换乘预设复用命名对话框，保存两种版式，重开后能载入、撤销和删除', async () => {
+      let state = editor.TransferState;
+      mode('guidance');
+      input('#transfer-width', '613', 'change');
+      mode('separate');
+      line('first', '预设线路');
+      const project = state.serialize(editor.App.state);
+      propertyTab('project');
+      click('#transfer-save-preset');
+      assert(isVisible('.modal .modal-input'), '应使用导向标识的预设命名控件');
+      input('.modal .modal-input', '换乘测试预设');
+      click('.modal [data-act="ok"]');
+      await waitFor(() => page.querySelector('#transfer-preset-list [aria-label="载入预设 换乘测试预设"]'));
+      await navigate(() => { frame.src = '../index.html?editor=transfer&reload=presets'; });
+      await editor.App.ready;
+      state = editor.TransferState;
+      line('first', '临时编辑');
+      const edited = state.serialize(editor.App.state);
+      click('[data-transfer-library="presets"]');
+      click('#transfer-preset-list [aria-label="载入预设 换乘测试预设"]');
+      assert(state.serialize(editor.App.state) === project, '预设应恢复两个版式和当前版式');
+      click('#transfer-undo');
+      assert(state.serialize(editor.App.state) === edited, '载入预设应可一步撤销');
+      click('#transfer-preset-list [aria-label="删除预设 换乘测试预设"]');
+      click('.modal [data-act="ok"]');
+      await waitFor(() => !page.querySelector('#transfer-preset-list [aria-label="载入预设 换乘测试预设"]'));
     });
   } finally {
     await navigate(() => { frame.src = 'about:blank'; });

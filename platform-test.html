@@ -23,7 +23,7 @@
       return S.settings(S.replaceStations(original, stations), { mode: 'vertical', direction: 1, currentId: stations[6].id });
     }
     function $(id) { return d.getElementById(id); }
-    function input(id, value, type) { var el = $(id); el.focus(); el.value = value; el.dispatchEvent(new w.Event(type || 'input', { bubbles: true })); }
+    function input(id, value, type) { var el = $(id); if (id === 'station-transfers') $('transfer-bulk').open = true; el.focus(); el.value = value; el.dispatchEvent(new w.Event(type || 'input', { bubbles: true })); }
     function restore() { A.update(function () { return original; }); A.select(original.currentId); }
     await test('Ctrl/Shift 多选：站点列表与牌面一致，全组选框、微调、删除和撤销恢复选择', function () {
       restore(); var ids = A.state.stations.map(function(s){return s.id;});
@@ -335,8 +335,8 @@
       await drag(0,3,false);assert(A.state.stations[3].id===ids[0]);assert(A.selectedId===ids[0]&&A.state.currentId===current);
       $('undo').click();assert(A.state.stations[0].id===ids[0]);$('redo').click();assert(A.state.stations[3].id===ids[0]);
       var snapshot=S.serialize(A.state);await drag(0,3,true);assert(S.serialize(A.state)===snapshot,'取消拖动仍改变顺序');
-      restore();list.children[2].dispatchEvent(new w.KeyboardEvent('keydown',{bubbles:true,key:'ArrowUp',altKey:true}));
-      assert(A.state.stations[1].id===ids[2]&&d.activeElement.dataset.id===ids[2],'键盘调序后焦点未跟随站点');$('undo').click();
+      restore();var target=list.children[2].querySelector('.station-select');target.focus();target.dispatchEvent(new w.KeyboardEvent('keydown',{bubbles:true,key:'ArrowUp',altKey:true}));
+      assert(A.state.stations[1].id===ids[2]&&d.activeElement===target,'键盘调序后焦点未跟随站点');$('undo').click();
       restore();var before=S.serialize(A.state),direction=A.state.direction,previous=S.neighbors(A.state).previous.id;
       $('reverse-stations').click();assert(A.state.stations[0].id===ids[7]&&A.state.currentId===current&&S.neighbors(A.state).next.id===previous);
       assert(A.state.direction===direction&&$('travel-direction').value===String(direction),'倒序不应改变列车行驶方向');
@@ -372,7 +372,7 @@
       var color=$('transfer-colors').children[1].querySelector('.cp-native');color.value='#654321';color.dispatchEvent(new w.Event('input',{bubbles:true}));
       assert(S.neighbors(A.state).current.transfers[1].color==='#654321'&&S.neighbors(A.state).current.zh==='调色板测试');
       assert(!d.querySelector('.platform-brand'));assert($('tool-up').textContent.includes('前移')&&$('tool-down').textContent.includes('后移'));
-      assert($('tool-up').querySelector('path').getAttribute('d')!==d.querySelector('[data-nudge-x="-1"] path').getAttribute('d'),'调序与微调图标仍相同');restore();
+      assert($('tool-up').dataset.controlIcon === $('station-up').dataset.controlIcon && w.getComputedStyle($('tool-up'), '::before').maskImage !== 'none','两处站点调序按钮应使用同一专用图标');restore();
     });
     await test('响应式增站：11/12站实际圆标等距；密集线路缺口与换乘支线在屏幕上连贯', function () {
       function centers() {
@@ -453,9 +453,8 @@
       $('undo').click(); assert(!A.state.adjustments[key]); $('redo').click(); assert(A.state.adjustments[key].x === 1); input('element-offset-y', '3', 'change'); assert(A.state.adjustments[key].y === 3); $('tool-reset').click(); assert(!A.state.adjustments[key]);
       A.update(function (state) { return S.settings(state, { mode: 'station' }); }); A.selectElement('station:direction'); assert($('station-properties').hidden && !$('element-properties').hidden && $('tool-current').hidden);
       A.deselect(); assert(!$('property-settings').hidden && $('element-properties').hidden && $('platform-element-toolbar').hidden);
-      $('export-svg').scrollIntoView({ block: 'center' });
       var exportBounds = $('export-svg').getBoundingClientRect(), panelBounds = $('property-scroll').getBoundingClientRect();
-      assert(exportBounds.top >= panelBounds.top && exportBounds.bottom <= panelBounds.bottom + 1, '导出按钮应能在面板内滚动到达');
+      assert(exportBounds.top >= panelBounds.bottom && exportBounds.bottom <= w.innerHeight, '导出按钮应固定在属性滚动区下方');
     });
     await test('预设保存完整快照、缩略图载入、删除与本地持久化', function () {
       restore(); A.selectElement('route:' + A.state.currentId); d.querySelector('[data-nudge-x="1"]').click(); var snapshot = S.serialize(A.state);
@@ -701,6 +700,7 @@
     });
     await test('线路底纹：独立开关、自动匹配、保留手选、恢复默认和撤销重做', function () {
       restore(); A.deselect();
+      d.querySelector('[data-property-tab-button="appearance"]').click();
       var toggle = $('line-pattern-enabled'), controls = $('line-pattern-controls');
       assert(toggle.getAttribute('aria-checked') === 'false' && controls.hidden && !$('platform-svg').querySelector('pattern'));
       toggle.click();
@@ -843,6 +843,7 @@
     });
     await test('自定义底纹：导入矢量图和透明图片，坏文件保留已选纹样，项目与预设可载回', async function () {
       restore(); A.deselect();
+      d.querySelector('[data-property-tab-button="appearance"]').click();
       $('line-pattern-enabled').click();
       assert($('line-pattern-import').textContent === '上传底纹');
       var artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">' +
@@ -875,12 +876,14 @@
       await waitFor(function () { return A.state.linePattern.image !== image; });
       image = A.state.linePattern.image;
       var project = S.serialize(A.state);
+      d.querySelector('[data-property-tab-button="project"]').click();
       $('save-preset-shortcut').click();
       $('preset-name').value = '试用底纹';
       $('save-preset-confirm').click();
       var preview = $('platform-svg').querySelector('pattern');
       var thumbnail = $('preset-list').querySelector('pattern');
       assert(preview && thumbnail && preview.id !== thumbnail.id, '同页预览和预设应有各自的纹样');
+      d.querySelector('[data-property-tab-button="appearance"]').click();
       $('line-pattern-clear').click();
       assert(!A.state.linePattern.enabled && A.state.linePattern.image === null);
       assert(d.activeElement === $('line-pattern-enabled'));
@@ -891,6 +894,7 @@
       await waitFor(function () { return A.state.linePattern.image === image; });
       await waitFor(function () { return JSON.parse(w.localStorage.getItem(key)).linePattern.image === image; });
       $('return-to-settings').click();
+      d.querySelector('[data-property-tab-button="appearance"]').click();
       input('line-pattern-source', 'line-1', 'change');
       $('line-pattern-clear').click();
       assert(A.state.linePattern.enabled && A.state.linePattern.source === 'line-1' && A.state.linePattern.image === null,
@@ -902,6 +906,7 @@
     });
     await test('窄窗口可从右栏选择底纹，切换版式后保留设置和上传入口', function () {
       restore(); A.deselect();
+      d.querySelector('[data-property-tab-button="appearance"]').click();
       var oldWidth = frame.style.width;
       try {
         frame.style.width = '390px';
@@ -923,6 +928,7 @@
     });
     await test('底纹上传：错误格式、超限文件和晚到的上传结果', async function () {
       restore(); A.deselect();
+      d.querySelector('[data-property-tab-button="appearance"]').click();
       $('line-pattern-enabled').click();
       var mark = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="12" height="24" fill="white"/></svg>';
       input('line-pattern-source', 'line-5', 'change');

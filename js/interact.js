@@ -136,11 +136,10 @@
       }
 
       var actions = h('div', { class: 'row-actions' });
-      var saveBtn = h('button', { text: '⭐ 存为预设', title: '将此行保存为预设' });
-      saveBtn.addEventListener('click', function (ev) {
+      var saveBtn = SignUI.presetSaveButton(function (ev) {
         ev.stopPropagation();
         saveRowAsPreset(i);
-      });
+      }, { title: '将此行保存为预设' });
       var delBtn = h('button', {
         class: 'row-del', text: '删除行', 'data-control-icon': 'delete',
         title: state.rows.length > 1 ? '删除此行' : '至少保留一行',

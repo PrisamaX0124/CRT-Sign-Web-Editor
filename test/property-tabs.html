@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>右栏标签页测试</title>
+<h1>右栏标签页测试</h1>
+<p id="summary">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="标识编辑器" style="width:1280px;height:640px"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  let editor, page, app;
+  const find = selector => page.querySelector(selector);
+  const visible = selector => !!find(selector)?.getClientRects().length;
+  const tab = name => find('[role="tab"][data-property-tab-button="' + name + '"]');
+  const active = () => find('[data-property-tab-button][aria-selected="true"]')?.dataset.propertyTabButton;
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function waitFor(check) {
+    return new Promise((resolve, reject) => {
+      const deadline = Date.now() + 15000;
+      function poll() {
+        if (check()) resolve();
+        else if (Date.now() > deadline) reject(new Error('等待编辑器或导出结果超时'));
+        else setTimeout(poll, 40);
+      }
+      poll();
+    });
+  }
+  async function open(path) {
+    await new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = '../' + path;
+    });
+    editor = frame.contentWindow;
+    page = frame.contentDocument;
+    await waitFor(() => {
+      page.querySelector('.modal-mask [data-act="ok"]')?.click();
+      return editor.App?.measure && editor.App.state;
+    });
+    app = editor.App;
+    await app.ready;
+  }
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try { await run(); item.className = 'pass'; item.textContent = name; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '。' + error.message; }
+    results.append(item);
+  }
+  function checkFooter(body, png, project) {
+    assert(active() === 'edit' && visible(png) && !visible(project), '应默认打开编辑并固定图片导出');
+    const before = find(png).getBoundingClientRect();
+    find(body).scrollTop = find(body).scrollHeight;
+    tab('project').click();
+    const after = find(png).getBoundingClientRect();
+    assert(visible(project) && before.top === after.top && before.bottom === after.bottom, '滚动和切签时导出区应保持原位');
+    assert(!find(body).contains(find(png)) && after.bottom <= frame.contentWindow.innerHeight, '图片导出区应在滚动区下方、视口之内');
+    tab('edit').click();
+  }
+  async function checkDownloads(scale, png, capture) {
+    const dimensions = [];
+    let received;
+    capture(blob => { received = blob; });
+    for (const multiplier of [1, 2, 4]) {
+      received = null;
+      find(scale).value = multiplier;
+      find(png).click();
+      await waitFor(() => received);
+      const header = new DataView(await received.slice(0, 24).arrayBuffer());
+      dimensions.push([header.getUint32(16), header.getUint32(20)]);
+    }
+    assert(dimensions.every(([width, height], index) => width === dimensions[0][0] * 2 ** index && height === dimensions[0][1] * 2 ** index), 'PNG 文件的实际宽高应随倍率变化');
+  }
+
+  await test('导向标识首签提供常用颜色，键盘可切换标签，项目签保留元素选择', async function () {
+    await open('index.html');
+    assert(visible('[data-scope="标识牌背景色"]') && !visible('.frame-width-input'), '整牌底色应在首签，灰框在外观');
+    const background = find('[data-scope="标识牌背景色"] .cp-current');
+    assert(background.getBoundingClientRect().bottom <= find('#right-panel-body').getBoundingClientRect().bottom, '应能在首屏直接点到背景色');
+    checkFooter('#right-panel-body', '#guidance-export-png', '#guidance-export-project');
+    const state = editor.SignState;
+    const first = state.createElement('bilingual-text');
+    const second = state.createElement('bilingual-text');
+    app.update(() => {
+      const sign = state.createSign();
+      const row = sign.rows[0].id;
+      return state.addElement(state.addElement(sign, row, first), row, second);
+    });
+    app.select(first.id);
+    const input = find('#right-panel-body input[placeholder="中文文本"]');
+    assert(visible('[data-scope="文字颜色"]') && visible('[data-scope="元素背景色"]'), '元素常用颜色应在首签');
+    tab('edit').focus();
+    assert(tab('edit').dataset.controlIcon && tab('layout').dataset.controlIcon && tab('project').dataset.controlIcon, '右栏标签应有各自的图标');
+    tab('edit').dispatchEvent(new editor.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    assert(active() === 'layout' && page.activeElement === tab('layout'), '方向键应切换标签和焦点');
+    const layout = find('.element-properties [data-property-tab="layout"]');
+    const reduced = editor.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    assert((layout.getAnimations().length > 0) === !reduced, '标签过渡应遵循减少动态效果设置');
+    tab('project').click();
+    assert(app.selection.elementId === first.id && visible('#guidance-export-png'), '项目签应保留选区和图片导出');
+    tab('edit').click();
+    assert(find('#right-panel-body input[placeholder="中文文本"]') === input, '切签应保留原控件');
+    tab('layout').click();
+    app.select(second.id);
+    assert(active() === 'layout', '连续选择同类元素应保留当前标签');
+    await checkDownloads('#guidance-png-scale', '#guidance-export-png', handler => { editor.SignStorage.download = handler; });
+  });
+
+  await test('换乘标识按选区提供颜色、排版或底纹，固定支持 PNG 三档倍率', async function () {
+    await open('index.html?editor=transfer');
+    assert(tab('layout').hidden && tab('appearance').hidden && visible('#transfer-palette'), '整牌设置只需编辑与项目');
+    checkFooter('#transfer-property-scroll', '#transfer-export-image', '#transfer-export-project');
+    find('[data-transfer-element^="line:"]').dispatchEvent(new editor.MouseEvent('click', { bubbles: true }));
+    assert(visible('#transfer-line-color-picker') && !tab('appearance').hidden && !visible('#line-pattern-enabled'), '线路色应直接可见，底纹放外观');
+    tab('appearance').click();
+    assert(visible('#line-pattern-enabled') && visible('[data-open-image-upload]'), '底纹与上传入口应可用');
+    find('[data-transfer-element^="arrow:"]').dispatchEvent(new editor.MouseEvent('click', { bubbles: true }));
+    assert(active() === 'edit' && visible('#transfer-directions') && tab('appearance').hidden, '换选箭头时应打开方向选择并隐藏底纹签');
+    await checkDownloads('#transfer-png-scale', '#transfer-export-image', handler => { editor.SignStorage.download = handler; });
+  });
+
+  await test('站台标识首签可改线色和换乘颜色，排版与批量生成各有固定入口', async function () {
+    await open('platform.html');
+    const state = editor.PlatformState;
+    app.update(() => state.replaceStations(state.create(), state.parseStations('01|甲站|First|1\n02|乙站|Second|2', 'chongqing')));
+    assert(visible('#line-color-picker') && visible('#line-number') && visible('#hanging-length') && !visible('[data-property-tab-button="layout"]'), '站台线路、颜色和整牌排版应共用首签');
+    checkFooter('#property-scroll', '#export-png', '#save-project');
+    app.select(app.state.stations[0].id);
+    assert(active() === 'edit' && visible('#station-zh') && visible('#transfer-colors .cp-current') && visible('#set-current'), '首签应显示站名、本站按钮和换乘颜色');
+    assert(visible('#element-offset-x') && visible('#open-batch-generation'), '首签应显示站点位置，批量生成入口固定');
+    app.select(app.state.stations[1].id);
+    assert(active() === 'edit' && visible('#element-offset-x'), '连续选择站点应保留首签');
+    await checkDownloads('#png-scale', '#export-png', handler => { app.download = handler; });
+  });
+
+  const passed = results.querySelectorAll('.pass').length;
+  document.getElementById('summary').textContent = passed + ' / ' + results.children.length + ' 通过';
+  document.title = passed === results.children.length ? '✔ 右栏标签页测试全部通过' : '✖ 右栏标签页测试失败';
+})();
+</script>

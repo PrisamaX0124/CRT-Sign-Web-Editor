@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 站台标识</title>
-  <link rel="stylesheet" href="style.css?v=8eb3ef9d5065">
-  <link rel="stylesheet" href="platform.css?v=76363eff8333">
-  <link rel="stylesheet" href="image-upload.css?v=2d9a1dc337a4">
+  <link rel="stylesheet" href="style.css?v=8e9342a18028">
+  <link rel="stylesheet" href="platform.css?v=e3421f531c96">
+  <link rel="stylesheet" href="image-upload.css?v=39bea1cc93e6">
 </head>
 <body class="editor-page platform-page">
   <header class="editor-header">
@@ -110,7 +110,7 @@
       </div>
       <div id="platform-element-toolbar" class="floating-toolbar" role="toolbar" aria-label="标识牌元素快捷操作" hidden inert>
         <span id="toolbar-element-label"></span>
-        <div class="platform-tool-group" role="group" aria-label="站点管理"><button id="tool-current" title="设为本站">本站</button><button id="tool-up" title="站点前移" aria-label="站点前移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 12H8m5-5-5 5 5 5"/></svg><span>前移</span></button><button id="tool-down" title="站点后移" aria-label="站点后移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16M4 12h12m-5-5 5 5-5 5"/></svg><span>后移</span></button><button id="tool-delete" title="删除站点" aria-label="删除站点" data-control-icon="delete"></button></div>
+        <div class="platform-tool-group" role="group" aria-label="站点管理"><button id="tool-current" title="设为本站" aria-label="设为本站" data-control-icon="locate"></button><button id="tool-up" title="站点前移" aria-label="站点前移" data-control-icon="station-up"><span>前移</span></button><button id="tool-down" title="站点后移" aria-label="站点后移" data-control-icon="station-down"><span>后移</span></button><button id="tool-delete" title="删除站点" aria-label="删除站点" data-control-icon="delete"></button></div>
         <div class="platform-tool-group nudge-tools" role="group" aria-label="位置微调"><span class="tool-group-label">微调</span><button data-nudge-x="-1" data-nudge-y="0" title="元素左移 1px" aria-label="元素左移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg></button><button data-nudge-x="1" data-nudge-y="0" title="元素右移 1px" aria-label="元素右移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="-1" title="元素上移 1px" aria-label="元素上移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><button data-nudge-x="0" data-nudge-y="1" title="元素下移 1px" aria-label="元素下移 1px"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></button><button id="tool-reset" title="复位元素微调" aria-label="复位元素微调"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M4 10a8 8 0 1 1-1 6"/></svg></button></div>
       </div>
       <footer class="editor-footer">
@@ -135,17 +135,28 @@
       </footer>
     </main>
     <aside class="platform-properties editor-right" aria-labelledby="property-heading">
-      <header class="panel-header">
+      <header class="panel-header property-header">
         <div class="panel-heading">
           <button type="button" class="icon-btn" id="return-to-settings" aria-label="返回标识牌设置" title="返回标识牌设置" hidden>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <h1 class="panel-title" id="property-heading" tabindex="-1">标识牌设置</h1>
         </div>
+        <div class="property-tabs" role="tablist" aria-labelledby="property-heading"></div>
       </header>
       <div class="panel-body" id="property-scroll">
         <div id="property-settings">
-          <section class="panel-section platform-section" id="dimension-section">
+          <section class="panel-section platform-section" data-property-tab="edit">
+            <h2 class="section-title">线路与行车方向</h2>
+            <div class="field"><label for="line-number">线路号或名称</label><input id="line-number" type="text" maxlength="40" placeholder="如 10 或 市郊线"></div>
+            <div class="field color-field"><label for="line-color-hex">线路色</label><div id="line-color-picker"></div></div>
+            <div class="field"><label for="travel-direction" id="travel-direction-label">列车行驶方向</label><select id="travel-direction"><option value="-1">前往列表首站 ←</option><option value="1">前往列表末站 →</option></select></div>
+            <div id="station-direction-option" class="station-direction-option" hidden>
+              <label id="station-direction-caption" for="show-station-direction">显示行车方向提示</label>
+              <button type="button" id="show-station-direction" class="platform-switch" role="switch" aria-labelledby="station-direction-caption" aria-checked="true"><span aria-hidden="true"></span></button>
+            </div>
+          </section>
+          <section class="panel-section platform-section" id="dimension-section" data-property-tab="edit">
             <h2 class="section-title">尺寸与排版</h2>
             <div id="vertical-layout-controls" hidden>
               <div class="field">
@@ -175,61 +186,41 @@
               <input id="font-scale" type="range" min="0.7" max="1.4" step="0.05">
             </div>
           </section>
-          <section class="panel-section platform-section">
-            <h2 class="section-title">线路与行车方向</h2>
-            <div class="field"><label for="line-number">线路号或名称</label><input id="line-number" type="text" maxlength="40" placeholder="如 10 或 市郊线"></div>
-            <div class="field"><label for="travel-direction" id="travel-direction-label">列车行驶方向</label><select id="travel-direction"><option value="-1">前往列表首站 ←</option><option value="1">前往列表末站 →</option></select></div>
-            <div id="station-direction-option" class="station-direction-option" hidden>
-              <label id="station-direction-caption" for="show-station-direction">显示行车方向提示</label>
-              <button type="button" id="show-station-direction" class="platform-switch" role="switch" aria-labelledby="station-direction-caption" aria-checked="true"><span aria-hidden="true"></span></button>
-            </div>
-          </section>
-          <section class="panel-section platform-section">
+          <section class="panel-section platform-section" data-property-tab="appearance">
             <h2 class="section-title">牌面颜色</h2>
             <div class="field"><label for="palette-city">城市配色</label><select id="palette-city"><option value="chongqing">重庆</option><option value="chengdu">成都</option><option value="shanghai">上海</option></select></div>
-            <div class="field color-field"><label for="line-color-hex">线路色</label><div id="line-color-picker"></div></div>
             <div class="field color-field"><label for="background-color-hex">标识牌背景色</label><div id="background-color-picker"></div></div>
             <div class="field color-field"><label for="muted-color-hex">已驶过区段颜色</label><div id="muted-color-picker"></div></div>
           </section>
-          <section class="panel-section platform-section" id="line-pattern-section"></section>
-          <section class="panel-section platform-section">
-            <h2 class="section-title">导出</h2>
-            <div class="field"><label for="png-scale">PNG 图片尺寸</label><select id="png-scale"><option value="1">原尺寸（1 倍）</option><option value="2" selected>2 倍尺寸</option><option value="4">4 倍尺寸</option></select></div>
-            <div class="image-upload-pair">
-              <button id="export-png" class="btn btn-primary">导出 PNG</button>
-            </div>
-            <button id="export-svg" class="btn">导出 SVG</button>
-            <button type="button" id="open-batch-generation" class="btn" data-control-icon="batch-generate">批量生成</button>
-          </section>
-          <section class="panel-section platform-section">
-            <h2 class="section-title">项目</h2>
-            <div class="field-pair">
-              <button type="button" id="save-project" class="btn">导出项目 JSON</button>
-              <button type="button" id="import-project" class="btn">导入项目 JSON</button>
-            </div>
-            <button id="save-preset-shortcut" class="btn">存为预设</button>
-            <input id="project-file" type="file" accept=".json,application/json" hidden>
-          </section>
+          <section class="panel-section platform-section" id="line-pattern-section" data-property-tab="appearance"></section>
         </div>
         <div id="property-selection" hidden>
           <p class="element-type-label" id="property-selection-name" hidden></p>
-          <section class="panel-section platform-section" id="station-properties" hidden>
+          <section class="panel-section platform-section" id="station-properties" data-property-tab="edit" hidden>
             <div class="section-heading"><h2 class="section-title">站点内容</h2><span id="current-station-label" hidden>本站</span></div>
             <div class="field"><label for="station-code">站点编号</label><input id="station-code" type="text" maxlength="8"></div>
             <div class="field"><label for="station-zh">中文站名</label><input id="station-zh" type="text" maxlength="80"></div>
             <div class="field"><label for="station-en">英文站名</label><input id="station-en" type="text" maxlength="160"></div>
+            <button class="btn" id="set-current" data-control-icon="locate">设为本站</button>
           </section>
-          <section class="panel-section platform-section" id="transfer-properties" hidden>
-            <h2 class="section-title">换乘线路</h2>
-            <div class="field">
-              <label for="station-transfers">线路列表</label>
-              <input id="station-transfers" type="text" placeholder="如 1,5" aria-describedby="transfer-help">
-              <small id="transfer-help">最多 6 条，用逗号分隔。输入线路号会按城市配色。文字线路可用下方按钮添加。</small>
-            </div>
+          <section class="panel-section platform-section" id="transfer-properties" data-property-tab="edit" hidden>
+            <div class="section-heading"><h2 class="section-title">换乘线路</h2><span id="transfer-count"></span></div>
+            <form id="add-number-transfer-form" class="transfer-add-number" novalidate>
+              <input id="new-transfer-number" type="text" inputmode="numeric" maxlength="8" placeholder="线路号" aria-label="新换乘线路号" autocomplete="off">
+              <button type="submit" class="btn" id="add-number-transfer">＋ 数字线路</button>
+            </form>
+            <button type="button" class="btn" id="add-text-transfer">＋ 文字线路</button>
+            <p id="transfer-empty" class="field-help">还没有换乘线路</p>
             <div id="transfer-colors"></div>
-            <button class="btn" id="add-text-transfer">添加文字换乘线路</button>
+            <details id="transfer-bulk">
+              <summary>批量填写</summary>
+              <div class="field"><label class="sr-only" for="station-transfers">批量填写换乘线路</label>
+                <input id="station-transfers" type="text" placeholder="如 1,5" aria-describedby="transfer-help">
+                <small id="transfer-help">用逗号分隔。文字线路格式为 碧桐线~Bitong Line:#0057B8。</small>
+              </div>
+            </details>
           </section>
-          <section class="panel-section platform-section" id="element-properties" hidden>
+          <section class="panel-section platform-section" id="element-properties" data-property-tab="edit" hidden>
             <h2 class="section-title">位置微调</h2>
             <div class="field-pair" id="element-offsets">
               <div class="field"><label for="element-offset-x">横向（像素）</label><input id="element-offset-x" type="number" min="-128" max="128" step="1"></div>
@@ -243,20 +234,37 @@
             </div>
             <button id="reset-element" class="btn">还原位置</button>
           </section>
-          <section class="panel-section platform-section" id="station-management" hidden>
-            <h2 class="section-title">站点管理</h2>
+          <section class="panel-section platform-section" id="station-management" data-property-tab="edit" hidden>
+            <h2 class="section-title">站点操作</h2>
             <div id="single-station-actions">
-              <button class="btn" id="set-current" data-control-icon="locate">设为本站</button>
               <div class="field-pair">
-                <button class="btn" id="station-up">前移</button>
-                <button class="btn" id="station-down">后移</button>
+                <button class="btn" id="station-up" data-control-icon="station-up">前移</button>
+                <button class="btn" id="station-down" data-control-icon="station-down">后移</button>
               </div>
               <button class="btn" id="station-delete" data-control-icon="delete">删除站点</button>
             </div>
             <button class="btn" id="delete-selected-stations" data-control-icon="delete" hidden>删除所选站点</button>
           </section>
         </div>
+        <section class="panel-section platform-section" data-property-tab="project">
+          <div class="field-pair">
+            <button type="button" id="save-project" class="btn">导出项目 JSON</button>
+            <button type="button" id="import-project" class="btn">导入项目 JSON</button>
+          </div>
+          <button id="save-preset-shortcut" class="btn">存为预设</button>
+        </section>
       </div>
+      <div class="image-export" role="group" aria-label="图片导出">
+        <div class="image-export-primary">
+          <button type="button" id="export-png" class="btn btn-primary">导出 PNG</button>
+          <select id="png-scale" aria-label="PNG 倍率" title="PNG 倍率"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select>
+        </div>
+        <div class="image-export-secondary">
+          <button type="button" id="export-svg" class="btn">导出 SVG</button>
+          <button type="button" id="open-batch-generation" class="btn" data-control-icon="batch-generate">批量生成</button>
+        </div>
+      </div>
+      <input id="project-file" type="file" accept=".json,application/json" hidden>
     </aside>
   </div>
   <dialog id="batch-dialog"><form method="dialog"><div class="batch-heading"><h2>批量编辑站点</h2><button value="cancel" class="dialog-close" data-control-icon="close" aria-label="关闭批量编辑"></button></div><p>每行一个站点：编号 | 中文站名 | 英文站名 | 换乘线路</p><label class="batch-label" for="batch-text">站点数据</label><textarea id="batch-text" rows="12" spellcheck="false" autofocus></textarea><p class="field-help">英文、换乘可留空。应用后按编号保留本站，支持撤销。</p><p id="batch-error" role="alert"></p><div class="batch-buttons"><button class="btn btn-primary" type="button" id="apply-batch">应用站点</button></div></form></dialog>
@@ -339,13 +347,14 @@
   <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
   <script src="js/editor-motion.js?v=46757705e313"></script>
+  <script src="js/property-tabs.js?v=c86bbaf97d42"></script>
   <script src="js/preview-zoom.js?v=acec1aa66512"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
   <script src="js/palette-manager.js?v=800486182d2f"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
-  <script src="js/exporters.js?v=54135fa606d4"></script>
+  <script src="js/exporters.js?v=f439220b937f"></script>
   <script src="js/image-upload.js?v=7a2caa6e67ea"></script>
-  <script src="js/image-upload-dialog.js?v=3c9316d202eb"></script>
+  <script src="js/image-upload-dialog.js?v=95e0fd6ff5d6"></script>
   <script src="js/platform/state.js?v=0838e6342bae"></script>
   <script src="js/platform/reference.js?v=public-80b402bac929"></script>
   <script src="js/platform/vertical-reference.js?v=public-a036244575d0"></script>
@@ -361,6 +370,6 @@
   <script src="vendor/zip.min.js?v=2.25.0"></script>
   <script src="js/platform/batch.js?v=77ffb48c2c7c"></script>
   <script src="js/platform/batch-dialog.js?v=7db851c565b8"></script>
-  <script src="js/platform/main.js?v=72a4f8144ccd"></script>
+  <script src="js/platform/main.js?v=12866ab653fb"></script>
 </body>
 </html>

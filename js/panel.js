@@ -338,6 +338,8 @@
   var previousPanelSelection = null;
   var syncFns = [];
   var rowBackgroundId = null;
+  var propertyBody = document.getElementById('right-panel-body');
+  var propertyTabs;
 
   function panelMode() {
     if (App.selectedIds().length > 1) return 'batch';
@@ -366,10 +368,16 @@
 
   function syncRightPanel() {
     if (!App.state || !App.measure) return;
+    if (!propertyTabs) {
+      propertyTabs = global.PropertyTabs.create(propertyBody);
+      bindImageExport();
+    }
     var mode = panelMode();
     var sig = panelSignature(mode);
     if (sig !== lastSignature) {
       var content = rebuildRightPanel(mode);
+      var context = mode === 'element' ? State.findElement(App.state, App.selection.elementId)?.element.type : mode;
+      propertyTabs.sync(context);
       var selection = mode === 'preset' ? App.presetPreviewId : App.selectedIds().join(',');
       if (previousPanelMode && (previousPanelMode !== mode || previousPanelSelection !== selection)) {
         document.getElementById('right-panel-body').scrollTop = 0;
@@ -392,12 +400,13 @@
   function rebuildRightPanel(mode) {
     syncFns = [];
     paletteCityFns = [];
-    var body = document.getElementById('right-panel-body');
-    body.innerHTML = '';
-    if (mode === 'batch') return body.appendChild(buildBatchPanel());
-    if (mode === 'element') return body.appendChild(buildElementPanel());
-    if (mode === 'preset') return body.appendChild(buildPresetPreviewPanel());
-    return body.appendChild(buildSettingsPanel());
+    var content;
+    if (mode === 'batch') content = buildBatchPanel();
+    else if (mode === 'element') content = buildElementPanel();
+    else if (mode === 'preset') content = buildPresetPreviewPanel();
+    else content = buildSettingsPanel();
+    propertyBody.replaceChildren(content, buildProjectPanel());
+    return content;
   }
 
   // ─── 表单控件工厂 ──────────────────────────────────────────
@@ -417,8 +426,8 @@
     return h('div', { class: 'field' + (control.classList.contains('color-picker') ? ' color-field' : '') }, children);
   }
 
-  function panelSection(title, key) {
-    return h('section', { class: 'panel-section', 'data-section': key }, [h('h3', { class: 'section-title', text: title })]);
+  function panelSection(title, key, tab) {
+    return h('section', { class: 'panel-section', 'data-section': key, 'data-property-tab': tab }, [h('h3', { class: 'section-title', text: title })]);
   }
 
   var toolIcon = UI.toolIcon;
@@ -527,7 +536,10 @@
 
   function buildSettingsPanel() {
     var s = App.state;
-    var root = h('div');
+    var dimensions = panelSection('尺寸', 'dimensions', 'edit');
+    var heading = dimensions.firstElementChild;
+    heading.classList.add('sign-size-heading');
+    heading.appendChild(h('span', { text: s.rows.length + ' 行' }));
 
     var rowHeightInput = numberInput({ min: '32', max: '2048', step: '4' }, function (v) {
       App.update(function (st) {
@@ -536,13 +548,9 @@
     });
     rowHeightInput.value = s.rowHeight;
     bindSync(rowHeightInput, function () { return App.state.rowHeight; });
-    root.appendChild(field('行高（px）', rowHeightInput));
+    dimensions.appendChild(field('行高（px）', rowHeightInput));
 
-    var rowCount = h('input', { type: 'number', value: s.rows.length, disabled: 'disabled' });
-    bindSync(rowCount, function () { return App.state.rows.length; });
-    root.appendChild(field('行数（由添加/删除行控制）', rowCount));
-
-    root.appendChild(field('宽度模式', segGroup([
+    dimensions.appendChild(field('宽度模式', segGroup([
       { value: 'fixed', label: '固定' },
       { value: 'dynamic', label: '动态' },
     ], function () { return App.state.widthMode; }, function (v) {
@@ -588,7 +596,7 @@
     }
     syncWidth();
     syncFns.push(syncWidth);
-    root.appendChild(widthControls);
+    dimensions.appendChild(widthControls);
 
     var dynamicHint = h('div', { class: 'hint-text', text: '' });
     syncFns.push(function () {
@@ -596,9 +604,9 @@
       dynamicHint.textContent = '当前动态宽度：' + (App.layout ? App.layout.width : '–') + ' px（由最宽行决定）';
     });
     dynamicHint.style.display = s.widthMode === 'dynamic' ? '' : 'none';
-    root.appendChild(dynamicHint);
+    dimensions.appendChild(dynamicHint);
 
-    root.appendChild(checkbox('锁定宽高比', function () { return App.state.aspectLocked; }, function (v) {
+    dimensions.appendChild(checkbox('锁定宽高比', function () { return App.state.aspectLocked; }, function (v) {
       App.update(function (st) { return State.updateSignSettings(st, { aspectLocked: v }); });
     }));
 
@@ -612,9 +620,10 @@
         });
       },
     });
-    root.appendChild(h('div', { class: 'section-title', text: '牌面颜色与灰框' }));
-    root.appendChild(field('标识牌背景色', bgColor));
-    root.appendChild(buildRowBackgroundSettings());
+    var colors = panelSection('牌面颜色', 'colors', 'edit');
+    colors.appendChild(field('标识牌背景色', bgColor));
+    var appearance = panelSection('行背景与灰框', 'appearance', 'appearance');
+    appearance.appendChild(buildRowBackgroundSettings());
 
     var frameWidthInput = numberInput({ class: 'frame-width-input', min: '0', max: '512', step: '1' }, function (v) {
       App.update(function (st) {
@@ -623,9 +632,9 @@
     });
     frameWidthInput.value = s.frameWidth;
     bindSync(frameWidthInput, function () { return App.state.frameWidth; });
-    root.appendChild(field('灰框宽度（px）', frameWidthInput,
+    appearance.appendChild(field('灰框宽度（px）', frameWidthInput,
       '外缘与行间分割线使用相同宽度；0 为不显示'));
-    root.appendChild(field('灰框颜色', buildColorPicker({
+    appearance.appendChild(field('灰框颜色', buildColorPicker({
       value: s.frameColor,
       scope: '灰框颜色',
       getValue: function () { return App.state.frameColor; },
@@ -634,68 +643,61 @@
       },
     }), '作用于每行灰框，宽度为 0 时隐藏'));
 
-    root.appendChild(h('div', { class: 'divider' }));
-    root.appendChild(h('div', { class: 'section-title', text: '编辑器' }));
-    root.appendChild(checkbox('输入线路号自动匹配线路色', function () { return App.prefs.autoLineColor; }, function (v) {
+    return h('div', {}, [dimensions, colors, appearance]);
+  }
+
+  function buildProjectPanel() {
+    var files = panelSection('项目文件', 'project-files', 'project');
+    var download = h('button', { class: 'btn', id: 'guidance-export-project', text: '导出项目 JSON' });
+    var upload = h('button', { class: 'btn', id: 'guidance-import-project', text: '导入项目 JSON' });
+    download.addEventListener('click', function () { App.exportProject(); });
+    upload.addEventListener('click', function () { document.getElementById('guidance-project-file').click(); });
+    files.append(download, upload);
+
+    var preferences = panelSection('编辑偏好', 'editor-preferences', 'project');
+    preferences.appendChild(checkbox('输入线路号自动匹配线路色', function () { return App.prefs.autoLineColor; }, function (v) {
       setAutoLineColor(v);
     }));
-    root.appendChild(h('div', {
+    preferences.appendChild(h('div', {
       class: 'hint-text',
       text: '开启后输入线路号会自动填充线路色；展开色板后可切换城市。',
     }));
 
-    root.appendChild(h('button', {
-      class: 'btn', text: '清空标识牌', 'data-control-icon': 'clear',
-      style: 'margin-top:6px',
-    })).addEventListener('click', function () {
+    var actions = panelSection('项目操作', 'project-actions', 'project');
+    var clear = h('button', { class: 'btn', text: '清空标识牌', 'data-control-icon': 'clear' });
+    actions.append(clear);
+    clear.addEventListener('click', function () {
       SignUI.confirmDialog('确定要清空所有行和元素吗？', '清空标识牌', '清空', 'clear').then(function (ok) {
         if (!ok) return;
         App.update(State.clearSign);
-        App.select(null);
+        if (App.presetPreviewId) App.previewPreset(null);
+        else App.select(null);
+        propertyTabs.show('edit');
         SignUI.toast('标识牌已清空');
       });
     });
 
-    root.appendChild(h('div', { class: 'divider' }));
-    root.appendChild(h('div', { class: 'section-title', text: '导出' }));
-    // 导出前按需加载实际使用的内嵌字体，加载期间按钮保持忙碌态，
-    // 避免慢网络下「点了没反应」；失败由导出函数 toast 错误。
-    function exportButton(text, run) {
-      var btn = h('button', { type: 'button', class: 'btn', text: text });
-      btn.addEventListener('click', function () {
-        if (btn.disabled) return;
-        var original = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = '⏳ 正在准备字体…';
-        function done() { btn.disabled = false; btn.textContent = original; }
-        run().then(done, done);
+    return h('div', {}, [files, preferences, actions]);
+  }
+
+  function bindImageExport() {
+    var png = document.getElementById('guidance-export-png');
+    var svg = document.getElementById('guidance-export-svg');
+    var scale = document.getElementById('guidance-png-scale');
+    [[png, () => SignExporters.exportPNGFile(App.state, App.measure, Number(scale.value))],
+      [svg, () => SignExporters.exportSVGFile(App.state, App.measure)]].forEach(function ([button, run]) {
+      button.addEventListener('click', async function () {
+        if (!App.measure || button.disabled) return;
+        var label = button.textContent;
+        button.disabled = true;
+        button.textContent = '正在导出…';
+        try { await run(); }
+        finally { button.disabled = false; button.textContent = label; }
       });
-      return btn;
-    }
-    var imageActions = h('div', { class: 'image-upload-pair' });
-    var downloadImage = exportButton('⬇ 导出 PNG', function () {
-      return SignExporters.exportPNGFile(App.state, App.measure);
     });
-    downloadImage.classList.add('btn-primary');
-    imageActions.appendChild(downloadImage);
-    global.ImageUploadDialog.addButton(downloadImage, function () {
+    global.ImageUploadDialog.addButton(svg, function () {
       return SignExporters.createImage(App.state, App.measure).then(function (result) { return result.image; });
     });
-    root.appendChild(imageActions);
-    root.appendChild(exportButton('⬇ 导出 SVG', function () {
-      return SignExporters.exportSVGFile(App.state, App.measure);
-    }));
-
-    root.appendChild(h('div', { class: 'divider' }));
-    root.appendChild(h('div', { class: 'section-title', text: '项目' }));
-    root.appendChild(h('button', { class: 'btn', id: 'guidance-export-project', text: '导出项目 JSON' })).addEventListener('click', function () {
-      App.exportProject();
-    });
-    root.appendChild(h('button', { class: 'btn', id: 'guidance-import-project', text: '导入项目 JSON' })).addEventListener('click', function () {
-      document.getElementById('guidance-project-file').click();
-    });
-
-    return root;
   }
 
   // ─── 元素属性面板 ──────────────────────────────────────────
@@ -757,7 +759,7 @@
   function buildBatchPanel() {
     var root = h('div', { class: 'batch-properties' });
     root.appendChild(h('div', { class: 'element-type-label', text: '已选择 ' + App.selectedIds().length + ' 个元素' }));
-    var layout = panelSection('批量排版', 'layout');
+    var layout = panelSection('批量排版', 'layout', 'edit');
     [
       { key: 'align', label: '文字对齐', values: ['left', 'center', 'right'] },
       { key: 'contentAlign', label: '内容对齐', values: ['left', 'right'] },
@@ -788,8 +790,8 @@
       });
       layout.appendChild(field('左右内边距（行高比例）', grid));
     }
-    root.appendChild(layout);
-    var colors = panelSection('元素颜色', 'colors');
+    if (layout.children.length > 1) root.appendChild(layout);
+    var colors = panelSection('元素颜色', 'colors', 'edit');
     colors.appendChild(field('元素背景色', buildColorPicker({
       value: App.backgroundColorValue(), scope: '元素背景色', nullable: true,
       getValue: App.backgroundColorValue,
@@ -797,7 +799,7 @@
       onChange: App.setBackgroundColor,
     })));
     root.appendChild(colors);
-    var del = h('button', { class: 'btn', text: '删除选中元素', 'data-control-icon': 'delete' });
+    var del = h('button', { class: 'btn', text: '删除选中元素', 'data-control-icon': 'delete', 'data-property-tab': 'edit' });
     del.addEventListener('click', App.deleteSelection);
     root.appendChild(del);
     return root;
@@ -817,9 +819,9 @@
 
     var root = h('div', { class: 'element-properties' });
     root.appendChild(h('div', { class: 'element-type-label', text: TYPE_NAMES[el.type] }));
-    var content = panelSection('内容', 'content');
-    var layout = panelSection('排版', 'layout');
-    var colors = panelSection('元素颜色', 'colors');
+    var content = panelSection('内容', 'content', 'edit');
+    var layout = panelSection('排版', 'layout', 'layout');
+    var colors = panelSection('元素颜色', 'colors', 'edit');
     var fields = h('div');
 
     switch (el.type) {
@@ -836,7 +838,7 @@
     }
     Array.prototype.slice.call(fields.children).forEach(function (node) {
       if (node.classList.contains('color-field')) colors.appendChild(node);
-      else if (node.querySelector('.seg-group, .format-btn, .alignment-buttons, input[type="range"]')) layout.appendChild(node);
+      else if (!node.matches('.arrow-direction') && node.querySelector('.seg-group, .format-btn, .alignment-buttons, input[type="range"]')) layout.appendChild(node);
       else content.appendChild(node);
     });
 
@@ -848,8 +850,7 @@
       if (section.children.length > 1) root.appendChild(section);
     });
 
-    root.appendChild(h('div', { class: 'divider' }));
-    var del = h('button', { class: 'btn', text: '删除元素', 'data-control-icon': 'delete' });
+    var del = h('button', { class: 'btn', text: '删除元素', 'data-control-icon': 'delete', 'data-property-tab': 'edit' });
     del.addEventListener('click', function () {
       App.update(function (st) { return State.deleteElement(st, el.id); });
       App.select(null);
@@ -860,7 +861,7 @@
   }
 
   function buildArrowFields(root, el, live) {
-    root.appendChild(field('方向', segGroup([
+    var direction = field('方向', segGroup([
       { value: 'left', label: '←', title: '向左' },
       { value: 'left-up', label: '↖', title: '向左上' },
       { value: 'up', label: '↑', title: '向上' },
@@ -871,7 +872,9 @@
       { value: 'left-down', label: '↙', title: '向左下' },
     ], function () { return live().props.direction; }, function (v) {
       patchProps(el.id, { direction: v });
-    })));
+    }));
+    direction.classList.add('arrow-direction');
+    root.appendChild(direction);
 
     var range = h('input', { type: 'range', min: '0.1', max: '0.5', step: '0.05' });
     var pct = h('span', { class: 'hint-text' });
@@ -1199,8 +1202,8 @@
 
   function buildPresetPreviewPanel() {
     var p = Presets.get(App.presetPreviewId);
-    if (!p) return h('div', { class: 'hint-text', text: '预设不存在或已删除' });
-    var root = h('div');
+    if (!p) return h('div', { class: 'hint-text', text: '预设不存在或已删除', 'data-property-tab': 'edit' });
+    var root = h('div', { 'data-property-tab': 'edit' });
     root.appendChild(h('div', { class: 'section-title', text: p.name }));
     root.appendChild(h('div', { class: 'field' }, [
       h('div', { style: 'border:1px solid #edf0f3;border-radius:6px;padding:6px;background:#fff' }, [

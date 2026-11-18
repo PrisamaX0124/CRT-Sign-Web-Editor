@@ -258,18 +258,18 @@
     });
   }
 
-  function createImage(sign, measure) {
+  function createImage(sign, measure, scale = 1) {
     return ensureFontData(sign).then(function (embedData) {
       var size = Render.layoutSign(sign, measure);
       var source = buildExportSVGString(sign, measure, embedData);
-      return rasterizePNG(source, size).then(function (image) {
-        return { image: image, width: Math.round(size.width), height: Math.round(size.height) };
+      return rasterizePNG(source, size, scale).then(function (image) {
+        return { image: image, width: Math.round(size.width * scale), height: Math.round(size.height * scale) };
       });
     });
   }
 
-  function exportPNGFile(sign, measure) {
-    return createImage(sign, measure).then(function (result) {
+  function exportPNGFile(sign, measure, scale) {
+    return createImage(sign, measure, scale).then(function (result) {
       Storage.download(result.image, 'sign-' + Storage.timestamp() + '.png');
       SignUI.toast('PNG 已导出（' + result.width + '×' + result.height + ' px）', 'success');
     }).catch(function (error) {

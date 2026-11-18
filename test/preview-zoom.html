@@ -31,7 +31,7 @@
       },
       dimensions: editor => editor.App.layout,
       serialize: editor => editor.SignState.serializeSign(editor.App.state),
-      exportButtons: document => [...document.querySelectorAll('#right-panel-body button')].filter(button => /导出 (SVG|PNG)/.test(button.textContent)),
+      exportButtons: document => document.querySelectorAll('#guidance-export-svg, #guidance-export-png'),
       downloadFrom: editor => editor.SignStorage,
     },
     {

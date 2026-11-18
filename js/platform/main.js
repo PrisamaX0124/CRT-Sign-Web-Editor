@@ -8,7 +8,8 @@
   var previousPanelSelection = '';
   var renderedCurrentId;
   var renderedLayout;
-  var basePickers=[],transferPickers=[],paletteRevision=-1;
+  var propertyTabs = global.PropertyTabs.create($('property-scroll'));
+  var basePickers = [], transferRows = [], paletteRevision = -1;
   var syncLinePattern;
   var names = { route: '全线吊板', station: '本站吊板', vertical: '纵向线路图' };
   function $(id) { return document.getElementById(id); }
@@ -228,25 +229,40 @@
           if (list.children[index] !== current) list.insertBefore(current, list.children[index] || null);
           return;
         }
-        var button = document.createElement('button'); button.className = 'station-item'; button.dataset.id = s.id;
+        var card = document.createElement('div'); card.className = 'station-item'; card.dataset.id = s.id;
+        var button = document.createElement('button'); button.type = 'button'; button.className = 'station-select';
         var code = document.createElement('span'); code.className = 'station-item-code';
         var text = document.createElement('span'); text.className = 'station-item-text'; text.appendChild(document.createElement('strong')); text.appendChild(document.createElement('small'));
-        var tag = document.createElement('span'); tag.className = 'station-item-tag';
         var grip=document.createElement('span');grip.className='station-drag-handle';grip.setAttribute('aria-hidden','true');
         grip.innerHTML='<svg viewBox="0 0 24 24"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg>';
-        button.append(grip,code, text, tag); button.addEventListener('click', function (event) { App.select(button.dataset.id, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); }); list.insertBefore(button, list.children[index] || null);
+        var currentButton = document.createElement('button'); currentButton.type = 'button'; currentButton.className = 'station-current';
+        currentButton.dataset.controlIcon = 'locate';
+        currentButton.addEventListener('click', function (event) {
+          event.stopPropagation();
+          var hadFocus = document.activeElement === currentButton;
+          setCurrentStation(card.dataset.id);
+          if (hadFocus && currentButton.disabled) button.focus({ preventScroll: true });
+        });
+        button.append(grip, code, text);
+        card.append(button, currentButton);
+        card.addEventListener('click', function (event) { App.select(card.dataset.id, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); });
+        list.insertBefore(card, list.children[index] || null);
       });
       existing.forEach(function (card) { card.remove(); });
       if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
       listSignature = signature; list.scrollTop = scroll; list.scrollLeft = horizontal;
     }
     var selected = App.selectedStationIds();
-    Array.from(list.children).forEach(function (button, i) {
-      var s = App.state.stations[i]; button.setAttribute('aria-pressed', String(selected.indexOf(s.id) >= 0));
-      button.setAttribute('aria-label', s.code + ' ' + s.zh + (s.id === App.state.currentId ? ' 本站' : ''));
-      button.querySelector('.station-item-code').textContent = s.code;
-      button.querySelector('strong').textContent = s.zh || '未命名站点'; button.querySelector('small').textContent = s.en;
-      button.querySelector('.station-item-tag').textContent = s.id === App.state.currentId ? '本站' : '';
+    Array.from(list.children).forEach(function (card, i) {
+      var s = App.state.stations[i], isCurrent = s.id === App.state.currentId;
+      var button = card.querySelector('.station-select'), currentButton = card.querySelector('.station-current');
+      button.setAttribute('aria-pressed', String(selected.includes(s.id)));
+      button.setAttribute('aria-label', s.code + ' ' + s.zh + (isCurrent ? ' 本站' : ''));
+      card.querySelector('.station-item-code').textContent = s.code;
+      card.querySelector('strong').textContent = s.zh || '未命名站点'; card.querySelector('small').textContent = s.en;
+      currentButton.disabled = isCurrent;
+      currentButton.title = isCurrent ? '已是本站' : '设为本站';
+      currentButton.setAttribute('aria-label', isCurrent ? s.zh + '已是本站' : '将' + s.zh + '设为本站');
     });
     $('station-count').textContent = App.state.stations.length + ' 站'; $('add-station').disabled = App.state.stations.length >= 120;
     $('reverse-stations').disabled=App.state.stations.length<2;
@@ -334,7 +350,7 @@
 
   stationList.addEventListener('pointerdown', function (event) {
     var button = event.target.closest('.station-item');
-    if (!button || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || stationDrag || App.state.stations.length < 2) return;
+    if (!button || event.target.closest('.station-current') || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || stationDrag || App.state.stations.length < 2) return;
     if (event.pointerType === 'touch' && !event.target.closest('.station-drag-handle')) return;
     stationLanding?.();
     var cards = Array.from(stationList.children);
@@ -382,57 +398,91 @@
     if(card&&event.altKey&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)) {
       event.preventDefault();var id=card.dataset.id,delta=['ArrowUp','ArrowLeft'].includes(event.key)?-1:1;
       App.update(function(state){return S.moveStation(state,id,delta);});App.select(id);
-      Array.from($('station-list').children).find(function(el){return el.dataset.id===id;}).focus();
+      card.querySelector('.station-select').focus();
     }
   });
   document.addEventListener('keydown',function(event){if(event.key==='Escape'&&stationDrag){event.preventDefault();finishStationDrag(true);}});
+  function numberColor(number, city) { return Core.lineColorFor(number, city)?.bg || '#424A52'; }
+  function transferNumber(input) {
+    var number = input.value.trim().normalize('NFKC');
+    return /^\d{1,8}$/.test(number) ? number : '';
+  }
+  function buildTransferRow(stationId, transfer, index) {
+    var textLine = transfer.type === 'text';
+    var row = document.createElement('div'); row.className = 'transfer-color';
+    var heading = document.createElement('div'); heading.className = 'transfer-entry-heading';
+    var title = document.createElement('span'); title.className = 'transfer-color-label';
+    var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'transfer-remove';
+    remove.dataset.controlIcon = 'delete'; remove.title = '删除这条换乘线路';
+    heading.append(title, remove); row.append(heading);
+    var getTransfer = function () { return App.state.stations.find(function (station) { return station.id === stationId; })?.transfers[index]; };
+    function updateTransfer(change, field) {
+      if (!row.isConnected) return;
+      App.update(function (state) {
+        var station = state.stations.find(function (entry) { return entry.id === stationId; });
+        var current = station?.transfers[index];
+        if (!current) return state;
+        var items = station.transfers.slice(), next = change(current, state.city);
+        if (next) items[index] = next;
+        else items.splice(index, 1);
+        return S.patchStation(state, stationId, { transfers: items });
+      }, field && stationId + ':transfer:' + index + ':' + field);
+    }
+    remove.addEventListener('click', function () {
+      updateTransfer(function () { return null; });
+      (transferRows[Math.min(index, transferRows.length - 1)]?.remove || $('new-transfer-number')).focus();
+    });
+    var fields = (textLine ? [['nameZh', '中文线路名', 40], ['nameEn', '英文线路名', 80]] : [['number', '线路号', 8]]).map(function ([key, label, limit]) {
+      var field = document.createElement('div'); field.className = 'field';
+      var name = document.createElement('label'); name.textContent = label;
+      var input = document.createElement('input'); input.type = 'text'; input.maxLength = limit;
+      input.id = 'transfer-' + index + '-' + key; input.dataset.transferField = key; name.htmlFor = input.id;
+      field.append(name, input); row.append(field);
+      if (key === 'number') {
+        input.inputMode = 'numeric';
+        input.addEventListener('change', function () {
+          var number = transferNumber(input);
+          if (!number) { input.value = getTransfer()?.number || ''; notice('线路号须为 1–8 位数字'); return; }
+          input.value = number;
+          updateTransfer(function (current, city) {
+            var color = current.color === numberColor(current.number, city) ? numberColor(number, city) : current.color;
+            return { number: number, color: color };
+          }, key);
+        });
+      } else {
+        input.addEventListener('input', function () {
+          if (key === 'nameZh' && !input.value.trim()) return;
+          updateTransfer(function (current) { return Object.assign({}, current, { [key]: input.value }); }, key);
+        });
+        input.addEventListener('blur', function () { input.value = getTransfer()?.[key] || ''; });
+      }
+      return input;
+    });
+    var picker = global.SignColorPicker.create({ value: transfer.color, mini: true, scope: '换乘线路颜色',
+      getValue: function () { return getTransfer()?.color; }, getCity: function () { return App.state.city; }, onCityChange: changeCity,
+      onChange: function (color) { updateTransfer(function (current) { return Object.assign({}, current, { color: color }); }, 'color'); },
+    });
+    row.append(picker);
+    return { row, title, remove, fields, picker };
+  }
   function syncTransfers() {
-    var s = live(), signature = s.id + ':' + s.transfers.map(function(t){return t.type||'number';}).join(',');
+    var station = live(), items = station.transfers;
+    var signature = station.id + ':' + items.map(function (item) { return item.type || 'number'; }).join(',');
     if (signature !== transferSignature) {
-      $('transfer-colors').replaceChildren();transferPickers=[];
-      s.transfers.forEach(function (t, index) {
-        var label = document.createElement('div'); label.className = 'transfer-color';
-        var span = document.createElement('span');span.className='transfer-color-label';
-        var picker=global.SignColorPicker.create({value:t.color,mini:true,scope:'换乘线路颜色',getValue:function(){return live().transfers[index].color;},getCity:function(){return App.state.city;},onCityChange:changeCity,onChange:function(color){
-          var station = live();
-          var transfers = station.transfers.map(function (item, i) { return i === index ? Object.assign({}, item, { color: color }) : item; });
-          patchStation({ transfers: transfers }, station.id + ':transfer:' + index);
-        }});
-        transferPickers.push(picker);
-        label.append(span);
-        if(t.type==='text') {
-          var fields=document.createElement('div');fields.className='text-transfer-fields';
-          [['nameZh','中文线路名',40],['nameEn','英文线路名',80]].forEach(function(spec){
-            var field = document.createElement('div');
-            field.className = 'field';
-            var name = document.createElement('label');
-            var input = document.createElement('input');
-            input.type = 'text';
-            input.maxLength = spec[2];
-            input.dataset.transferField = spec[0];
-            input.id = 'transfer-' + index + '-' + spec[0];
-            name.htmlFor = input.id;
-            name.textContent = spec[1];
-            input.addEventListener('input',function(){var station=live(),patch={};patch[spec[0]]=input.value;var transfers=station.transfers.map(function(item,i){return i===index?Object.assign({},item,patch):item;});if(spec[0]==='nameZh'&&!input.value.trim())return;patchStation({transfers:transfers},station.id+':transfer:'+index+':'+spec[0]);});
-            field.append(name, input);
-            fields.append(field);
-          });
-          var remove=document.createElement('button');remove.className='btn transfer-remove';remove.dataset.controlIcon='delete';remove.textContent='删除这条换乘线路';
-          remove.addEventListener('click',function(){var station=live();patchStation({transfers:station.transfers.filter(function(_,i){return i!==index;})});});
-          label.append(fields, picker, remove);
-        } else {
-          label.append(picker);
-        }
-        $('transfer-colors').appendChild(label);
-      });
+      transferRows = items.map(function (item, index) { return buildTransferRow(station.id, item, index); });
+      $('transfer-colors').replaceChildren(...transferRows.map(function (entry) { return entry.row; }));
       transferSignature = signature;
     }
-    Array.from($('transfer-colors').children).forEach(function (label, i) {
-      var transfer = s.transfers[i];
-      label.querySelector('.transfer-color-label').textContent = transfer.type === 'text' ? transfer.nameZh : transfer.number + ' 号线';
-      label.querySelectorAll('[data-transfer-field]').forEach(function(input){if(document.activeElement!==input)input.value=s.transfers[i][input.dataset.transferField];});
-      transferPickers[i].sync();
+    transferRows.forEach(function (entry, index) {
+      var item = items[index], label = item.type === 'text' ? item.nameZh : item.number + ' 号线';
+      entry.title.textContent = label;
+      entry.remove.setAttribute('aria-label', '删除换乘线路 ' + label);
+      entry.fields.forEach(function (input) { if (document.activeElement !== input) input.value = item[input.dataset.transferField]; });
+      entry.picker.sync();
     });
+    $('transfer-count').textContent = items.length + ' / 6';
+    $('transfer-empty').hidden = !!items.length;
+    $('new-transfer-number').disabled = $('add-number-transfer').disabled = $('add-text-transfer').disabled = items.length >= 6;
   }
   function changeCity(city) { var auto=Core.lineColorFor(App.state.line,city);set(Object.assign({city:city},auto?{color:auto.bg}:{})); }
   function syncPropertyPanel() {
@@ -464,11 +514,14 @@
     $('single-station-actions').hidden = multiple;
     $('delete-selected-stations').hidden = !multiple;
     $('delete-selected-stations').disabled = App.state.stations.length <= 1;
+    propertyTabs.sync(!hasSelection ? 'settings' : multiple ? 'multiple' : showStation ? 'station' : 'element');
 
     var panelSelection = JSON.stringify([App.selectedKey, keys]);
     if (panelSelection !== previousPanelSelection) {
       $('property-scroll').scrollTop = 0;
       $('station-transfers').setCustomValidity('');
+      $('new-transfer-number').value = '';
+      $('new-transfer-number').setCustomValidity('');
       if (previousPanelSelection) {
         var direction = switchedSection ? (hasSelection ? 1 : -1) : 0;
         global.EditorMotion.reveal(hasSelection ? selection : settings, direction);
@@ -527,7 +580,6 @@
     if (syncLinePattern) syncLinePattern(state);
     value('station-code', s.code); value('station-zh', s.zh); value('station-en', s.en);
     value('station-transfers', S.formatTransfers(s.transfers));
-    $('add-text-transfer').disabled=s.transfers.length>=6;
     $('current-station-label').hidden = s.id !== state.currentId;
     $('set-current').disabled = s.id === state.currentId;
     var index = state.stations.findIndex(function (item) { return item.id === s.id; });
@@ -541,7 +593,7 @@
     $('property-heading').focus({ preventScroll: true });
   });
   // Preserve controls and text drag selections while allowing blank clicks anywhere on the page.
-  var selectionControls = 'button, input, select, textarea, label, a, summary, [contenteditable], [role="button"], .field, .platform-section, #platform-element-toolbar, dialog, #platform-notice';
+  var selectionControls = 'button, input, select, textarea, label, a, summary, [contenteditable], [role="button"], .field, .station-item, .platform-section, #platform-element-toolbar, dialog, #platform-notice';
   var pagePointer = null, suppressPageClick = false;
   document.addEventListener('pointerdown', function (event) {
     if (event.button !== 0 || event.isPrimary === false) return;
@@ -586,7 +638,22 @@
     catch (err) { event.target.setCustomValidity(err.message); event.target.reportValidity(); notice(err.message); }
   });
   $('station-transfers').addEventListener('input', function (event) { event.target.setCustomValidity(''); });
-  $('add-text-transfer').addEventListener('click',function(){var s=live();if(s.transfers.length<6)patchStation({transfers:s.transfers.concat([{type:'text',nameZh:'文字线路',nameEn:'',color:'#0057B8'}])});});
+  $('add-number-transfer-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var input = $('new-transfer-number'), number = transferNumber(input), station = live();
+    if (station.transfers.length >= 6) return;
+    if (!number) { input.setCustomValidity('请输入 1–8 位数字作为线路号'); input.reportValidity(); return; }
+    patchStation({ transfers: station.transfers.concat({ number: number, color: numberColor(number, App.state.city) }) });
+    input.value = ''; input.setCustomValidity('');
+    (input.disabled ? transferRows.at(-1).fields[0] : input).focus();
+  });
+  $('new-transfer-number').addEventListener('input', function (event) { event.target.setCustomValidity(''); });
+  $('add-text-transfer').addEventListener('click', function () {
+    var station = live();
+    if (station.transfers.length >= 6) return;
+    patchStation({ transfers: station.transfers.concat({ type: 'text', nameZh: '文字线路', nameEn: '', color: '#0057B8' }) });
+    var input = transferRows.at(-1).fields[0]; input.focus(); input.select();
+  });
   $('line-number').addEventListener('input', function (event) {
     var state = App.state, n = event.target.value, auto = Core.lineColorFor(n, state.city);
     var patch = { line: n };
@@ -617,7 +684,7 @@
   ['x', 'y'].forEach(function (axis) { $('element-offset-' + axis).addEventListener('change', function (event) { if (!App.selectedKey) return; var n = Number(event.target.value); if (!Number.isFinite(n) || n < -128 || n > 128) { notice('微调范围为 −128 至 128px'); event.target.value = (App.state.adjustments[App.selectedKey] || {})[axis] || 0; return; } var patch = {}; patch[axis] = n; App.update(function (state) { return S.setElementOffset(state, App.selectedKey, patch); }); }); });
   function resetElement() { var keys = selectedVisibleKeys(); if (keys.length) App.update(function (state) { return S.resetElements(state, keys); }); }
   $('tool-reset').addEventListener('click', resetElement); $('reset-element').addEventListener('click', resetElement);
-  [['tool-current', 'set-current'], ['tool-up', 'station-up'], ['tool-down', 'station-down'], ['tool-delete', 'station-delete']].forEach(function (pair) { $(pair[0]).addEventListener('click', function () { $(pair[1]).click(); }); });
+  [['tool-up', 'station-up'], ['tool-down', 'station-down'], ['tool-delete', 'station-delete']].forEach(function (pair) { $(pair[0]).addEventListener('click', function () { $(pair[1]).click(); }); });
   function setSize(patch) {
     if(App.state.mode==='vertical'&&patch.width!==undefined)return;
     var sizes = Object.assign({}, App.state.sizes); sizes[App.state.mode] = Object.assign({}, sizes[App.state.mode], patch); set(Object.assign({ sizes: sizes }, App.state.mode === 'route' && patch.width !== undefined ? { routeLengthAuto: false } : {}));
@@ -630,12 +697,24 @@
       var patch = {}; patch[key] = Math.round(n); setSize(patch);
     });
   });
-  $('set-current').addEventListener('click', function () { set({ currentId: App.selectedId }); });
+  function setCurrentStation(id) {
+    if (id === App.state.currentId) return;
+    var stationMode = App.state.mode === 'station', hadSelection = !!App.selectedKey;
+    App.update(function (state) { return S.settings(state, { currentId: id }); }, null, { clearSelection: stationMode });
+    if (stationMode && hadSelection) App.select(id);
+  }
+  $('set-current').addEventListener('click', function () { setCurrentStation(App.selectedId); });
+  $('tool-current').addEventListener('click', function () { setCurrentStation(App.selectedId); });
   $('add-station').addEventListener('click', function () {
     var previous = App.state;
     App.update(function (state) { return S.addStation(state, App.selectedId); });
     var added = App.state.stations.find(function (s) { return !previous.stations.some(function (old) { return old.id === s.id; }); });
-    if (added) { App.select(added.id); $('station-zh').focus(); $('station-zh').select(); }
+    if (added) {
+      App.select(added.id);
+      propertyTabs.show('edit');
+      $('station-zh').focus();
+      $('station-zh').select();
+    }
   });
   $('station-delete').addEventListener('click', App.deleteSelection);
   $('delete-selected-stations').addEventListener('click', App.deleteSelection);
@@ -764,7 +843,7 @@
   }
   global.PlatformExport = { buildSVG: buildSVG, drawSVG: drawExportSVG, prepare: prepareExport, pngBlob: pngBlob, exportFile: exportFile };
   $('export-svg').addEventListener('click', function () { exportFile('svg'); }); $('export-png').addEventListener('click', function () { exportFile('png'); });
-  global.ImageUploadDialog.addButton($('export-png'), async function () {
+  global.ImageUploadDialog.addButton($('export-svg'), async function () {
     var prepared = await prepareExport(App.state);
     return pngBlob(prepared.drawing, prepared.size);
   });
