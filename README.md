@@ -7,7 +7,7 @@
 
 ## 在线使用
 
-### [导向标识牌](https://prisamax0124.github.io/CRT-Sign-Web-Editor/) · [站台吊板与线路图](https://prisamax0124.github.io/CRT-Sign-Web-Editor/platform.html)
+### [导向标识](https://prisamax0124.github.io/CRT-Sign-Web-Editor/) · [换乘标识](https://prisamax0124.github.io/CRT-Sign-Web-Editor/index.html?editor=transfer) · [站台标识](https://prisamax0124.github.io/CRT-Sign-Web-Editor/platform.html)
 
 这个项目原本是我在自己的 Minecraft 建筑服务器 [GrandMaster Craft](https://chinadlrs.com/mc/3) 里制作轨道交通导视牌的自用工具。
 
@@ -26,7 +26,7 @@
 ## 如何使用？
 
 1. 打开对应页面，添加元素或站点，选中后在右侧修改内容。站台页也可以批量填写站名和换乘信息。
-2. 调整尺寸、排版和颜色。内置上海、重庆、成都、北京地铁配色，默认输入线路号自动匹配颜色，也可以自己创建色板。在站台页开启「线路底纹」，可选择重庆纹样，也可以点「上传底纹」。大小和深浅可分别调整和重置。
+2. 调整尺寸、排版和颜色。内置上海、重庆、成都、北京地铁配色，默认输入线路号自动匹配颜色，也可以自己创建色板。在站台页开启「线路底纹」，自带重庆纹样，也可以点「上传底纹」自定义。大小和深浅可分别调整和重置。
 3. 导出 **PNG** 用作图片或游戏贴图，也支持导出 **SVG** 保留矢量与内嵌字体。需要以后继续编辑时，也可以下载 **项目 JSON**。
 
 要把图片地址贴到游戏里，点「导出 PNG」旁的「上传到图床…」图标。支持 ImgBB 和 Freeimage.host，可以同时上传到两家。[图片上传和转发服务说明](docs/image-upload.md)
