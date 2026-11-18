@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 站台标识</title>
-  <link rel="stylesheet" href="style.css?v=49c897879d3a">
-  <link rel="stylesheet" href="platform.css?v=32f5abbaebb5">
+  <link rel="stylesheet" href="style.css?v=8eb3ef9d5065">
+  <link rel="stylesheet" href="platform.css?v=76363eff8333">
   <link rel="stylesheet" href="image-upload.css?v=2d9a1dc337a4">
 </head>
 <body class="editor-page platform-page">
@@ -246,7 +246,7 @@
           <section class="panel-section platform-section" id="station-management" hidden>
             <h2 class="section-title">站点管理</h2>
             <div id="single-station-actions">
-              <button class="btn" id="set-current">设为本站</button>
+              <button class="btn" id="set-current" data-control-icon="locate">设为本站</button>
               <div class="field-pair">
                 <button class="btn" id="station-up">前移</button>
                 <button class="btn" id="station-down">后移</button>
@@ -259,11 +259,11 @@
       </div>
     </aside>
   </div>
-  <dialog id="batch-dialog"><form method="dialog"><div class="batch-heading"><h2>批量编辑站点</h2><button value="cancel" class="icon-btn" aria-label="关闭批量编辑">×</button></div><p>每行一个站点：编号 | 中文站名 | 英文站名 | 换乘线路</p><label class="batch-label" for="batch-text">站点数据</label><textarea id="batch-text" rows="12" spellcheck="false"></textarea><p class="field-help">英文、换乘可留空。应用后按编号保留本站，支持撤销。</p><p id="batch-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="apply-batch">应用站点</button></div></form></dialog>
+  <dialog id="batch-dialog"><form method="dialog"><div class="batch-heading"><h2>批量编辑站点</h2><button value="cancel" class="dialog-close" data-control-icon="close" aria-label="关闭批量编辑"></button></div><p>每行一个站点：编号 | 中文站名 | 英文站名 | 换乘线路</p><label class="batch-label" for="batch-text">站点数据</label><textarea id="batch-text" rows="12" spellcheck="false" autofocus></textarea><p class="field-help">英文、换乘可留空。应用后按编号保留本站，支持撤销。</p><p id="batch-error" role="alert"></p><div class="batch-buttons"><button class="btn btn-primary" type="button" id="apply-batch">应用站点</button></div></form></dialog>
   <dialog id="batch-generation-dialog" aria-labelledby="batch-generation-title">
     <header class="batch-heading">
       <h2 id="batch-generation-title">批量生成</h2>
-      <button type="button" class="icon-btn" id="close-batch-generation" aria-label="关闭批量生成">×</button>
+      <button type="button" class="dialog-close" data-control-icon="close" id="close-batch-generation" aria-label="关闭批量生成"></button>
     </header>
     <div id="batch-generation-settings">
       <div class="batch-generation-options">
@@ -284,6 +284,7 @@
           </select>
         </div>
       </div>
+      <p id="batch-generation-layout-help" class="field-help" hidden></p>
       <fieldset class="batch-generation-group">
         <legend>导出格式</legend>
         <div class="batch-generation-actions">
@@ -321,7 +322,7 @@
     <p id="batch-generation-status" role="status"></p>
     <div class="batch-buttons">
       <button type="button" class="btn" id="batch-generation-back" hidden>返回设置</button>
-      <button type="button" class="btn" id="batch-generation-cancel">关闭</button>
+      <button type="button" class="btn" id="batch-generation-cancel" hidden>取消处理</button>
       <button type="button" class="btn btn-primary" id="batch-generation-preview">生成预览</button>
       <button type="button" class="btn btn-primary" id="batch-generation-download" hidden>打包下载</button>
     </div>
@@ -329,28 +330,28 @@
   <dialog id="batch-generation-detail" aria-labelledby="batch-generation-detail-title">
     <form method="dialog" class="batch-heading">
       <h2 id="batch-generation-detail-title"></h2>
-      <button class="icon-btn" aria-label="关闭大图">×</button>
+      <button class="dialog-close" data-control-icon="close" aria-label="关闭大图"></button>
     </form>
     <div id="batch-generation-large-preview"></div>
   </dialog>
   <div id="platform-notice" role="status" hidden></div>
-  <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button value="cancel" class="icon-btn" aria-label="关闭预设保存">×</button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn" value="cancel">取消</button><button class="btn btn-primary" type="button" id="save-preset-confirm">保存预设</button></div></form></dialog>
+  <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button type="button" class="dialog-close" data-control-icon="close" aria-label="关闭预设保存"></button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required autofocus></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn btn-primary" id="save-preset-confirm">保存预设</button></div></form></dialog>
   <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
-  <script src="js/editor-motion.js?v=ca1eb0979930"></script>
-  <script src="js/preview-zoom.js?v=714942225aa8"></script>
+  <script src="js/editor-motion.js?v=46757705e313"></script>
+  <script src="js/preview-zoom.js?v=acec1aa66512"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
-  <script src="js/palette-manager.js?v=public-939b5399500f"></script>
+  <script src="js/palette-manager.js?v=800486182d2f"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
   <script src="js/exporters.js?v=54135fa606d4"></script>
   <script src="js/image-upload.js?v=7a2caa6e67ea"></script>
-  <script src="js/image-upload-dialog.js?v=0349bbf99982"></script>
-  <script src="js/platform/state.js?v=9498b91f4a81"></script>
+  <script src="js/image-upload-dialog.js?v=3c9316d202eb"></script>
+  <script src="js/platform/state.js?v=0838e6342bae"></script>
   <script src="js/platform/reference.js?v=public-80b402bac929"></script>
   <script src="js/platform/vertical-reference.js?v=public-a036244575d0"></script>
   <script src="js/platform/route.js?v=public-b8986b777b72"></script>
   <script src="js/platform/hanging.js?v=public-17c54cd4b071"></script>
-  <script src="js/platform/vertical.js?v=public-4c1e378ef3fd"></script>
+  <script src="js/platform/vertical.js?v=b7e6216e0ef9"></script>
   <script src="js/platform/render.js?v=public-1a8db166e6e2"></script>
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
   <script src="js/platform/clipboard.js?v=public-15d857755771"></script>
@@ -358,8 +359,8 @@
   <script src="js/platform/patterns.js?v=cc2c94583c53"></script>
   <script src="js/storage.js?v=5156bc2ae677"></script>
   <script src="vendor/zip.min.js?v=2.25.0"></script>
-  <script src="js/platform/batch.js?v=724d7c263f95"></script>
-  <script src="js/platform/batch-dialog.js?v=519f50a0f76e"></script>
-  <script src="js/platform/main.js?v=c3980fd3d6a1"></script>
+  <script src="js/platform/batch.js?v=77ffb48c2c7c"></script>
+  <script src="js/platform/batch-dialog.js?v=7db851c565b8"></script>
+  <script src="js/platform/main.js?v=72a4f8144ccd"></script>
 </body>
 </html>

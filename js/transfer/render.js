@@ -233,7 +233,15 @@
     vector.setAttribute('height', scene.height);
     vector.setAttribute('viewBox', '0 0 ' + designWidth + ' ' + designHeight);
     const fills = Object.assign({}, ...scene.patterns.map(pattern => patterns.draw(vector, pattern)));
-    scene.nodes.forEach(({ tag, attributes, text, markup }, index) => {
+    const graphics = new Map();
+    const counts = new Map();
+    function track(node, key, bounds, kind, content) {
+      if (clean) return;
+      const count = counts.get(key) || 0;
+      counts.set(key, count + 1);
+      graphics.set(key + ':' + count, { node, bounds, kind, content });
+    }
+    scene.nodes.forEach(({ tag, attributes, text, markup, element: target, bounds }, index) => {
       const exportAttributes = { ...attributes };
       if (clean) {
         delete exportAttributes['data-role'];
@@ -245,23 +253,28 @@
       if (text) element.textContent = text;
       if (markup) element.innerHTML = markup;
       vector.append(element);
+      if (target) track(element, target.key + ':' + attributes['data-role'], bounds, target.kind, text);
       if (fills[index]) {
         const pattern = element.cloneNode();
         pattern.setAttribute('fill', fills[index]);
         if (!clean) pattern.setAttribute('data-role', 'line-pattern');
         vector.append(pattern);
+        track(pattern, target.key + ':line-pattern', bounds, target.kind);
       }
     });
     if (clean) return;
     for (const element of scene.elements) {
       const { left, top, width, height } = element.bounds;
       const padding = element.kind === 'line' ? 0 : 5;
-      vector.append(shape('rect', {
+      const target = shape('rect', {
         x: left - padding, y: top - padding, width: width + 2 * padding, height: height + 2 * padding,
         class: 'transfer-hit-target', 'vector-effect': 'non-scaling-stroke',
         'data-transfer-element': element.key, tabindex: 0, role: 'button', 'aria-pressed': false,
-      }));
+      });
+      vector.append(target);
+      track(target, element.key + ':hit-area', { left: left - padding, top: top - padding, width: width + 2 * padding, height: height + 2 * padding }, element.kind);
     }
+    return graphics;
   }
 
   function exportVector(scene, fontData) {

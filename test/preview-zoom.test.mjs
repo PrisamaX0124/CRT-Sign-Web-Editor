@@ -92,6 +92,7 @@ function createPreview({ alignTop = false, observeResize = true } = {}) {
   };
   let resize;
   browser.getComputedStyle = element => element === viewport ? {} : { marginTop: '20px' };
+  browser.EditorMotion = { timing: () => ({ duration: 0 }) };
   browser.ResizeObserver = observeResize ? class {
     constructor(callback) { resize = callback; }
     observe(element) { assert.equal(element, viewport); }

@@ -58,6 +58,11 @@
     return new Promise(resolve => editor.requestAnimationFrame(resolve));
   }
 
+  async function finishGuide(editor) {
+    const line = guide(editor, 'vertical');
+    if (line) await Promise.allSettled(line.getAnimations().map(animation => animation.finished));
+  }
+
   function drag(editor, graphic, source, start, movement, scale) {
     const bounds = graphic.getBoundingClientRect();
     function send(type, target, x, y, pointerId = 9) {
@@ -124,6 +129,11 @@
       const vertical = guide(editor, 'vertical');
       assert(vertical, '缺少中心参考线');
       near(parseFloat(vertical.style.left), 50, '竖线穿过牌面中心');
+      const feedback = vertical.getAnimations()[0];
+      if (!editor.matchMedia('(prefers-reduced-motion: reduce)').matches) assert(feedback, '首次吸附缺少动效');
+      movement.move(centered + 2, 20);
+      await nextFrame(editor);
+      assert(vertical.getAnimations()[0] === feedback, '持续吸附到同一条参考线时重复播放了动效');
       const preview = query('.position-preview g.element.selected');
       assert(preview?.parentNode.matches('.sign-row:first-of-type'), '预览时元素离开了所属行');
       assert(preview.getAttribute('transform') === 'translate(' + centered + ',' + box.y + ')', '预览时元素上下移动');
@@ -131,7 +141,8 @@
       movement.drop();
       near(position(0).x, centered, '松手后元素横向居中');
       near(position(0).y, box.y, '松手后元素应留在原行');
-      assert(!guide(editor, 'vertical'), '松手后参考线仍可见');
+      await finishGuide(editor);
+      assert(!guide(editor, 'vertical'), '松手后参考线没有淡出');
       assert(application.state.rows[0].elements[0].id === first.id, '元素所属行改变');
       const vectorText = editor.SignExporters.buildExportSVGString(application.state, application.measure);
       const drawing = new editor.DOMParser().parseFromString(vectorText, 'image/svg+xml');
@@ -214,6 +225,7 @@
       const zoom = query('#guidance-zoom select');
       zoom.value = '200';
       zoom.dispatchEvent(new editor.Event('change'));
+      while (query('#canvas-scroll').dataset.zoomTransition) await nextFrame(editor);
       const original = application.state;
       const box = position(0);
       const centered = (application.layout.width - box.width) / 2;
@@ -228,6 +240,7 @@
       await nextFrame(editor);
       assert(guide(editor, 'vertical'), '进入屏幕吸附距离后缺少竖线');
       movement.cancel();
+      await finishGuide(editor);
       assert(application.state === original && !guide(editor, 'vertical') && query('.position-preview').hasAttribute('hidden'), '取消后项目、参考线或预览未恢复');
       assert(zoom.value === '200', '移动元素改变了缩放比例');
     });
@@ -262,6 +275,7 @@
       const zoom = query('#guidance-zoom select');
       zoom.value = 'fit';
       zoom.dispatchEvent(new editor.Event('change'));
+      while (query('#canvas-scroll').dataset.zoomTransition) await nextFrame(editor);
       const movement = start({ x: 1400, y: -600 });
       movement.move();
       await nextFrame(editor);

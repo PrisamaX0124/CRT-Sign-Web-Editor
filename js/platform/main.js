@@ -6,6 +6,8 @@
   var PRESET_KEY = 'public-platform-sign-presets-v1', presets = [], presetSignature = '', library = 'stations';
   var noticeTimer, listSignature = '', transferSignature = '', layoutMode = '', busy = false;
   var previousPanelSelection = '';
+  var renderedCurrentId;
+  var renderedLayout;
   var basePickers=[],transferPickers=[],paletteRevision=-1;
   var syncLinePattern;
   var names = { route: '全线吊板', station: '本站吊板', vertical: '纵向线路图' };
@@ -133,7 +135,15 @@
   function set(patch, key) { App.update(function (state) { return S.settings(state, patch); }, key); }
   function patchStation(patch, key) { App.update(function (state) { return S.patchStation(state, App.selectedId, patch); }, key); }
   function render() {
-    App.scene = R.metrics(App.state, App.measure); R.draw($('platform-svg'), App.scene);
+    var currentChanged = renderedCurrentId && renderedCurrentId !== App.state.currentId;
+    renderedCurrentId = App.state.currentId;
+    var graphic = $('platform-svg'), previous = App.scene;
+    var layout = App.state.mode === 'vertical' ? App.state.mode + ':' + App.state.verticalVariant : App.state.mode;
+    var finishCrossfade = previous && layout !== renderedLayout ? global.EditorMotion.prepareGraphicCrossfade(graphic, function (old) {
+      R.draw(old, previous, { clean: true });
+    }) : null;
+    renderedLayout = layout;
+    App.scene = R.metrics(App.state, App.measure); R.draw(graphic, App.scene);
     App.selectionKeys = App.selectedKeys();
     if (App.selectionKeys.indexOf(App.selectedKey) < 0) App.selectedKey = App.selectionKeys[App.selectionKeys.length - 1] || null;
     var selected = findElement(App.selectedKey);
@@ -141,6 +151,28 @@
     if (!S.validElementKey(App.anchorKey, App.state.stations)) App.anchorKey = App.selectedKey;
     sync();
     previewZoom.refresh(App.scene.output.width, App.scene.output.height);
+    finishCrossfade?.();
+    if (currentChanged) highlightCurrentStation();
+  }
+  function highlightCurrentStation() {
+    var paper = $('platform-paper'), scene = App.scene, frame = scene.frame;
+    paper.querySelectorAll('.current-station-highlight').forEach(function (element) { element.remove(); });
+    if (!global.EditorMotion.timing(paper).duration) return;
+    scene.elements.filter(function (item) {
+      return item.stationId === App.state.currentId && ['station-name', 'route-station', 'vertical-station'].includes(item.kind);
+    }).forEach(function (item) {
+      var box = item.box, highlight = document.createElement('div');
+      highlight.className = 'current-station-highlight';
+      highlight.setAttribute('aria-hidden', 'true');
+      highlight.style.left = ((box.x * frame.scale + frame.x) / scene.output.width * 100) + '%';
+      highlight.style.top = ((box.y * frame.scale + frame.y) / scene.output.height * 100) + '%';
+      highlight.style.width = (box.width * frame.scale / scene.output.width * 100) + '%';
+      highlight.style.height = (box.height * frame.scale / scene.output.height * 100) + '%';
+      paper.append(highlight);
+      var animation = global.EditorMotion.play(highlight, [{ opacity: 1 }, { opacity: .8, offset: .3 }, { opacity: 0 }], 'panel');
+      if (animation) animation.finished.then(function () { highlight.remove(); }, function () { highlight.remove(); });
+      else highlight.remove();
+    });
   }
   function paintInteraction() {
     if (!App.scene) return;
@@ -184,16 +216,28 @@
     var signature = App.state.stations.map(function (s) { return s.id; }).join('|');
     var list = $('station-list');
     if (signature !== listSignature) {
-      var scroll = list.scrollTop, horizontal = list.scrollLeft; list.replaceChildren();
-      App.state.stations.forEach(function (s) {
+      if (stationDrag) finishStationDrag(true, false);
+      stationLanding?.();
+      var scroll = list.scrollTop, horizontal = list.scrollLeft;
+      var existing = new Map(Array.from(list.children, function (card) { return [card.dataset.id, card]; }));
+      var focused = list.contains(document.activeElement) ? document.activeElement : null;
+      App.state.stations.forEach(function (s, index) {
+        var current = existing.get(s.id);
+        if (current) {
+          existing.delete(s.id);
+          if (list.children[index] !== current) list.insertBefore(current, list.children[index] || null);
+          return;
+        }
         var button = document.createElement('button'); button.className = 'station-item'; button.dataset.id = s.id;
         var code = document.createElement('span'); code.className = 'station-item-code';
         var text = document.createElement('span'); text.className = 'station-item-text'; text.appendChild(document.createElement('strong')); text.appendChild(document.createElement('small'));
         var tag = document.createElement('span'); tag.className = 'station-item-tag';
         var grip=document.createElement('span');grip.className='station-drag-handle';grip.setAttribute('aria-hidden','true');
         grip.innerHTML='<svg viewBox="0 0 24 24"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg>';
-        button.append(grip,code, text, tag); button.addEventListener('click', function (event) { App.select(button.dataset.id, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); }); list.appendChild(button);
+        button.append(grip,code, text, tag); button.addEventListener('click', function (event) { App.select(button.dataset.id, { toggle: event.ctrlKey || event.metaKey, range: event.shiftKey }); }); list.insertBefore(button, list.children[index] || null);
       });
+      existing.forEach(function (card) { card.remove(); });
+      if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
       listSignature = signature; list.scrollTop = scroll; list.scrollLeft = horizontal;
     }
     var selected = App.selectedStationIds();
@@ -207,63 +251,131 @@
     $('station-count').textContent = App.state.stations.length + ' 站'; $('add-station').disabled = App.state.stations.length >= 120;
     $('reverse-stations').disabled=App.state.stations.length<2;
   }
-  var stationDrag=null,dragFrame=null,suppressStationClick=false;
-  function clearDropMarker() {
-    Array.from($('station-list').children).forEach(function(el){el.classList.remove('station-drop-before','station-drop-after');});
+  var stationDrag = null, stationLanding = null, suppressStationClick = false;
+  var stationList = $('station-list');
+
+  function pointerInStationList(drag, box) {
+    return drag.x >= box.left - 8 && drag.x <= box.right + 8 && drag.y >= box.top - 8 && drag.y <= box.bottom + 8;
   }
+
   function updateStationDrop() {
-    var drag=stationDrag;if(!drag||!drag.active)return;
-    var list=$('station-list'),box=list.getBoundingClientRect();
-    var inside=drag.x>=box.left-8&&drag.x<=box.right+8&&drag.y>=box.top-8&&drag.y<=box.bottom+8;
-    clearDropMarker();drag.gap=null;if(!inside)return;
-    var cards = Array.from(list.children);
-    var gap = cards.filter(function (card) {
-      var bounds = card.getBoundingClientRect();
-      return drag.y > (bounds.top + bounds.bottom) / 2;
-    }).length;
-    drag.gap=gap;var target=cards[Math.min(gap,cards.length-1)];
-    target.classList.add(gap===cards.length?'station-drop-after':'station-drop-before');
+    var drag = stationDrag, box = stationList.getBoundingClientRect();
+    var cards = drag.cards, from = drag.from, button = drag.button;
+    var y = drag.y - box.top - stationList.clientTop + stationList.scrollTop;
+    // 卡片动画中的位置会随每一帧变化，落点始终按列表原有的行位置判断。
+    var gap = pointerInStationList(drag, box) ? cards.filter(function (card) {
+      return y > card.offsetTop + card.offsetHeight / 2;
+    }).length : null;
+    if (gap === drag.gap) return;
+    drag.gap = gap;
+    var to = gap === null ? from : gap > from ? gap - 1 : gap;
+    var step = from + 1 < cards.length ? cards[from + 1].offsetTop - button.offsetTop : button.offsetTop - cards[from - 1].offsetTop;
+    cards.forEach(function (card, index) {
+      var distance = index >= to && index < from ? step : index > from && index <= to ? -step : 0;
+      card.style.translate = distance ? '0 ' + distance + 'px' : '';
+    });
+    stationList.classList.toggle('station-drop-active', gap !== null);
+    if (gap === null) return;
+    var next = cards[to + 1];
+    var top = to <= from ? cards[to].offsetTop : next ? next.offsetTop - step : cards[to].offsetTop + cards[to].offsetHeight - button.offsetHeight;
+    stationList.style.setProperty('--station-gap-top', top + 'px');
+    stationList.style.setProperty('--station-gap-height', button.offsetHeight + 'px');
+    stationList.style.setProperty('--station-gap-left', button.offsetLeft + 'px');
+    stationList.style.setProperty('--station-gap-width', button.offsetWidth + 'px');
   }
   function scrollStationDrag() {
-    var drag=stationDrag;if(!drag||!drag.active)return;
-    var list=$('station-list'),box=list.getBoundingClientRect();
-    if(drag.x>=box.left-8&&drag.x<=box.right+8&&drag.y>=box.top-8&&drag.y<=box.bottom+8) {
-      list.scrollTop += drag.y < box.top + 28 ? -8 : drag.y > box.bottom - 28 ? 8 : 0;
+    var drag = stationDrag, box = stationList.getBoundingClientRect();
+    if (pointerInStationList(drag, box)) {
+      var previous = stationList.scrollTop;
+      stationList.scrollTop += drag.y < box.top + 28 ? -8 : drag.y > box.bottom - 28 ? 8 : 0;
+      if (stationList.scrollTop !== previous) updateStationDrop();
+    }
+    drag.frame = global.requestAnimationFrame(scrollStationDrag);
+  }
+
+  function landStationCard(drag, animate) {
+    var cleaned = false;
+    function clean() {
+      if (cleaned) return;
+      cleaned = true;
+      drag.button.classList.remove('station-dragging');
+      drag.ghost.remove();
+    }
+    var from = drag.ghost.getBoundingClientRect(), to = drag.button.getBoundingClientRect(), list = stationList.getBoundingClientRect();
+    if (!animate || to.bottom <= list.top || to.top >= list.bottom) { clean(); return; }
+    var motion = global.EditorMotion.play(drag.ghost, [{ translate: '0px 0px' }, {
+      translate: (to.left - from.left) + 'px ' + (to.top - from.top) + 'px', opacity: 1,
+    }]);
+    if (!motion) { clean(); return; }
+    stationLanding = function () { motion.cancel(); clean(); stationLanding = null; };
+    motion.finished.then(function () { clean(); stationLanding = null; }, clean);
+  }
+
+  function finishStationDrag(cancel, animate = true) {
+    var drag = stationDrag;
+    if (!drag) return;
+    stationDrag = null;
+    if (!drag.ghost) return;
+    global.cancelAnimationFrame(drag.frame);
+    var commit = !cancel && drag.gap !== null;
+    if (commit) stationList.classList.add('station-order-committing');
+    stationList.classList.remove('station-drop-active');
+    drag.cards.forEach(function (card) { card.style.translate = ''; });
+    suppressStationClick = true;
+    setTimeout(function () { suppressStationClick = false; }, 0);
+    if (commit) {
+      App.update(function (state) { return S.reorderStation(state, drag.button.dataset.id, drag.gap); });
+      App.select(drag.button.dataset.id);
+      stationList.getBoundingClientRect();
+      stationList.classList.remove('station-order-committing');
+    }
+    landStationCard(drag, animate);
+  }
+
+  stationList.addEventListener('pointerdown', function (event) {
+    var button = event.target.closest('.station-item');
+    if (!button || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || stationDrag || App.state.stations.length < 2) return;
+    if (event.pointerType === 'touch' && !event.target.closest('.station-drag-handle')) return;
+    stationLanding?.();
+    var cards = Array.from(stationList.children);
+    stationDrag = { button, cards, from: cards.indexOf(button), pointer: event.pointerId, startX: event.clientX, startY: event.clientY, gap: null };
+  });
+  document.addEventListener('pointermove', function (event) {
+    var drag = stationDrag;
+    if (drag?.pointer !== event.pointerId) return;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    if (!drag.ghost && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) < 5) return;
+    event.preventDefault();
+    if (!drag.ghost) {
+      var bounds = drag.button.getBoundingClientRect();
+      drag.grabX = drag.startX - bounds.left;
+      drag.grabY = drag.startY - bounds.top;
+      drag.button.classList.add('station-dragging');
+      drag.ghost = drag.button.cloneNode(true);
+      drag.ghost.removeAttribute('aria-pressed');
+      drag.ghost.className = 'station-item station-drag-ghost';
+      drag.ghost.setAttribute('aria-hidden', 'true');
+      drag.ghost.inert = true;
+      drag.ghost.style.width = bounds.width + 'px';
+      document.body.appendChild(drag.ghost);
+      drag.frame = global.requestAnimationFrame(scrollStationDrag);
+    }
+    drag.ghost.style.left = (drag.x - drag.grabX) + 'px';
+    drag.ghost.style.top = (drag.y - drag.grabY) + 'px';
+    updateStationDrop();
+  }, { passive: false });
+  document.addEventListener('pointerup', function (event) {
+    if (stationDrag?.pointer !== event.pointerId) return;
+    if (stationDrag.ghost) {
+      stationDrag.x = event.clientX;
+      stationDrag.y = event.clientY;
       updateStationDrop();
     }
-    dragFrame=global.requestAnimationFrame(scrollStationDrag);
-  }
-  function finishStationDrag(cancel) {
-    var drag=stationDrag;if(!drag)return;
-    stationDrag=null;global.cancelAnimationFrame(dragFrame);dragFrame=null;
-    clearDropMarker();drag.button.classList.remove('station-dragging');if(drag.ghost)drag.ghost.remove();
-    if(drag.active) {
-      suppressStationClick=true;setTimeout(function(){suppressStationClick=false;},0);
-      if(!cancel&&drag.gap!==null){App.update(function(state){return S.reorderStation(state,drag.id,drag.gap);});App.select(drag.id);}
-    }
-  }
-  $('station-list').addEventListener('pointerdown',function(event){
-    var button=event.target.closest('.station-item');
-    if(!button||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||stationDrag||App.state.stations.length<2)return;
-    if(event.pointerType==='touch'&&!event.target.closest('.station-drag-handle'))return;
-    stationDrag={id:button.dataset.id,button:button,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,active:false,gap:null};
+    finishStationDrag(false);
   });
-  document.addEventListener('pointermove',function(event){
-    var drag=stationDrag;if(!drag||event.pointerId!==drag.pointerId)return;
-    drag.x=event.clientX;drag.y=event.clientY;
-    if(!drag.active&&Math.hypot(drag.x-drag.startX,drag.y-drag.startY)<5)return;
-    event.preventDefault();
-    if(!drag.active) {
-      drag.active=true;drag.button.classList.add('station-dragging');
-      drag.ghost=drag.button.cloneNode(true);drag.ghost.removeAttribute('aria-pressed');drag.ghost.className='station-item station-drag-ghost';drag.ghost.setAttribute('aria-hidden','true');
-      drag.ghost.style.width=drag.button.getBoundingClientRect().width+'px';document.body.appendChild(drag.ghost);
-      dragFrame=global.requestAnimationFrame(scrollStationDrag);
-    }
-    drag.ghost.style.left=Math.min(global.innerWidth-drag.ghost.offsetWidth-4,drag.x+12)+'px';drag.ghost.style.top=drag.y+12+'px';updateStationDrop();
-  },{passive:false});
-  document.addEventListener('pointerup',function(event){if(stationDrag&&event.pointerId===stationDrag.pointerId)finishStationDrag(false);});
-  document.addEventListener('pointercancel',function(event){if(stationDrag&&event.pointerId===stationDrag.pointerId)finishStationDrag(true);});
-  global.addEventListener('blur',function(){finishStationDrag(true);});
+  document.addEventListener('pointercancel', function (event) { if (stationDrag?.pointer === event.pointerId) finishStationDrag(true); });
+  global.addEventListener('blur', function () { finishStationDrag(true); });
   $('station-list').addEventListener('click',function(event){if(suppressStationClick){event.preventDefault();event.stopImmediatePropagation();}},{capture:true});
   $('station-list').addEventListener('keydown',function(event){
     var card=event.target.closest('.station-item');
@@ -604,8 +716,8 @@
     try { var preset = P.create(App.state, $('preset-name').value); if (persistPresets(presets.concat([preset]))) { $('preset-dialog').close(); selectLibrary('presets'); notice('预设已保存到本机'); } }
     catch (err) { $('preset-error').textContent = err.message; }
   }
-  $('save-preset-confirm').addEventListener('click', savePreset);
-  $('preset-dialog').querySelector('form').addEventListener('submit', function (event) { if (event.submitter && event.submitter.value === 'cancel') return; event.preventDefault(); savePreset(); });
+  $('preset-dialog').querySelector('.dialog-close').addEventListener('click', function () { $('preset-dialog').close(); });
+  $('preset-dialog').querySelector('form').addEventListener('submit', function (event) { event.preventDefault(); savePreset(); });
   function drawExportSVG(scene, embedData) {
     var svg = document.createElementNS(Core.SVG_NS, 'svg'); R.draw(svg, scene, { clean: true });
     if (embedData) {

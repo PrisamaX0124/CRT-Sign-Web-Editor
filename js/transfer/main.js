@@ -54,6 +54,10 @@
   let shownLabelGroup;
   let scene;
   let currentGroups;
+  let drawnGraphics;
+  let drawnMode;
+  let drawnArrangement;
+  let toolbarFrame;
   let selected;
   let previousPanelSelection;
 
@@ -424,13 +428,70 @@
     syncSelection();
   }
 
+  function readGraphicPositions() {
+    const positions = new Map();
+    for (const [key, graphic] of drawnGraphics) {
+      const { bounds, node } = graphic;
+      const style = getComputedStyle(node);
+      const [x = 0, y = 0] = style.translate.split(' ').map(value => parseFloat(value) || 0);
+      const [, scaleY = 1] = style.scale.split(' ').map(value => parseFloat(value) || 1);
+      positions.set(key, { left: bounds.left + x, top: bounds.top + y, height: bounds.height * scaleY, content: graphic.content, opacity: Number(style.opacity) });
+    }
+    return positions;
+  }
+
+  function moveGraphics(positions, rearranged) {
+    const moving = [];
+    for (const [key, graphic] of drawnGraphics) {
+      const { node, bounds, content, kind } = graphic;
+      const previous = positions.get(key);
+      if (!previous || previous.content !== content) {
+        if (rearranged) global.EditorMotion.fadeIn(node);
+        continue;
+      }
+      const x = previous.left - bounds.left;
+      const y = previous.top - bounds.top;
+      const scale = kind === 'line' ? previous.height / bounds.height : 1;
+      if (Math.hypot(x, y) < .1 && Math.abs(scale - 1) < .001 && previous.opacity === 1) continue;
+      if (kind === 'line') {
+        node.style.transformBox = 'fill-box';
+        node.style.transformOrigin = 'left top';
+      }
+      const animation = global.EditorMotion.play(node, [
+        { translate: x + 'px ' + y + 'px', scale: '1 ' + scale, opacity: previous.opacity },
+        { translate: '0px 0px', scale: '1 1', opacity: 1 },
+      ], 'reveal');
+      if (animation) moving.push(animation);
+    }
+    if (!moving.length) return;
+    function followSelection() {
+      positionToolbar();
+      if (moving.some(animation => animation.pending || animation.playState === 'running')) toolbarFrame = requestAnimationFrame(followSelection);
+    }
+    toolbarFrame = requestAnimationFrame(followSelection);
+  }
+
   function render(selection = selected?.key) {
     const project = App.state;
     const board = state.board(project);
-    currentGroups = state.groups(project);
+    const groups = state.groups(project);
+    const switched = drawnMode && drawnMode !== project.mode;
+    const rearranged = drawnMode === project.mode && drawnArrangement !== board.arrangement;
+    const placementChanged = drawnMode === project.mode && groups.some((group, index) => {
+      const previous = currentGroups[index];
+      return previous && (group.alignment !== previous.alignment || group.arrowPosition !== previous.arrowPosition);
+    });
+    const positions = (rearranged || placementChanged) && global.EditorMotion.timing(vector).duration ? readGraphicPositions() : null;
+    const previous = scene;
+    const finishCrossfade = switched ? global.EditorMotion.prepareGraphicCrossfade(vector, old => drawing.draw(old, previous, true)) : null;
+    cancelAnimationFrame(toolbarFrame);
+    drawnMode = project.mode;
+    drawnArrangement = board.arrangement;
+    currentGroups = groups;
     scene = drawing.layout(project, App.measure);
     const focused = document.activeElement?.dataset.transferElement;
-    drawing.draw(vector, scene);
+    drawnGraphics = drawing.draw(vector, scene);
+    if (positions) moveGraphics(positions, rearranged);
     selected = scene.elements.find(target => target.key === selection);
     for (const target of scene.elements) {
       const control = vector.querySelector('[data-transfer-element="' + target.key + '"]');
@@ -451,6 +512,7 @@
     syncGroupList(project.mode, board.arrangement);
     syncSelection();
     previewZoom.refresh(scene.width, scene.height);
+    finishCrossfade?.();
     undoButton.disabled = latestChange(history.undo) < 0;
     redoButton.disabled = latestChange(history.redo) < 0;
   }

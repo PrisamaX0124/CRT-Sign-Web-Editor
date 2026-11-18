@@ -13,7 +13,9 @@
     var status=h('p',{class:'pm-status',role:'status','aria-live':'polite'});
     function message(value,error){status.textContent=value;status.classList.toggle('error',!!error);}
     var title=h('h2',{id:'pm-title',text:'自定义调色板'});
-    var heading=h('div',{class:'pm-heading'},[h('div',{},[title,h('p',{text:'保存一套常用线路颜色，两个编辑器都能使用。'})]),button('×','pm-close',function(){dialog.close();},'关闭调色板管理')]);
+    var close=button('','dialog-close',function(){dialog.close();},'关闭调色板管理');
+    close.dataset.controlIcon='close';
+    var heading=h('div',{class:'pm-heading'},[h('div',{},[title,h('p',{text:'保存一套常用线路颜色，两个编辑器都能使用。'})]),close]);
     var list=h('div',{class:'pm-list','aria-label':'已保存的自定义色板'});
     var name=h('input',{id:'pm-name',type:'text',maxlength:'40',placeholder:'例如：我的线路配色',autocomplete:'off'});
     name.addEventListener('input',function(){draft.name=name.value;dirty=true;});
@@ -72,7 +74,7 @@
       catch(e){message('保存失败：'+e.message,true);}
     }
     var sidebar=h('aside',{class:'pm-sidebar'},[h('div',{class:'pm-sidebar-actions'},[create,duplicate]),h('h3',{text:'我的色板'}),list,h('div',{class:'pm-file-actions'},[importBtn,exportBtn,importFile])]);
-    dialog.append(heading,h('div',{class:'pm-body'},[sidebar,editor]),h('div',{class:'pm-footer'},[status,h('div',{class:'pm-footer-actions'},[button('取消','btn',function(){dialog.close();}),button('保存','btn',function(){save(false);}),button('保存并使用','btn btn-primary',function(){save(true);})])]));
+    dialog.append(heading,h('div',{class:'pm-body'},[sidebar,editor]),h('div',{class:'pm-footer'},[status,h('div',{class:'pm-footer-actions'},[button('保存','btn',function(){save(false);}),button('保存并使用','btn btn-primary',function(){save(true);})])]));
     document.body.appendChild(dialog);
     var existing=P.get(opts.getCity());if(existing)load(existing);else newDraft();
     dialog.showModal();name.focus();

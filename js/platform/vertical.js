@@ -200,9 +200,8 @@
       });
     }
     rect(0,0,W,H,state.background,'vertical-background');rect(0,0,W,72,state.color,'vertical-header');
-    var dirs=double?[state.direction*(state.verticalSwapped?-1:1),-state.direction*(state.verticalSwapped?-1:1)]:[state.direction];
-    if(double){column('left',dirs[0],true);column('right',dirs[1],false);}
-    else column(state.verticalVariant,dirs[0],state.verticalVariant==='right');
+    var columnDirections=global.PlatformState.verticalColumnDirections(state);
+    columnDirections.forEach(function(item){column(item.side,item.direction,double?item.side==='left':item.side==='right');});
     origin=0;mirror=false;
     if(double) {
       state.stations.forEach(function(s,i){
@@ -239,8 +238,7 @@
       });
       nodes.slice(textStart).forEach(function(n){placeInk(n,1,0,(72-top)/2);});end();
     }
-    if(double){directionHeader('left',dirs[0]);directionHeader('right',dirs[1]);}
-    else directionHeader(state.verticalVariant,state.direction);
+    columnDirections.forEach(function(item){directionHeader(item.side,item.direction);});
     var output=state.sizes.vertical,scale=geometry.scale,usedFonts={};
     nodes.forEach(function(n){if(n.tag==='text'){usedFonts[n.attrs['font-family']===Core.FONT_NUM?'num400':'zh'+n.attrs['font-weight']]=true;if(n.attrs['font-family']===Core.FONT_NUM&&/[^\x00-\x7F]/.test(n.text))usedFonts.zh400=true;}});
     return {width:W,height:H,output:output,nodes:nodes,elements:elements,columns:columns,stationIds:state.stations.map(function(s){return s.id;}),usedFonts:usedFonts,background:state.background,frame:{scale:scale,x:(output.width-W*scale)/2,y:(output.height-H*scale)/2}};

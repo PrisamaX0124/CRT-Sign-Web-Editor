@@ -73,6 +73,27 @@
     let session = null;
     let frame = null;
     let enabled = toggle.getAttribute('aria-pressed') === 'true';
+    let guidePosition = null;
+    let guideAnimation;
+
+    function showGuide(position, width) {
+      if (position === guidePosition) return;
+      guidePosition = position;
+      const previous = guideAnimation;
+      const opacity = guide.hidden ? 0 : Number(global.getComputedStyle(guide).opacity);
+      previous?.cancel();
+      if (position === null) {
+        const fade = guideAnimation = global.EditorMotion.play(guide, [{ opacity }, { opacity: 0 }], 'dismiss');
+        if (!fade) { guide.hidden = true; return; }
+        fade.finished.then(() => { if (guideAnimation === fade) guide.hidden = true; }, () => {});
+      } else {
+        guide.hidden = false;
+        guide.style.left = position / width * 100 + '%';
+        guideAnimation = global.EditorMotion.play(guide, [
+          { opacity: .6, boxShadow: '0 0 0 2px #fff' }, { opacity: 1, boxShadow: '0 0 0 1px #fff' },
+        ]);
+      }
+    }
 
     function cancel() {
       if (!session) return;
@@ -82,7 +103,7 @@
       if (!selection) return;
       if (frame !== null) global.cancelAnimationFrame(frame);
       frame = null;
-      guide.hidden = true;
+      showGuide(null);
       preview.setAttribute('hidden', '');
       preview.replaceChildren();
       delete paper.dataset.movingElements;
@@ -92,6 +113,10 @@
       if (session || event.button !== 0 || event.isPrimary === false || event.ctrlKey || event.metaKey || event.shiftKey) return;
       const identifier = options.identifierAt(event.target);
       if (!identifier) return;
+      if (guidePosition === null && !guide.hidden) {
+        guideAnimation?.cancel();
+        guide.hidden = true;
+      }
       const bounds = graphic.getBoundingClientRect();
       if (!bounds.width || !bounds.height) return;
       session = {
@@ -123,8 +148,7 @@
       }
       session.previousDistance = movement.distance;
       session.previousRowDistance = movement.rowDistance;
-      guide.hidden = movement.guide === null || !session.guideFits;
-      if (!guide.hidden) guide.style.left = movement.guide / session.selection.canvasWidth * 100 + '%';
+      showGuide(session.guideFits ? movement.guide : null, session.selection.canvasWidth);
     }
 
     function queueDraw() {

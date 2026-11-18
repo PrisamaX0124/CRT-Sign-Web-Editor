@@ -195,6 +195,8 @@ function createMovement() {
   document.createElement = document.createElementNS = createElement;
   Object.assign(browser, {
     document,
+    EditorMotion: { play() {} },
+    getComputedStyle: () => ({ opacity: '1' }),
     addEventListener: window.addEventListener.bind(window),
     requestAnimationFrame(callback) { frames.set(++frameNumber, callback); return frameNumber; },
     cancelAnimationFrame(number) { frames.delete(number); },

@@ -318,21 +318,23 @@
       d.querySelector('[data-mode="vertical"]').click();assert($('station-direction-option').hidden);
       d.querySelector('[data-mode="station"]').click();assert(!enabled(),'切换版式丢失关闭设置');restore();
     });
-    await test('左栏按住拖动排序：插入反馈、松开提交、取消、撤销和一键倒序保留本站', function () {
+    await test('左栏按住拖动排序：插入反馈、松开提交、取消、撤销和一键倒序保留本站', async function () {
       restore();var list=$('station-list'),ids=A.state.stations.map(function(s){return s.id;}),current=A.state.currentId;
-      function drag(from,to,cancel) {
+      async function drag(from,to,cancel) {
         var start=list.children[from].getBoundingClientRect(),end=list.children[to].getBoundingClientRect(),id=list.children[from].dataset.id;
         var x=start.left+start.width/2,y=start.top+start.height/2;
         list.children[from].dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,pointerId:31,button:0,clientX:x,clientY:y,pointerType:'mouse'}));
         d.dispatchEvent(new w.PointerEvent('pointermove',{bubbles:true,pointerId:31,clientX:end.left+end.width/2,clientY:end.bottom-3,pointerType:'mouse'}));
-        assert(d.querySelector('.station-drag-ghost')&&list.querySelector('.station-drop-after,.station-drop-before'),'拖动缺少插入反馈');
+        assert(d.querySelector('.station-drag-ghost')&&list.classList.contains('station-drop-active'),'拖动缺少插入反馈');
         assert(A.state.stations[from].id===id,'松开前不能改变状态');
-        d.dispatchEvent(new w.PointerEvent(cancel?'pointercancel':'pointerup',{bubbles:true,pointerId:31,pointerType:'mouse'}));
-        assert(!d.querySelector('.station-drag-ghost')&&!list.querySelector('.station-drop-after,.station-drop-before'));
+        d.dispatchEvent(new w.PointerEvent(cancel?'pointercancel':'pointerup',{bubbles:true,pointerId:31,pointerType:'mouse',clientX:end.left+end.width/2,clientY:end.bottom-3}));
+        var ghost=d.querySelector('.station-drag-ghost');
+        if(ghost) await Promise.allSettled(ghost.getAnimations().map(function(animation){return animation.finished;}));
+        assert(!d.querySelector('.station-drag-ghost')&&!list.classList.contains('station-drop-active'));
       }
-      drag(0,3,false);assert(A.state.stations[3].id===ids[0]);assert(A.selectedId===ids[0]&&A.state.currentId===current);
+      await drag(0,3,false);assert(A.state.stations[3].id===ids[0]);assert(A.selectedId===ids[0]&&A.state.currentId===current);
       $('undo').click();assert(A.state.stations[0].id===ids[0]);$('redo').click();assert(A.state.stations[3].id===ids[0]);
-      var snapshot=S.serialize(A.state);drag(0,3,true);assert(S.serialize(A.state)===snapshot,'取消拖动仍改变顺序');
+      var snapshot=S.serialize(A.state);await drag(0,3,true);assert(S.serialize(A.state)===snapshot,'取消拖动仍改变顺序');
       restore();list.children[2].dispatchEvent(new w.KeyboardEvent('keydown',{bubbles:true,key:'ArrowUp',altKey:true}));
       assert(A.state.stations[1].id===ids[2]&&d.activeElement.dataset.id===ids[2],'键盘调序后焦点未跟随站点');$('undo').click();
       restore();var before=S.serialize(A.state),direction=A.state.direction,previous=S.neighbors(A.state).previous.id;
@@ -631,7 +633,7 @@
         var end = list.children[1].getBoundingClientRect();
         handle.dispatchEvent(new w.PointerEvent('pointerdown', { bubbles: true, pointerId: 52, button: 0, pointerType: 'mouse', clientX: start.left + 3, clientY: start.top + 3 }));
         d.dispatchEvent(new w.PointerEvent('pointermove', { bubbles: true, pointerId: 52, pointerType: 'mouse', clientX: start.left + 3, clientY: end.bottom - 4 }));
-        d.dispatchEvent(new w.PointerEvent('pointerup', { bubbles: true, pointerId: 52, pointerType: 'mouse' }));
+        d.dispatchEvent(new w.PointerEvent('pointerup', { bubbles: true, pointerId: 52, pointerType: 'mouse', clientX: start.left + 3, clientY: end.bottom - 4 }));
         assert(A.state.stations[1].id === first, '纵向拖动应调整站序');
         $('undo').click();
         assert(A.state.stations[0].id === first, '撤销应恢复站序');

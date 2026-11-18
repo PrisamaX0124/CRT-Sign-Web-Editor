@@ -13,7 +13,7 @@
     dialog.innerHTML = `
       <header class="image-upload-heading">
         <h2 id="image-upload-heading">上传到图床</h2>
-        <button type="button" class="icon-btn" aria-label="关闭图片上传">×</button>
+        <button type="button" class="dialog-close" data-control-icon="close" aria-label="关闭图片上传"></button>
       </header>
       <label class="image-upload-field">
         <span>上传到</span>

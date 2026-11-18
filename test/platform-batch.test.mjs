@@ -43,6 +43,42 @@ function project() {
   });
 }
 
+test('纵向双列每站只生成一张，逐站反向交换左右列并保留基准方向', () => {
+  const state = project();
+  const plan = batch.createPlan(state, ['middle', 'last'], 'vertical', 'both');
+  assert.equal(plan.results.length, 2);
+  const [middle, last] = plan.results;
+  const reverse = batch.oppositeResult(plan, middle);
+  assert.equal(batch.oppositeResult(plan, last).station.id, last.station.id);
+  const sign = batch.stateForResult(plan, reverse);
+  assert.equal(sign.direction, state.direction);
+  assert.equal(sign.verticalSwapped, !state.verticalSwapped);
+  assert.equal(batch.stateForResult(plan, last).verticalSwapped, state.verticalSwapped);
+  const columns = result => Array.from(render.metrics(batch.stateForResult(plan, result), measure).columns, column => column.direction);
+  assert.deepEqual(columns(reverse), columns(middle).reverse());
+  assert.notEqual(reverse.filename, middle.filename);
+  assert.match(reverse.filename, /双列/);
+});
+
+test('吊板和单列可逐站反向，保留原版式，反向后的同名文件仍可区分', () => {
+  const state = { ...project(), verticalVariant: 'right', stations: [
+    { id: 'one', code: 'X', zh: '同名' }, { id: 'two', code: 'X', zh: '同名' },
+  ] };
+  for (const mode of ['station', 'route', 'vertical']) {
+    const plan = batch.createPlan(state, ['one', 'two'], mode, 'current');
+    const reversed = Array.from(plan.results, result => batch.oppositeResult(plan, result));
+    assert.equal(new Set(reversed.map(result => result.filename)).size, 2);
+    for (const result of reversed) {
+      const sign = batch.stateForResult(plan, result);
+      assert.equal(sign.mode, mode);
+      assert.equal(sign.direction, -state.direction);
+      assert.equal(sign.verticalVariant, 'right');
+    }
+    const both = batch.createPlan(state, ['one'], mode, 'both');
+    assert.equal(batch.oppositeResult(both, both.results[0]), undefined);
+  }
+});
+
 test('所选站点按原站序排列，当前方向和反向的数量正确', () => {
   const state = project();
   for (const [choice, directions] of [['current', [-1]], ['reverse', [1]], ['both', [-1, 1]]]) {
@@ -58,7 +94,7 @@ test('三种版式的排版与逐张编辑一致，快照保留首末站、换�
   const state = project();
   for (const mode of ['route', 'station', 'vertical']) {
     const plan = batch.createPlan(state, state.stations.map(station => station.id), mode, 'both');
-    assert.equal(plan.results.length, 6);
+    assert.equal(plan.results.length, mode === 'vertical' ? 3 : 6);
     for (const result of plan.results) {
       const sign = batch.stateForResult(plan, result);
       const ordinary = stateTools.settings(state, { mode, currentId: result.station.id, direction: result.direction });
@@ -116,10 +152,10 @@ test('文件名包含线路和站点资料，处理非法字符、空名称、�
   const plan = batch.createPlan(state, state.stations.map(station => station.id), 'vertical', 'current');
   const names = Array.from(plan.results, result => result.filename);
   assert.deepEqual(names.slice(0, 2), [
-    '_CON.机场_线_无编号_同_名_纵向线路图_反向',
-    '_CON.机场_线_无编号_同_名_纵向线路图_反向_2',
+    '_CON.机场_线_无编号_同_名_纵向线路图_双列_左往末站_右往首站',
+    '_CON.机场_线_无编号_同_名_纵向线路图_双列_左往末站_右往首站_2',
   ]);
-  assert.match(names[2], /^_CON\.机场_线_123_🌐+.*_纵向线路图_反向$/u);
+  assert.match(names[2], /^_CON\.机场_线_123_🌐+.*_纵向线路图_双列_左往末站_右往首站$/u);
   assert.ok(Buffer.byteLength(names[2] + '.svg') <= 255);
   assert.match(names[3], /Airport/);
   assert.match(names[4], /未命名站点/);

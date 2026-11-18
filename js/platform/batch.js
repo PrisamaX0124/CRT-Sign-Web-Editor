@@ -12,6 +12,28 @@
     return direction === 1 ? '正向' : '反向';
   }
 
+  function verticalName(variant) {
+    return { left: '单列左版', right: '单列右版', double: '双列' }[variant];
+  }
+
+  function terminalName(project, direction) {
+    return stationName(project.stations[direction === 1 ? project.stations.length - 1 : 0]);
+  }
+
+  function orientation(project, mode, direction, verticalSwapped) {
+    const name = directionName(direction);
+    if (mode !== 'vertical') return { filename: name, label: name + ' · 前往' + terminalName(project, direction) };
+    const variant = verticalName(project.verticalVariant);
+    if (project.verticalVariant !== 'double') {
+      return { filename: variant + '_' + name, label: variant + ' · ' + name + (direction === 1 ? ' ↑ ' : ' ↓ ') + '前往' + terminalName(project, direction) };
+    }
+    const columns = global.PlatformState.verticalColumnDirections({ ...project, direction, verticalSwapped });
+    const side = column => column.side === 'left' ? '左' : '右';
+    const positions = columns.map(column => side(column) + '往' + (column.direction === 1 ? '末站' : '首站'));
+    const labels = columns.map(column => side(column) + '往' + terminalName(project, column.direction));
+    return { filename: [variant, ...positions].join('_'), label: [variant, ...labels].join(' · ') };
+  }
+
   function filenamePart(value, fallback, limit) {
     const cleaned = value.normalize('NFC')
       .replace(/[\u0000-\u001f\u007f\ud800-\udfff<>:"/\\|?*]/gu, '_')
@@ -34,27 +56,39 @@
     const layout = layoutNames[mode];
     const selected = new Set(stationIds);
     const filenames = new Set();
-    const directions = directionChoice === 'both' ? [project.direction, -project.direction] :
-      [directionChoice === 'reverse' ? -project.direction : project.direction];
+    const double = mode === 'vertical' && project.verticalVariant === 'double';
+    const both = !double && directionChoice === 'both';
+    const direction = !double && directionChoice === 'reverse' ? -project.direction : project.direction;
     const results = [];
+    const opposites = new Map();
     for (const station of project.stations) {
       if (!selected.has(station.id)) continue;
       const code = filenamePart(station.code, '无编号', 32);
-      const name = filenamePart(stationName(station), '未命名站点', 112);
-      for (const direction of directions) {
-        const base = [line, code, name, layout, directionName(direction)].join('_');
+      const name = filenamePart(stationName(station), '未命名站点', double ? 96 : 112);
+      function resultFor(direction, verticalSwapped) {
+        const details = orientation(project, mode, direction, verticalSwapped);
+        const base = [line, code, name, layout, details.filename].join('_');
         let filename = base;
         let suffix = 2;
         while (filenames.has(filename.toLowerCase())) filename = base + '_' + suffix++;
         filenames.add(filename.toLowerCase());
-        results.push({ station, direction, filename });
+        return { station, direction, verticalSwapped, filename, description: layout + ' · ' + details.label };
       }
+      const first = resultFor(direction, project.verticalSwapped);
+      const second = double ? resultFor(direction, !project.verticalSwapped) : resultFor(-direction, project.verticalSwapped);
+      results.push(first);
+      if (both) results.push(second);
+      else opposites.set(first, second);
     }
-    return { project, mode, layout, results, filename: line + '_' + layout + '_批量导出.zip' };
+    return { project, mode, layout, results, opposites, double, filename: line + '_' + layout + '_批量导出.zip' };
+  }
+
+  function oppositeResult(plan, result) {
+    return plan.opposites.get(result);
   }
 
   function stateForResult(plan, result) {
-    return { ...plan.project, mode: plan.mode, currentId: result.station.id, direction: result.direction };
+    return { ...plan.project, mode: plan.mode, currentId: result.station.id, direction: result.direction, verticalSwapped: result.verticalSwapped };
   }
 
   function allowBrowserUpdate() {
@@ -101,5 +135,5 @@
     }
   }
 
-  global.PlatformBatch = { createPlan, stateForResult, buildArchive, stationName, directionName, allowBrowserUpdate };
+  global.PlatformBatch = { createPlan, oppositeResult, stateForResult, buildArchive, stationName, directionName, verticalName, terminalName, allowBrowserUpdate };
 })(typeof window !== 'undefined' ? window : globalThis);

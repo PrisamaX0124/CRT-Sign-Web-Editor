@@ -4,6 +4,7 @@
   background-size: 18px 18px;
 }
 .transfer-paper {
+  position: relative;
   box-shadow: 0 4px 28px rgb(0 0 0 / 9%);
 }
 #transfer-sign { display: block; width: 100%; height: auto; }

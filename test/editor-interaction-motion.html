@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>编辑操作动效测试</title>
+<style>iframe { display: block; width: 1280px; height: 860px; border: 0; }</style>
+<h1>编辑操作动效测试</h1>
+<ol id="results"></ol>
+<iframe title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.querySelector('iframe');
+  const results = document.getElementById('results');
+  const storageKeys = ['public-sign-autosave', 'public-sign-instance', 'public-sign-prefs', 'public-platform-sign-project-v1', 'public-transfer-sign-project-v1'];
+  const storage = storageKeys.map(key => [key, localStorage.getItem(key)]);
+  let view, page, app;
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const query = selector => page.querySelector(selector);
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function load(path) {
+    return new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = path;
+    });
+  }
+  async function open(path) {
+    await load('../' + path);
+    view = frame.contentWindow;
+    page = view.document;
+    app = view.App;
+    await app.ready;
+    while (!app.measure) await new Promise(resolve => view.requestAnimationFrame(resolve));
+  }
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try { await run(); item.className = 'pass'; item.textContent = name; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '。' + error.message; }
+    results.append(item);
+  }
+  function pointer(type, target, x, y) {
+    target.dispatchEvent(new view.PointerEvent('pointer' + type, {
+      bubbles: true, cancelable: true, pointerId: 91, pointerType: 'mouse', clientX: x, clientY: y,
+    }));
+  }
+  function choose(select, value) {
+    select.value = value;
+    select.dispatchEvent(new view.Event('change', { bubbles: true }));
+  }
+  function animations(element) { return element.getAnimations({ subtree: true }); }
+  async function waitFor(condition) {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      if (condition()) return;
+      await new Promise(resolve => view.requestAnimationFrame(resolve));
+    }
+    throw new Error('等待画面更新超时');
+  }
+
+  try {
+    storageKeys.forEach(key => localStorage.removeItem(key));
+    await open('platform.html');
+    await test('本站按钮有定位图标，弹窗有足够大的关闭按钮且没有重复的关闭操作', () => {
+      assert(view.getComputedStyle(query('#set-current'), '::before').maskImage !== 'none', '设为本站缺少定位图标');
+      query('#open-batch-generation').click();
+      const close = query('#close-batch-generation');
+      assert(close.offsetWidth >= 36 && close.offsetHeight >= 36 && view.getComputedStyle(close, '::before').maskImage !== 'none', '右上角关闭目标太小');
+      assert(query('#batch-generation-cancel').hidden, '空闲时重复显示关闭按钮');
+      close.click();
+      query('#save-preset-shortcut').click();
+      query('#preset-name').value = '';
+      query('#preset-dialog .dialog-close').click();
+      assert(!query('#preset-dialog').open, '预设名称留空时也应可以关闭');
+    });
+    await test('站台三种版式和单双列可以连续切换，旧牌面淡出且不拦截操作', async () => {
+      const previous = app.state;
+      for (const mode of ['route', 'station', 'vertical', 'station']) {
+        if (app.state.mode === mode) continue;
+        query('[data-mode="' + mode + '"]').click();
+        const overlays = page.querySelectorAll('#platform-paper .outgoing-sign-preview');
+        assert(app.state.mode === mode && overlays.length === (reduced ? 0 : 1), '版式切换未交接画面或留下重复的旧牌面');
+        if (overlays.length) assert(overlays[0].getAttribute('aria-hidden') === 'true' && view.getComputedStyle(overlays[0]).pointerEvents === 'none', '旧牌面仍可交互');
+        if (mode === 'vertical') {
+          const next = app.state.verticalVariant === 'double' ? 'right' : 'double';
+          choose(query('#vertical-variant'), next);
+          assert(app.state.verticalVariant === next && page.querySelectorAll('#platform-paper .outgoing-sign-preview').length === (reduced ? 0 : 1), '切换纵向单双列没有平滑交接');
+        }
+      }
+      await waitFor(() => !query('#platform-paper .outgoing-sign-preview'));
+      app.update(() => previous);
+    });
+    await test('站点拖动实时让位，松手提交一次，取消保留原来的站序', () => {
+      app.update(state => view.PlatformState.addStation(view.PlatformState.addStation(state, state.currentId), state.currentId));
+      const list = query('#station-list');
+      const cards = [...list.querySelectorAll('.station-item')];
+      const first = cards[0].getBoundingClientRect();
+      const third = cards[2].getBoundingClientRect();
+      const x = first.left + 12, from = first.top + 12, to = third.bottom - 2;
+      const before = app.state;
+      pointer('down', cards[0], x, from);
+      pointer('move', page, x, to);
+      assert(app.state === before && cards[1].style.translate && cards[1].style.translate !== 'none', '相邻站点应在松手前让位');
+      pointer('cancel', page, x, to);
+      assert(app.state === before && !cards[1].style.translate, '取消时应该清除临时位移');
+      pointer('down', cards[0], x, from);
+      pointer('move', page, x, to);
+      pointer('up', page, x, to);
+      assert(app.state.stations[2].id === before.stations[0].id, '站点应移入预览空位');
+      app.undo();
+      assert(app.state === before && !query('.station-drag-ghost'), '一次撤销应恢复原站序并收起落位动画');
+    });
+    await test('设置本站只高亮新本站，普通选择不会重播', () => {
+      const other = app.state.stations.find(station => station.id !== app.state.currentId);
+      app.select(other.id);
+      query('#set-current').click();
+      const highlight = query('.current-station-highlight');
+      assert(Boolean(highlight) === !reduced && app.state.currentId === other.id, '设置本站时应有一次牌面反馈');
+      app.select(app.state.stations.find(station => station.id !== other.id).id);
+      assert(query('.current-station-highlight') === highlight, '普通点选不应重播');
+    });
+    await test('长站点列表拖到边缘会自动滚动，按 Esc 复原', async () => {
+      const previous = app.state;
+      const state = view.PlatformState;
+      app.update(project => state.replaceStations(project, Array.from({ length: 40 }, (_, index) => ({
+        id: 'motion-station-' + index, code: String(index + 1), zh: '测试站 ' + (index + 1), en: 'Test Station',
+      }))));
+      const before = app.state;
+      const list = query('#station-list');
+      const card = list.firstElementChild;
+      list.scrollTop = 0;
+      const start = card.getBoundingClientRect();
+      const end = list.getBoundingClientRect();
+      const x = start.left + 10;
+      pointer('down', card, x, start.top + 10);
+      pointer('move', page, x, end.bottom - 4);
+      await waitFor(() => list.scrollTop > 80);
+      assert(app.state === before && list.classList.contains('station-drop-active'), '滚动时应保持临时落点');
+      page.dispatchEvent(new view.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await waitFor(() => !query('.station-drag-ghost'));
+      assert(app.state === before && !list.classList.contains('station-drop-active'), '取消后站序或落点未复原');
+      app.update(() => previous);
+    });
+    await test('批量预览先保留卡片尺寸，再逐张显示，可操作已生成的结果', async () => {
+      const batch = view.PlatformBatch;
+      const original = batch.allowBrowserUpdate;
+      const steps = [];
+      batch.allowBrowserUpdate = () => new Promise(resolve => steps.push(resolve));
+      try {
+        query('#open-batch-generation').click();
+        query('#batch-generation-preview').click();
+        const cards = Array.from(page.querySelectorAll('.batch-generation-card'));
+        assert(cards.length > 1 && cards.every(card => card.querySelector('button').disabled), '生成前各张预览应占据固定位置');
+        const before = cards.map(card => [card.offsetTop, card.offsetHeight]);
+        await waitFor(() => steps.length > 0);
+        steps.shift()();
+        await waitFor(() => cards[0].querySelector('svg'));
+        const image = cards[0].querySelector('svg');
+        assert(Boolean(animations(image).length) === !reduced, '单张预览应遵循减少动态效果设置');
+        assert(cards.every((card, index) => card.offsetTop === before[index][0] && card.offsetHeight === before[index][1]), '生成图片不应推移其他卡片');
+        cards[0].querySelector('button').click();
+        assert(query('#batch-generation-detail').open && cards[1].querySelector('button').disabled, '首张就绪即可查看大图');
+        query('#batch-generation-detail button').click();
+      } finally {
+        query('#close-batch-generation').click();
+        batch.allowBrowserUpdate = original;
+        steps.forEach(resolve => resolve());
+      }
+    });
+
+    await open('index.html');
+    await test('整行拖动预演牌面让位，指针取消不会提交', () => {
+      const state = view.SignState;
+      app.update(() => state.addRow(state.addRow(state.createSign())));
+      const before = app.state;
+      const graphic = query('#sign-svg');
+      const { left, top, height } = graphic.getBoundingClientRect();
+      const x = left + 16, from = top + height / 9, to = top + height * .93;
+      const handle = query('.row-handle');
+      pointer('down', handle, x, from);
+      pointer('move', page, x, to);
+      const second = graphic.querySelectorAll('.sign-row')[1];
+      assert(second.style.translate && app.state === before, '整行应在拖动中预演新位置');
+      pointer('cancel', page, x, to);
+      assert(app.state === before && !second.style.translate, '取消应恢复原位置');
+      pointer('down', handle, x, from);
+      pointer('move', page, x, to);
+      pointer('up', page, x, to);
+      assert(app.state.rows[2].id === before.rows[0].id, '整行应放到预览空位');
+      app.undo();
+      assert(app.state === before, '一次撤销应恢复原行序');
+    });
+    await test('左栏元素悬停时按真实排版预演，离开后清除', () => {
+      const state = view.SignState;
+      const existing = state.createElement('bilingual-text', { textZh: '原有元素' });
+      app.update(sign => state.addElement(sign, sign.rows[0].id, existing));
+      const before = app.state;
+      const graphic = query('#sign-svg');
+      const { left, top, height } = graphic.getBoundingClientRect();
+      const dataTransfer = new view.DataTransfer();
+      const card = query('.palette-card[draggable="true"]');
+      card.dispatchEvent(new view.DragEvent('dragstart', { dataTransfer, bubbles: true, cancelable: true }));
+      Object.defineProperty(dataTransfer, 'getData', { value: () => '', configurable: true });
+      const init = { dataTransfer, bubbles: true, cancelable: true, clientX: left + 2, clientY: top + height / 6 };
+      const wrap = query('#canvas-wrap');
+      wrap.dispatchEvent(new view.DragEvent('dragover', init));
+      const preview = query('.palette-drop-preview:not([hidden])');
+      assert(app.state === before && preview?.querySelectorAll('.element').length === 2, '浏览器在悬停时保护拖放数据，仍应显示排版预览');
+      wrap.dispatchEvent(new view.DragEvent('dragleave', init));
+      assert(!query('.palette-drop-preview:not([hidden])') && app.state === before, '离开后应清除预演');
+      wrap.dispatchEvent(new view.DragEvent('dragover', init));
+      const positions = root => Array.from(root.querySelectorAll('g.element'), element => element.getAttribute('transform')).join('|');
+      const expected = positions(preview);
+      delete dataTransfer.getData;
+      wrap.dispatchEvent(new view.DragEvent('drop', init));
+      card.dispatchEvent(new view.DragEvent('dragend', { dataTransfer, bubbles: true }));
+      assert(expected === positions(graphic) && app.state.rows[0].elements.length === 2, '实际落位应与预演一致');
+    });
+
+    await open('index.html?editor=transfer');
+    await test('换乘组内换边时箭头、文字和选框一起移动，另一组静止', () => {
+      query('[data-transfer-mode="separate"]').click();
+      const state = view.TransferState;
+      query('[data-transfer-element="arrow:upper"]').dispatchEvent(new view.MouseEvent('click', { bubbles: true }));
+      const previous = state.groups(app.state)[0].arrowPosition;
+      app.update(project => state.changeArrowPosition(project, 'upper', previous === 'left' ? 'right' : 'left'));
+      const vector = query('#transfer-sign');
+      const moving = animations(vector).filter(animation => animation.effect.getKeyframes().some(frame => frame.translate));
+      assert(reduced ? moving.length === 0 : moving.some(animation => animation.effect.target.dataset.transferElement === 'arrow:upper'),
+        '箭头选框应和内容使用同一位移');
+      assert(!moving.some(animation => animation.effect.target.dataset.transferElement?.endsWith(':lower')), '另一组不应移动');
+    });
+    await test('换乘版式 B 重排时原线路滑到新位置，新增色带淡入', () => {
+      const old = query('[data-line="second"][data-role="line-band"]');
+      const top = old.getBoundingClientRect().top;
+      query('[data-transfer-arrangement="2+1"]').click();
+      const retained = query('[data-line="second"][data-role="line-band"]');
+      const added = query('[data-line="third"][data-role="line-band"]');
+      assert(retained && added, '重排后缺少线路');
+      assert(reduced ? !animations(retained).length && !animations(added).length :
+        Math.abs(retained.getBoundingClientRect().top - top) < 1 && animations(added).some(animation => animation.effect.getKeyframes()[0].opacity === '0'),
+        '原色带应从旧位置滑动，新增色带应淡入');
+    });
+    await test('换乘切换版式时，新旧牌面交接且旧牌面不可交互', () => {
+      query('[data-transfer-mode="guidance"]').click();
+      const outgoing = query('.transfer-paper .outgoing-sign-preview');
+      assert(reduced ? !outgoing : outgoing?.getAttribute('aria-hidden') === 'true' && !outgoing.querySelector('[tabindex]'), '旧预览只能用于淡出');
+    });
+    for (const [path, selector, paper] of [
+      ['index.html', '#guidance-zoom', '#canvas-wrap'],
+      ['platform.html', '#platform-zoom', '#platform-paper'],
+      ['index.html?editor=transfer', '#transfer-zoom', '.transfer-paper'],
+    ]) {
+      await open(path);
+      await test(path + ' 的缩放菜单过渡可中断，减少动态效果时立即到位', async () => {
+        const select = query(selector + ' select');
+        const preview = query(paper);
+        const initial = preview.getBoundingClientRect().width;
+        choose(select, '200');
+        const first = preview.getBoundingClientRect().width;
+        assert(reduced ? first > initial : Math.abs(first - initial) < 1, '菜单缩放应从当前画面开始');
+        choose(select, '50');
+        const graphic = preview.querySelector('svg');
+        const nativeWidth = graphic.viewBox.baseVal.width;
+        const output = path === 'platform.html' ? app.scene.output.width : path === 'index.html' ? app.layout.width : view.TransferState.board(app.state).width;
+        assert(nativeWidth > 0, '标识牌没有初始排版');
+        await waitFor(() => Math.abs(preview.getBoundingClientRect().width - output / 2) < 1 && select.value === '50');
+        const final = preview.getBoundingClientRect().width;
+        choose(select, '200');
+        await waitFor(() => preview.getBoundingClientRect().width > final * 3.9);
+        choose(select, 'fit');
+        await waitFor(() => Math.abs(preview.getBoundingClientRect().width - initial) < 1);
+      });
+    }
+  } catch (error) {
+    await test('打开编辑器', () => { throw error; });
+  } finally {
+    await load('about:blank');
+    storage.forEach(([key, value]) => {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    });
+    const failures = results.querySelectorAll('.fail').length;
+    document.title = (failures ? '✖ ' : '✔ ') + (results.children.length - failures) + ' 通过 / ' + failures + ' 失败 编辑操作动效测试';
+  }
+})();
+</script>
+</html>

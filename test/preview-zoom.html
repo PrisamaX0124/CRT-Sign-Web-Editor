@@ -115,9 +115,10 @@
       const scale = () => graphic.getBoundingClientRect().width / settings.dimensions(editor).width;
       const fit = () => zoomMenu.value === 'fit';
       const checkControls = () => assert(zoomMenu && controls.getClientRects().length, '未找到预览缩放菜单');
-      function chooseZoom(value) {
+      async function chooseZoom(value) {
         zoomMenu.value = value;
         zoomMenu.dispatchEvent(new editor.Event('change', { bubbles: true }));
+        await waitFor(() => !viewport.dataset.zoomTransition);
       }
       function center() {
         const bounds = viewport.getBoundingClientRect();
@@ -166,7 +167,7 @@
       }
       settings.prepare(editor);
 
-      await test(settings.name + '首次打开独立适应画布，下拉菜单中的固定档位对应准确尺寸', () => {
+      await test(settings.name + '首次打开独立适应画布，下拉菜单中的固定档位对应准确尺寸', async () => {
         checkControls();
         assert(fit(), '打开页面时未启用适应画布');
         const area = viewport.getBoundingClientRect();
@@ -174,18 +175,18 @@
         assert(sign.left >= area.left && sign.top >= area.top && sign.right <= area.right && sign.bottom <= area.bottom, '适应后没有完整显示');
         const choices = [...zoomMenu.options].filter(option => !option.disabled).map(option => option.value).join(',');
         assert(choices === 'fit,25,50,75,100,125,150,200,300,400', '缩放菜单应列出固定档位和适应画布');
-        chooseZoom(100);
+        await chooseZoom(100);
         assert(!fit() && shown() === 100, '实际尺寸没有同步比例');
         near(graphic.getBoundingClientRect().width, settings.dimensions(editor).width, '实际尺寸下宽度错误');
         near(graphic.getBoundingClientRect().height, settings.dimensions(editor).height, '实际尺寸下高度错误');
-        chooseZoom(75);
+        await chooseZoom(75);
         assert(shown() === 75, '固定档位没有同步显示');
         near(scale(), 0.75, '下拉菜单没有更新实际尺寸', 0.002);
       });
 
-      await test(settings.name + 'Shift 滚轮按鼠标位置缩放，普通滚轮和预览区外不被拦截', () => {
+      await test(settings.name + 'Shift 滚轮按鼠标位置缩放，普通滚轮和预览区外不被拦截', async () => {
         checkControls();
-        chooseZoom(150);
+        await chooseZoom(150);
         viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
         viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) / 2;
         const pointer = center();
@@ -222,27 +223,28 @@
 
       await test(settings.name + '窗口变化时重新适应，手动比例继续保留', async () => {
         checkControls();
-        chooseZoom('fit');
+        await chooseZoom('fit');
         const full = scale();
         try {
           frame.style.width = '1120px';
           frame.style.height = '620px';
           await frameReady();
           assert(fit() && scale() < full, '缩小窗口后适应比例没有更新');
-          chooseZoom(125);
+          const choosing = chooseZoom(125);
           frame.style.width = '1280px';
           frame.style.height = '860px';
+          await choosing;
           await frameReady();
           near(scale(), 1.25, '窗口变化覆盖了手动比例', 0.002);
         } finally {
           frame.style.width = '1280px';
           frame.style.height = '860px';
-          chooseZoom('fit');
+          await chooseZoom('fit');
           await frameReady();
         }
       });
 
-      await test(settings.name + '使用同一个锁图标，开锁可拖动，闭锁固定位置和比例', () => {
+      await test(settings.name + '使用同一个锁图标，开锁可拖动，闭锁固定位置和比例', async () => {
         checkControls();
         const lock = controls.querySelector('button');
         const icon = lock?.querySelector('svg');
@@ -252,7 +254,7 @@
         const bodyTop = body.y.baseVal.value;
         function shackleEnd() { return shackle.getPointAtLength(shackle.getTotalLength()).y; }
         assert(shackleEnd() < bodyTop && lock.title.startsWith('已解锁'), '开锁时应看得到锁扣缺口和解锁提示');
-        chooseZoom(200);
+        await chooseZoom(200);
         viewport.scrollLeft = 150;
         viewport.scrollTop = 160;
         const capture = viewport.setPointerCapture;
@@ -293,7 +295,7 @@
         } finally {
           viewport.setPointerCapture = capture;
           if (lock.getAttribute('aria-pressed') === 'true') lock.click();
-          chooseZoom('fit');
+          await chooseZoom('fit');
         }
       });
 
@@ -304,6 +306,9 @@
         const downloader = settings.downloadFrom(editor);
         const download = downloader.download;
         const downloads = [];
+        const transfer = settings.name === '换乘标识';
+        const rasterize = editor.SignExporters.rasterizePNG;
+        const rasterSources = [];
         const write = editor.Storage.prototype.setItem;
         let writes = 0;
         downloader.download = blob => downloads.push(blob);
@@ -331,20 +336,34 @@
           }
         }
         try {
+          if (transfer) editor.SignExporters.rasterizePNG = function (source, size, ...options) {
+            rasterSources.push({ source, width: size.width, height: size.height });
+            return rasterize.call(this, source, size, ...options);
+          };
           const original = await exportBoth();
           editor.Storage.prototype.setItem = function (key, value) {
             if (key === settings.project) writes++;
             return write.call(this, key, value);
           };
-          chooseZoom(300);
+          await chooseZoom(300);
           const enlarged = await exportBoth();
           const svg = original.findIndex(file => file.type.includes('svg'));
           const png = original.findIndex(file => file.type.includes('png'));
           assert(await original[svg].text() === await enlarged[svg].text(), 'SVG 源文件随预览比例改变');
+          if (transfer) {
+            assert(rasterSources.length === 2 && JSON.stringify(rasterSources[0]) === JSON.stringify(rasterSources[1]),
+              '换乘 PNG 的光栅化源数据随预览比例改变');
+          }
           const first = await pixels(original[png]);
           const second = await pixels(enlarged[png]);
-          assert(first.width === second.width && first.height === second.height &&
-            first.data.every((value, position) => value === second.data[position]), 'PNG 尺寸或像素随预览比例改变');
+          assert(first.width === second.width && first.height === second.height, 'PNG 尺寸随预览比例改变');
+          // Chromium 对同一份换乘 SVG 重复采样时，少数抗锯齿边缘的 RGB 会相差 1。
+          let changedChannels = 0;
+          assert(first.data.every((value, position) => {
+            const difference = Math.abs(value - second.data[position]);
+            if (!difference) return true;
+            return transfer && position % 4 !== 3 && difference === 1 && ++changedChannels <= first.data.length / 10000;
+          }), 'PNG 像素随预览比例改变');
           await new Promise(resolve => setTimeout(resolve, 600));
           assert(before === settings.serialize(editor) && writes === 0, '缩放改动或写入了项目');
           assert(history.every((disabled, index) => disabled === document.querySelectorAll('#undo-btn, #redo-btn, #transfer-undo, #transfer-redo, #undo, #redo')[index].disabled),
@@ -352,6 +371,7 @@
         } finally {
           editor.Storage.prototype.setItem = write;
           downloader.download = download;
+          if (transfer) editor.SignExporters.rasterizePNG = rasterize;
         }
       });
 
@@ -363,7 +383,7 @@
           const target = identifier => graphic.querySelector('[data-element-id="' + identifier + '"]');
           const selector = 'g.element';
           for (const percent of [50, 200]) {
-            chooseZoom(percent);
+            await chooseZoom(percent);
             viewport.scrollLeft = viewport.scrollTop = 0;
             const first = hitPoint(target(items[0]).querySelector('.hitbox'), selector);
             clickPoint(first);
@@ -402,12 +422,14 @@
           const toolbar = document.getElementById('transfer-element-toolbar');
           let toolbarWidth;
           for (const percent of [50, 200]) {
-            chooseZoom(percent);
+            await chooseZoom(percent);
             const target = graphic.querySelector(selector);
             reveal(target);
             await frameReady();
             clickPoint(hitPoint(target, selector));
             assert(target.getAttribute('aria-pressed') === 'true', '换乘箭头没有被选中');
+            toolbar.getBoundingClientRect();
+            await Promise.allSettled(toolbar.getAnimations().map(animation => animation.finished));
             const width = checkToolbar(toolbar);
             if (toolbarWidth) near(width, toolbarWidth, '工具栏宽度随牌面变化');
             toolbarWidth = width;
@@ -423,7 +445,7 @@
           app.update(project => editor.PlatformState.settings(project, { mode: 'route' }));
           const keys = app.state.stations.slice(0, 2).map(station => 'route:' + station.id);
           for (const percent of [50, 200]) {
-            chooseZoom(percent);
+            await chooseZoom(percent);
             app.deselect();
             for (const [index, key] of keys.entries()) {
               const selector = '.platform-hitbox[data-element-key="' + key + '"]';

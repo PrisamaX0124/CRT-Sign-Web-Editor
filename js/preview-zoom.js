@@ -40,6 +40,7 @@
     let locked = false;
     let lockedScroll = null;
     let drag = null;
+    let zoom = null;
     let suppressClick = false;
     const shackleOutline = 'M8 12V7a4 4 0 0 1 8 0v';
 
@@ -72,7 +73,7 @@
       fittingOption.textContent = fitting ? '适应画布（' + percent + '%）' : '适应画布';
       currentOption.textContent = percent + '%';
       const exactStop = zoomStops.includes(percent) && Math.abs(scale - percent / 100) < 1e-8;
-      zoomMenu.value = fitting ? 'fit' : exactStop ? String(percent) : 'current';
+      zoomMenu.value = zoom?.value ?? (fitting ? 'fit' : exactStop ? String(percent) : 'current');
       zoomMenu.disabled = locked;
       lock.setAttribute('aria-pressed', String(locked));
       shackle.setAttribute('d', shackleOutline + (locked ? '5' : '1'));
@@ -101,14 +102,15 @@
       paper.style.marginTop = top + 'px';
     }
 
+    function fittedScale(spacing) {
+      // 滚动条可能随适应比例消失，不能继续用它占据的空间计算。
+      return fitScale(width, height, viewport.offsetWidth - spacing.horizontalSpace - spacing.borderWidth,
+        viewport.offsetHeight - spacing.verticalSpace - spacing.borderHeight);
+    }
+
     function apply(nextScale, anchor, resetScroll) {
       const spacing = viewportSpacing();
-      if (fitting && !locked) {
-        // 滚动条可能随适应比例消失，不能继续用它占据的空间计算。
-        const availableWidth = viewport.offsetWidth - spacing.horizontalSpace - spacing.borderWidth;
-        const availableHeight = viewport.offsetHeight - spacing.verticalSpace - spacing.borderHeight;
-        nextScale = fitScale(width, height, availableWidth, availableHeight);
-      }
+      if (fitting && !locked) nextScale = fittedScale(spacing);
       scale = nextScale;
       const displayWidth = width * scale;
       const displayHeight = height * scale;
@@ -145,6 +147,10 @@
 
     function refresh(nextWidth = width, nextHeight = height) {
       if (!(nextWidth > 0 && nextHeight > 0)) return;
+      if (zoom) {
+        if (nextWidth === width && nextHeight === height) return;
+        stopZoom();
+      }
       if (locked && nextWidth === width && nextHeight === height) {
         onChange();
         return;
@@ -154,20 +160,68 @@
       apply(scale);
     }
 
-    function manual(nextScale, pointer) {
-      if (locked || !width || !height) return;
-      const bounded = clamp(nextScale, minimumScale, maximumScale);
-      if (!fitting && bounded === scale) return;
-      stopDrag();
-      fitting = false;
+    function anchorAt(pointer) {
       const viewportBounds = viewport.getBoundingClientRect();
       const x = pointer?.clientX ?? viewportBounds.left + viewport.clientLeft + viewport.clientWidth / 2;
       const y = pointer?.clientY ?? viewportBounds.top + viewport.clientTop + viewport.clientHeight / 2;
       const bounds = paper.getBoundingClientRect();
-      apply(bounded, { x, y, horizontalFraction: (x - bounds.left) / bounds.width, verticalFraction: (y - bounds.top) / bounds.height });
+      return { x, y, horizontalFraction: (x - bounds.left) / bounds.width, verticalFraction: (y - bounds.top) / bounds.height };
+    }
+
+    function stopZoom() {
+      if (!zoom) return;
+      global.cancelAnimationFrame(zoom.frame);
+      zoom.clock.cancel();
+      zoom = null;
+      delete viewport.dataset.zoomTransition;
+      updateControls();
+    }
+
+    function chooseZoom(value) {
+      stopDrag();
+      stopZoom();
+      const fit = value === 'fit';
+      const nextScale = fit ? fittedScale(viewportSpacing()) : Number(value) / 100;
+      const anchor = anchorAt();
+      const timing = global.EditorMotion.timing(controls);
+      const finish = () => {
+        stopZoom();
+        fitting = fit;
+        apply(nextScale, fit ? null : anchor, fit);
+      };
+      if (!timing.duration || !global.KeyframeEffect || !global.Animation || (!fit && nextScale === scale)) { finish(); return; }
+
+      const spacing = viewportSpacing();
+      const bounds = viewport.getBoundingClientRect();
+      const originX = bounds.left + viewport.clientLeft + spacing.paddingLeft;
+      const originY = bounds.top + viewport.clientTop + spacing.paddingTop;
+      const fromX = left - viewport.scrollLeft;
+      const fromY = top - viewport.scrollTop;
+      const toX = Math.max(0, viewport.offsetWidth - spacing.horizontalSpace - spacing.borderWidth - width * nextScale) / 2;
+      const toY = alignTop ? 0 : Math.max(0, viewport.offsetHeight - spacing.verticalSpace - spacing.borderHeight - height * nextScale) / 2;
+      const start = scale;
+      const interpolate = (from, to, progress) => from + (to - from) * progress;
+      const clock = new global.Animation(new global.KeyframeEffect(null, [], { ...timing, fill: 'both' }), document.timeline);
+      zoom = { clock, value };
+      viewport.dataset.zoomTransition = 'true';
+      fitting = false;
+      clock.play();
+      updateControls();
+      function move() {
+        const progress = clock.effect.getComputedTiming().progress ?? 0;
+        if (progress >= 1) { finish(); return; }
+        const position = fit ? {
+          x: originX + interpolate(fromX, toX, progress), y: originY + interpolate(fromY, toY, progress),
+          horizontalFraction: 0, verticalFraction: 0,
+        } : anchor;
+        apply(interpolate(start, nextScale, progress), position);
+        zoom.frame = global.requestAnimationFrame(move);
+      }
+      zoom.frame = global.requestAnimationFrame(move);
     }
 
     function startDrag(event) {
+      stopZoom();
       if (locked || drag || !width || event.isPrimary === false || event.pointerType === 'touch' || (event.button !== 0 && event.button !== 1)) return;
       // 左键仍优先用于编辑元素和操作按钮，按住滚轮可以在元素上平移。
       if (event.button === 0 && (event.shiftKey || event.ctrlKey || event.metaKey ||
@@ -218,6 +272,7 @@
     }
 
     function toggleLock() {
+      stopZoom();
       stopDrag();
       if (!locked) {
         const spacing = viewportSpacing();
@@ -240,13 +295,7 @@
     lock.addEventListener('click', toggleLock);
     zoomMenu.addEventListener('change', () => {
       if (locked || !width || !height) return;
-      if (zoomMenu.value === 'fit') {
-        stopDrag();
-        fitting = true;
-        apply(scale, null, true);
-      } else if (zoomStops.includes(Number(zoomMenu.value))) {
-        manual(Number(zoomMenu.value) / 100);
-      }
+      if (zoomMenu.value === 'fit' || zoomStops.includes(Number(zoomMenu.value))) chooseZoom(zoomMenu.value);
     });
     viewport.addEventListener('pointerdown', startDrag, true);
     viewport.addEventListener('pointermove', moveDrag);
@@ -268,10 +317,15 @@
     });
     viewport.addEventListener('wheel', event => {
       if (!event.shiftKey || event.ctrlKey || event.metaKey || event.defaultPrevented || !event.cancelable || !width) return;
-      const nextScale = scaleFromWheel(scale, event, viewport.clientHeight);
       if (!event.deltaY && !event.deltaX) return;
       event.preventDefault();
-      manual(nextScale, event);
+      if (locked || !height) return;
+      stopZoom();
+      const nextScale = scaleFromWheel(scale, event, viewport.clientHeight);
+      if (!fitting && nextScale === scale) return;
+      stopDrag();
+      fitting = false;
+      apply(nextScale, anchorAt(event));
     }, { passive: false });
     if (global.ResizeObserver) new global.ResizeObserver(() => refresh()).observe(viewport);
     else global.addEventListener('resize', () => refresh());

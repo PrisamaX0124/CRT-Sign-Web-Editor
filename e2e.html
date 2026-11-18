@@ -219,7 +219,7 @@
       ok('S03 第 1 行剩 2 个元素', w.App.state.rows[0].elements.length === 2);
     }
 
-    function s04_rowHandleDrag() {
+    async function s04_rowHandleDrag() {
       var w = W();
       var firstRowId = w.App.state.rows[0].id;
       var handle = $('.row-band[data-row-index="0"] .row-handle');
@@ -227,6 +227,7 @@
       var b1 = band1.getBoundingClientRect();
       drag(handle, { x: b1.left + 30, y: b1.top + b1.height * 0.75 }, { fromX: handle.getBoundingClientRect().left + 10 });
       ok('S04 行手柄拖拽：第 1 行移到第 2 行', w.App.state.rows[1].id === firstRowId);
+      await Promise.allSettled($('#sign-overlay').getAnimations({ subtree: true }).map(function (animation) { return animation.finished; }));
       // 拖回去
       var handle2 = $('.row-band[data-row-index="1"] .row-handle');
       var band0 = $('.row-band[data-row-index="0"]');
@@ -2200,7 +2201,7 @@
         s01_selectAndPanel();
         s02_elementDragReorder();
         s03_crossRowDrag();
-        s04_rowHandleDrag();
+        await s04_rowHandleDrag();
         await s05_deleteRowWithConfirm();
         await s06_savePresetFlow();
         s07_presetPreviewAndDrop();

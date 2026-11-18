@@ -36,7 +36,14 @@
   function all(selector) { return [...editor.document.querySelectorAll(selector)]; }
   function control(name) { return find('#batch-generation-' + name); }
   function click(name) { control(name).click(); }
+  function chooseLayout(mode) {
+    control('layout').value = mode;
+    control('layout').dispatchEvent(new editor.Event('change', { bubbles: true }));
+  }
   function resultCards() { return all('.batch-generation-card'); }
+  function previewComplete(count) {
+    return resultCards().length === count && all('.batch-generation-picture > svg').length === count && !control('download').disabled;
+  }
 
   async function waitFor(check, message) {
     const deadline = Date.now() + 20000;
@@ -68,7 +75,7 @@
 
   async function preview(count) {
     click('preview');
-    await waitFor(() => resultCards().length === count && !control('previews').inert, '预览没有完成');
+    await waitFor(() => previewComplete(count), '预览没有完成');
   }
 
   function normalized(vector) {
@@ -163,21 +170,23 @@
       assert(!control('preview').disabled, '可以单独选择 SVG');
     });
 
-    await test('三种版式的双方向预览与逐张绘制相同，包括首末站和换乘站', async () => {
+    await test('吊板的双方向、纵向双列的每站一张预览都与逐张绘制相同', async () => {
       for (const [mode, name] of layouts) {
         open();
-        control('layout').value = mode;
+        chooseLayout(mode);
         control('direction').value = 'both';
-        await preview(6);
+        const double = mode === 'vertical';
+        assert(control('direction').closest('.field').hidden === double, '双列不应要求选择单一行车方向');
+        await preview(double ? 3 : 6);
         const cards = resultCards();
         for (const [index, card] of cards.entries()) {
-          const station = sampleStations[Math.floor(index / 2)];
-          const direction = index % 2 === 0 ? -1 : 1;
+          const station = sampleStations[double ? index : Math.floor(index / 2)];
+          const direction = double || index % 2 === 0 ? -1 : 1;
           const ordinary = editor.PlatformState.settings(project, { mode, currentId: station.id, direction });
           const expected = parse(editor.PlatformExport.buildSVG(ordinary, editor.App.measure, {}));
           assert(normalized(card.querySelector('svg')) === normalized(expected), name + '预览与逐张绘制有差异');
           assert(card.textContent.includes(station.code + ' ' + station.zh), '缺少站名或编号');
-          assert(card.textContent.includes(name + ' · ' + (direction === -1 ? '反向' : '正向')), '缺少版式或方向');
+          assert(card.textContent.includes(name + ' · ' + (double ? '双列' : direction === -1 ? '反向' : '正向')), '缺少版式或方向');
         }
         const thumbnail = cards[2].querySelector('svg');
         cards[2].querySelector('button').click();
@@ -188,6 +197,38 @@
         control('detail').querySelector('button').click();
         await waitFor(() => !control('large-preview').childElementCount, '关闭大图后仍有绘图节点');
         find('#close-batch-generation').click();
+      }
+    });
+
+    await test('预览中单站反向或交换双列，下载包含对应牌面和文件名', async () => {
+      for (const [mode, expectedSuffix] of [['station', '正向'], ['vertical', '双列_左往首站_右往末站']]) {
+        const before = editor.App.state;
+        open();
+        chooseLayout(mode);
+        click('png');
+        click('svg');
+        await preview(3);
+        const cards = resultCards();
+        const other = normalized(cards[0].querySelector('svg'));
+        const target = cards[1];
+        const button = target.querySelector('.batch-generation-reverse');
+        const original = normalized(target.querySelector('svg'));
+        button.click();
+        const flipped = normalized(target.querySelector('svg'));
+        assert(flipped !== original && normalized(cards[0].querySelector('svg')) === other, '逐站反向影响了其他站点');
+        assert(target.querySelector('input').checked && editor.App.state === before, '反向不应修改勾选或项目');
+        button.click();
+        assert(normalized(target.querySelector('svg')) === original, '无法恢复方向');
+        button.click();
+        cards[0].querySelector('input').click();
+        cards[2].querySelector('input').click();
+        click('download');
+        await waitFor(() => downloads.length === 1 || control('status').textContent.includes('失败'), '压缩包没有生成');
+        assert(downloads.length === 1, control('status').textContent);
+        const files = await unzip(downloads[0].archive);
+        const file = files.get('10号线_05_上云岭_' + layouts.get(mode) + '_' + expectedSuffix + '.svg');
+        assert(files.size === 1 && file && normalized(parse(await file.text())) === flipped, '导出未使用反向后的文件名和绘图');
+        downloads = [];
       }
     });
 
@@ -262,7 +303,7 @@
     await test('全线吊板和双列纵向线路图可直接打包，文件与预览一致', async () => {
       for (const mode of ['route', 'vertical']) {
         open();
-        control('layout').value = mode;
+        chooseLayout(mode);
         click('select-none');
         all('#batch-generation-stations input')[1].click();
         click('png');
@@ -273,7 +314,7 @@
         await waitFor(() => downloads.length === 1 || control('status').textContent.includes('失败'), '压缩包没有生成');
         assert(downloads.length === 1, control('status').textContent);
         const files = await unzip(downloads[0].archive);
-        const name = '10号线_05_上云岭_' + layouts.get(mode) + '_反向.svg';
+        const name = '10号线_05_上云岭_' + layouts.get(mode) + (mode === 'vertical' ? '_双列_左往末站_右往首站' : '_反向') + '.svg';
         assert(files.size === 1 && files.has(name), '压缩包应含一张所选版式的矢量图');
         const vector = parse(await files.get(name).text());
         assert(normalized(vector) === thumbnail, '文件内容与缩略图有差异');
@@ -299,12 +340,25 @@
       const first = resultCards()[0];
       first.querySelector('input').click();
       click('next-page');
-      await waitFor(() => resultCards().length === 12 && !control('previews').inert, '下一页未生成');
+      await waitFor(() => previewComplete(12), '下一页未生成');
       assert(!first.isConnected && resultCards()[0].textContent.includes('测试站7'), '翻页后上一页未释放，或站序有误');
       click('previous-page');
-      await waitFor(() => resultCards().length === 12 && !control('previews').inert, '上一页未生成');
+      await waitFor(() => previewComplete(12), '上一页未生成');
       assert(!resultCards()[0].querySelector('input').checked, '翻页后取消勾选状态丢失');
       assert(control('result-count').textContent.includes('239 / 240'), '总选择数有误');
+
+      find('#close-batch-generation').click();
+      open();
+      await preview(12);
+      const reverse = resultCards()[0].querySelector('.batch-generation-reverse');
+      reverse.click();
+      resultCards()[0].querySelector('input').click();
+      click('next-page');
+      await waitFor(() => previewComplete(12), '下一页未生成');
+      click('previous-page');
+      await waitFor(() => previewComplete(12), '上一页未生成');
+      assert(resultCards()[0].querySelector('.batch-generation-reverse').textContent.includes('恢复方向') &&
+        !resultCards()[0].querySelector('input').checked, '跨页后逐站反向或勾选状态丢失');
     });
 
     await test('SVG 单格式打包失败后可直接重试，同名文件都能解压', async () => {

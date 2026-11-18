@@ -10,6 +10,11 @@
     var contentHeight=height/.75,unit=Math.min(1,(contentHeight-72)/(208+(count-1)*64));
     return {width:width,height:height,contentWidth:width/.75,contentHeight:contentHeight,scale:.75,bodyUnit:unit,first:72+104*unit,last:contentHeight-104*unit};
   }
+  function verticalColumnDirections(state) {
+    if (state.verticalVariant !== 'double') return [{ side: state.verticalVariant, direction: state.direction }];
+    var left = state.verticalSwapped ? -state.direction : state.direction;
+    return [{ side: 'left', direction: left }, { side: 'right', direction: -left }];
+  }
   function str(value, fallback, limit) {
     return typeof value === 'string' ? value.slice(0, limit || 160) : fallback;
   }
@@ -266,7 +271,7 @@
   global.PlatformState = {
     create: create, settings: settings, patchStation: patchStation, addStation: addStation,
     setVerticalVariant: setVerticalVariant, swapVerticalColumns: swapVerticalColumns,
-    verticalGeometry: verticalGeometry,
+    verticalGeometry: verticalGeometry, verticalColumnDirections: verticalColumnDirections,
     removeStation: removeStation, removeStations: removeStations, moveStation: moveStation, replaceStations: replaceStations,
     serializeStations: serializeStations, deserializeStations: deserializeStations, pasteStations: pasteStations,
     reorderStation: reorderStation, reverseStations: reverseStations,

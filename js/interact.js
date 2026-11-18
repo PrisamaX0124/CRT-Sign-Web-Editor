@@ -20,7 +20,7 @@
   var App = global.App;
   var h = UI.h;
 
-  var overlay, svg, elIndicator, rowIndicator, canvasScroll, elementToolbar;
+  var overlay, svg, elIndicator, rowIndicator, canvasScroll, elementToolbar, palettePreview;
   var positionMode, positionMovement, resetPositionButton;
   var toolbarAlignments = [];
   var toolbarPaddingControls = [];
@@ -53,7 +53,7 @@
     document.addEventListener('pointermove', onPagePointerMove, true);
     document.addEventListener('pointerup', onPagePointerUp, true);
     document.addEventListener('pointercancel', onPagePointerCancel, true);
-    window.addEventListener('blur', function () { pagePointer = null; });
+    window.addEventListener('blur', function () { pagePointer = null; finishRowDrag(false, false); });
     document.addEventListener('click', onPageClick);
     document.addEventListener('keydown', onKeyDown);
     document.getElementById('add-row-btn').addEventListener('click', function () {
@@ -61,6 +61,11 @@
     });
 
     var wrap = document.getElementById('canvas-wrap');
+    palettePreview = document.createElementNS(Core.SVG_NS, 'svg');
+    palettePreview.classList.add('palette-drop-preview');
+    palettePreview.setAttribute('aria-hidden', 'true');
+    palettePreview.setAttribute('hidden', '');
+    wrap.appendChild(palettePreview);
     positionMode = document.getElementById('guidance-position-mode');
     positionMovement = global.ElementAlignment.create({
       paper: wrap,
@@ -91,12 +96,16 @@
     wrap.addEventListener('dragover', onPaletteDragOver);
     wrap.addEventListener('drop', onPaletteDrop);
     wrap.addEventListener('dragleave', onPaletteDragLeave);
+    document.addEventListener('dragstart', function (event) { palettePayload = readDragKind(event) === 'new' ? readDragPayload(event, 'new') : null; });
+    document.addEventListener('dragend', function () { resetPaletteDrop(); palettePayload = null; });
   }
 
   // ─── 覆盖层渲染 ────────────────────────────────────────────
 
   function renderOverlay(layout, state) {
     positionMovement?.cancelActive();
+    finishRowDrag(false, false);
+    resetPaletteDrop();
     // 保留两个指示器（挂在 overlay 底部），清掉其余
     Array.prototype.slice.call(overlay.children).forEach(function (child) {
       if (child !== elIndicator && child !== rowIndicator) child.remove();
@@ -610,6 +619,7 @@
 
   function onKeyDown(ev) {
     if (ev.defaultPrevented || ev.isComposing) return;
+    if (ev.key === 'Escape' && rowDrag) { ev.preventDefault(); finishRowDrag(false); return; }
     // 焦点在输入控件内时不拦截（文本编辑优先）
     var t = ev.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
@@ -805,46 +815,90 @@
 
   // ─── 行拖拽排序 ────────────────────────────────────────────
 
-  var rowDrag = null; // {fromIndex, pointerId, active, boundary}
+  var rowDrag = null;
+
+  function rowGraphics() { return Array.from(svg.querySelectorAll('.sign-row:not(.row-drag-ghost)')); }
 
   function startRowDrag(ev, fromIndex) {
-    rowDrag = { fromIndex: fromIndex, pointerId: ev.pointerId, active: true };
+    if (rowDrag || ev.button !== 0) return;
+    var point = toSignPoint(ev);
+    if (!point) return;
+    rowDrag = { from: fromIndex, to: fromIndex, pointer: ev.pointerId, startY: point.y, clientY: ev.clientY };
     document.addEventListener('pointermove', onRowDragMove);
     document.addEventListener('pointerup', onRowDragEnd);
     document.addEventListener('pointercancel', onRowDragEnd);
   }
 
   function onRowDragMove(ev) {
-    if (!rowDrag || ev.pointerId !== rowDrag.pointerId) return;
-    var pt = toSignPoint(ev);
-    if (!pt) return;
+    var drag = rowDrag;
+    if (!drag || ev.pointerId !== drag.pointer) return;
+    var point = toSignPoint(ev);
+    if (!point) return;
     var layout = App.layout;
-    var n = layout.rows.length;
-    // 指针所在行 → 插入边界（该行之前），下半则在其后
-    var ri = rowIndexAt(pt.y);
-    if (ri === -1) {
-      ri = pt.y < 0 ? 0 : n - 1;
+    var row = layout.rows[drag.from];
+    if (!drag.ghost) {
+      if (Math.abs(ev.clientY - drag.clientY) < 5) return;
+      drag.graphics = rowGraphics();
+      drag.bands = Array.from(overlay.querySelectorAll('.row-band'));
+      drag.ghost = drag.graphics[drag.from].cloneNode(true);
+      drag.ghost.classList.add('row-drag-ghost');
+      drag.ghost.setAttribute('aria-hidden', 'true');
+      drag.graphics[drag.from].classList.add('row-drag-source');
+      svg.appendChild(drag.ghost);
+      overlay.parentElement.dataset.movingElements = 'true';
+      overlay.parentElement.dataset.sortingRows = 'true';
     }
-    var boundary = pt.y > layout.rows[ri].y + layout.rows[ri].height / 2 ? ri + 1 : ri;
-    boundary = Core.clamp(boundary, 0, n);
-    rowDrag.boundary = boundary;
+    var boundary = layout.rows.filter(function (candidate) { return point.y > candidate.y + candidate.height / 2; }).length;
+    drag.to = boundary > drag.from ? boundary - 1 : boundary;
+    var distance = Core.clamp(point.y - drag.startY, -row.y, layout.height - row.y - row.height);
+    drag.ghost.style.translate = '0 ' + distance + 'px';
+    var scale = svg.getBoundingClientRect().height / layout.height;
+    drag.graphics.forEach(function (node, index) {
+      var offset = index >= drag.to && index < drag.from ? row.height : index > drag.from && index <= drag.to ? -row.height : 0;
+      node.style.translate = offset ? '0 ' + offset + 'px' : '';
+      drag.bands[index].style.translate = offset ? '0 ' + offset * scale + 'px' : '';
+    });
     rowIndicator.style.display = 'block';
-    var y = boundary < n ? layout.rows[boundary].y : layout.height;
-    rowIndicator.style.top = (y / layout.height * 100) + '%';
+    rowIndicator.style.top = layout.rows[drag.to].y / layout.height * 100 + '%';
+    rowIndicator.style.height = row.height / layout.height * 100 + '%';
   }
 
   function onRowDragEnd(ev) {
-    if (!rowDrag || ev.pointerId !== rowDrag.pointerId) return;
+    if (!rowDrag || ev.pointerId !== rowDrag.pointer) return;
+    if (ev.type === 'pointerup' && rowDrag.ghost) onRowDragMove(ev);
+    finishRowDrag(ev.type === 'pointerup');
+  }
+
+  function finishRowDrag(commit, animate = true) {
+    var drag = rowDrag;
+    if (!drag) return;
     detachRowDragListeners();
-    var session = rowDrag;
     rowDrag = null;
+    if (!drag.ghost) return;
+    var previous = new Map();
+    if (animate) drag.graphics.forEach(function (node, index) {
+      var visible = index === drag.from ? drag.ghost : node;
+      previous.set(node.dataset.rowId, visible.querySelector('.row-bg').getBoundingClientRect().top);
+    });
+    drag.ghost.remove();
+    drag.graphics[drag.from].classList.remove('row-drag-source');
+    drag.graphics.concat(drag.bands).forEach(function (node) { node.style.translate = ''; });
+    delete overlay.parentElement.dataset.movingElements;
+    delete overlay.parentElement.dataset.sortingRows;
     rowIndicator.style.display = 'none';
-    if (session.boundary === undefined) return;
-    var from = session.fromIndex;
-    var to = session.boundary > from ? session.boundary - 1 : session.boundary;
-    if (to !== from) {
-      App.update(function (st) { return State.moveRow(st, from, to); });
-    }
+    if (commit && drag.to !== drag.from) App.update(function (state) { return State.moveRow(state, drag.from, drag.to); });
+    if (!previous.size) return;
+    var bounds = svg.getBoundingClientRect();
+    var scale = bounds.height / App.layout.height;
+    rowGraphics().forEach(function (node, index) {
+      var offset = previous.get(node.dataset.rowId) - (bounds.top + App.layout.rows[index].y * scale);
+      if (!scale || Math.abs(offset) < .5) return;
+      var shift = function (target, distance) {
+        global.EditorMotion.play(target, [{ translate: '0 ' + distance + 'px' }, { translate: '0px 0px' }]);
+      };
+      shift(node, offset / scale);
+      shift(rowBandByIndex(index), offset);
+    });
   }
 
   function detachRowDragListeners() {
@@ -856,7 +910,7 @@
   // ─── 左栏卡片 / 预设 拖放接收（HTML5 DnD）─────────────────
 
   function readDragKind(ev) {
-    var types = ev.dataTransfer.types;
+    var types = ev.dataTransfer?.types || [];
     if (Array.prototype.indexOf.call(types, MIME_PRESET) !== -1) return 'preset';
     if (Array.prototype.indexOf.call(types, MIME_NEW) !== -1) return 'new';
     return null;
@@ -877,9 +931,9 @@
     var pt = toSignPoint(ev);
     clearRowHighlights();
     elIndicator.style.display = 'none';
-    if (!pt) return;
+    if (!pt) { resetPaletteDrop(); return; }
     var ri = rowIndexAt(pt.y);
-    if (ri === -1) return;
+    if (ri === -1) { resetPaletteDrop(); return; }
     var band = rowBandByIndex(ri);
     var row = App.state.rows[ri];
 
@@ -888,12 +942,17 @@
       // 新元素来自左栏默认属性（elementAlign: left），按左通道计算落点
       var t = dropTargetAt(ri, pt.x, 'left');
       showElementIndicator(ri, t.indicatorX);
-      paletteDropTarget = { kind: kind, rowIndex: ri, gap: t.gap };
+      if (paletteDropTarget?.kind === kind && paletteDropTarget.rowId === row.id && paletteDropTarget.gap === t.gap) return;
+      var element = paletteDropTarget?.element;
+      var payload = element ? null : palettePayload || readDragPayload(ev, kind);
+      if (payload?.type) element = State.createElement(payload.type, payload.props);
+      paletteDropTarget = { kind: kind, rowId: row.id, gap: t.gap, element: element };
+      if (element) showPalettePreview(paletteDropTarget);
     } else {
       // 预设仅可放入空行
       if (row.elements.length === 0) {
         band.classList.add('drop-ok');
-        paletteDropTarget = { kind: kind, rowIndex: ri };
+        paletteDropTarget = { kind: kind, rowId: row.id };
       } else {
         band.classList.add('drop-invalid');
         paletteDropTarget = null;
@@ -901,35 +960,58 @@
     }
   }
 
-  var paletteDropTarget = null;
+  var paletteDropTarget = null, palettePayload = null;
+
+  function showPalettePreview(target) {
+    var motion = global.EditorMotion;
+    var source = palettePreview.hasAttribute('hidden') ? svg : palettePreview;
+    var positions = new Map();
+    if (motion.timing(svg).duration) source.querySelectorAll('g.element').forEach(function (node) {
+      positions.set(node.getAttribute('data-element-id'), node.getCTM());
+    });
+    var baseline = Render.anchorExistingPositions(App.state, App.layout);
+    var next = State.applyPaddingAuto(State.addElement(baseline, target.rowId, target.element, target.gap));
+    var scale = svg.getBoundingClientRect().width / App.layout.width;
+    palettePreview.removeAttribute('hidden');
+    var layout = Render.renderSignInto(palettePreview, next, App.measure, { selectedElementIds: [target.element.id].concat(App.selectedIds()) });
+    palettePreview.style.width = layout.width * scale + 'px';
+    if (!scale || !positions.size) return;
+    palettePreview.querySelectorAll('g.element').forEach(function (node) {
+      var id = node.getAttribute('data-element-id'), from = positions.get(id), to = node.getCTM();
+      if (!from || !to || id === target.element.id) return;
+      var x = (from.e - to.e) / scale, y = (from.f - to.f) / scale;
+      if (Math.hypot(x, y) > .5) motion.play(node, [{ translate: x + 'px ' + y + 'px' }, { translate: '0px 0px' }]);
+    });
+  }
+
+  function resetPaletteDrop() {
+    clearRowHighlights();
+    elIndicator.style.display = 'none';
+    paletteDropTarget = null;
+    palettePreview.setAttribute('hidden', '');
+    palettePreview.replaceChildren();
+  }
 
   function onPaletteDragLeave(ev) {
-    if (!overlay.contains(ev.relatedTarget) && ev.relatedTarget !== overlay) {
-      clearRowHighlights();
-      elIndicator.style.display = 'none';
-      paletteDropTarget = null;
-    }
+    if (!ev.currentTarget.contains(ev.relatedTarget)) resetPaletteDrop();
   }
 
   function onPaletteDrop(ev) {
     ev.preventDefault();
     var kind = readDragKind(ev);
-    clearRowHighlights();
-    elIndicator.style.display = 'none';
-    if (!kind || !paletteDropTarget) return;
-    var payload = readDragPayload(ev, kind);
     var target = paletteDropTarget;
-    paletteDropTarget = null;
+    resetPaletteDrop();
+    if (!kind || kind !== target?.kind) return;
+    var payload = readDragPayload(ev, kind);
     if (!payload) return;
 
     if (target.kind === 'new' && payload.type) {
       App.update(function (st) {
-        var rowId = st.rows[target.rowIndex].id;
-        return State.addElement(st, rowId, State.createElement(payload.type, payload.props), target.gap);
+        return State.addElement(st, target.rowId, target.element || State.createElement(payload.type, payload.props), target.gap);
       });
     } else if (target.kind === 'preset' && payload.id) {
-      var row = App.state.rows[target.rowIndex];
-      if (row.elements.length !== 0) {
+      var row = App.state.rows.find(function (item) { return item.id === target.rowId; });
+      if (!row || row.elements.length !== 0) {
         SignUI.toast('预设只能放入空行', 'error');
         return;
       }
@@ -939,8 +1021,8 @@
         return;
       }
       App.update(function (st) {
-        var rows = st.rows.map(function (r, i) {
-          return i === target.rowIndex ? Object.assign({}, r, { elements: elements }) : r;
+        var rows = st.rows.map(function (r) {
+          return r.id === target.rowId ? Object.assign({}, r, { elements: elements }) : r;
         });
         return Object.assign({}, st, { rows: rows });
       });
