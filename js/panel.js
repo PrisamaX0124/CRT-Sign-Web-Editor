@@ -820,7 +820,7 @@
     var root = h('div', { class: 'element-properties' });
     root.appendChild(h('div', { class: 'element-type-label', text: TYPE_NAMES[el.type] }));
     var content = panelSection('内容', 'content', 'edit');
-    var layout = panelSection('排版', 'layout', 'layout');
+    var layout = panelSection('排版', 'layout', 'edit');
     var colors = panelSection('元素颜色', 'colors', 'edit');
     var fields = h('div');
 
@@ -846,7 +846,7 @@
     if (el.type !== 'space') {
       layout.appendChild(buildPaddingEditor(el, live));
     }
-    [content, layout, colors].forEach(function (section) {
+    [content, colors, layout].forEach(function (section) {
       if (section.children.length > 1) root.appendChild(section);
     });
 

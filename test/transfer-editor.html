@@ -602,8 +602,8 @@
       mode('separate');
       select('label:lower');
       assert(isVisible('#transfer-label-lines [data-select-line="third"]'), '切回时未还原文字属性');
-      propertyTab('layout');
-      assert(isVisible('#transfer-group-alignment'), '排版签应显示本组对齐');
+      assert(isVisible('#transfer-group-alignment') && isVisible('#transfer-group-arrow-position'), '编辑签应同时显示本组对齐和箭头位置');
+      assert(!page.querySelector('#transfer-properties [data-property-tab-button="layout"]'), '换乘标识应合并排版标签');
     });
 
     await test('换乘两个版式的四个斜向箭头在牌面与方向选项中均匀留白', () => {

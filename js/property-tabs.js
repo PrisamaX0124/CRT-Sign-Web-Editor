@@ -3,7 +3,6 @@
 
   const tabs = [
     ['edit', '编辑', 'property-edit'],
-    ['layout', '排版', 'property-layout'],
     ['appearance', '外观', 'property-appearance'],
     ['project', '项目', 'property-project'],
   ];

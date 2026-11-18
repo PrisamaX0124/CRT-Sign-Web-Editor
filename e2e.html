@@ -1386,7 +1386,6 @@
       var back = $('#close-element-btn');
       ok('S42 返回按钮位于标题左侧', back.getBoundingClientRect().left < $('#right-panel-title').getBoundingClientRect().left);
       ok('S42 属性按内容、排版、颜色分组', $$('#right-panel-body .element-properties .panel-section').length === 3);
-      propertyTab('layout');
       var bold = $('#right-panel-body button[aria-label="加粗"]');
       ok('S42 加粗为带图形的按钮', !!bold && !!bold.querySelector('svg'));
       if (bold) {
@@ -1403,7 +1402,6 @@
       ok('S42 元素颜色与背景颜色有明确作用范围', !!color && !!bg);
       var padding = $('#right-panel-body .padding-editor');
       ok('S42 内边距直接展开，四个方向均可编辑', !!padding && padding.tagName === 'DIV' && padding.querySelectorAll('input[type="number"]').length === 4);
-      propertyTab('edit');
       if (color && bg) {
         var signBg = w.App.state.backgroundColor;
         typeInto(color.querySelector('.hex-input'), '#123456');
@@ -1886,7 +1884,6 @@
       function move(x, opts) { pointer('pointermove', w.document, x, 100, opts); }
       function end(x, opts) { pointer('pointerup', w.document, x, 100, opts); }
       ['toolbar', 'panel'].forEach(function (source) {
-        if (source === 'panel') propertyTab('layout');
         ['left', 'right'].forEach(function (side) {
           var selector = source === 'toolbar' ? '#element-toolbar [data-padding="' + side + '"] .padding-trigger'
             : '#right-panel-body [data-padding="' + side + '"] .padding-trigger';

@@ -72,7 +72,7 @@
     assert(dimensions.every(([width, height], index) => width === dimensions[0][0] * 2 ** index && height === dimensions[0][1] * 2 ** index), 'PNG 文件的实际宽高应随倍率变化');
   }
 
-  await test('导向标识首签提供常用颜色，键盘可切换标签，项目签保留元素选择', async function () {
+  await test('导向标识在编辑签同时提供内容、颜色和排版，键盘切签保留选区', async function () {
     await open('index.html');
     assert(visible('[data-scope="标识牌背景色"]') && !visible('.frame-width-input'), '整牌底色应在首签，灰框在外观');
     const background = find('[data-scope="标识牌背景色"] .cp-current');
@@ -89,26 +89,26 @@
     app.select(first.id);
     const input = find('#right-panel-body input[placeholder="中文文本"]');
     assert(visible('[data-scope="文字颜色"]') && visible('[data-scope="元素背景色"]'), '元素常用颜色应在首签');
+    assert(!tab('layout') && visible('.element-properties [data-section="layout"] [data-align="align"]') && visible('.element-properties .padding-editor'), '文字对齐和内边距应直接显示在编辑签');
     tab('edit').focus();
-    assert(tab('edit').dataset.controlIcon && tab('layout').dataset.controlIcon && tab('project').dataset.controlIcon, '右栏标签应有各自的图标');
+    assert(tab('edit').dataset.controlIcon && tab('project').dataset.controlIcon, '右栏标签应有各自的图标');
     tab('edit').dispatchEvent(new editor.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-    assert(active() === 'layout' && page.activeElement === tab('layout'), '方向键应切换标签和焦点');
-    const layout = find('.element-properties [data-property-tab="layout"]');
+    assert(active() === 'project' && page.activeElement === tab('project'), '方向键应切换标签和焦点');
+    const project = find('#right-panel-body [data-property-tab="project"]');
     const reduced = editor.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    assert((layout.getAnimations().length > 0) === !reduced, '标签过渡应遵循减少动态效果设置');
-    tab('project').click();
+    assert((project.getAnimations().length > 0) === !reduced, '标签过渡应遵循减少动态效果设置');
     assert(app.selection.elementId === first.id && visible('#guidance-export-png'), '项目签应保留选区和图片导出');
     tab('edit').click();
     assert(find('#right-panel-body input[placeholder="中文文本"]') === input, '切签应保留原控件');
-    tab('layout').click();
+    tab('project').click();
     app.select(second.id);
-    assert(active() === 'layout', '连续选择同类元素应保留当前标签');
+    assert(active() === 'project', '连续选择同类元素应保留当前标签');
     await checkDownloads('#guidance-png-scale', '#guidance-export-png', handler => { editor.SignStorage.download = handler; });
   });
 
   await test('换乘标识按选区提供颜色、排版或底纹，固定支持 PNG 三档倍率', async function () {
     await open('index.html?editor=transfer');
-    assert(tab('layout').hidden && tab('appearance').hidden && visible('#transfer-palette'), '整牌设置只需编辑与项目');
+    assert(!tab('layout') && tab('appearance').hidden && visible('#transfer-palette'), '整牌设置只需编辑与项目');
     checkFooter('#transfer-property-scroll', '#transfer-export-image', '#transfer-export-project');
     find('[data-transfer-element^="line:"]').dispatchEvent(new editor.MouseEvent('click', { bubbles: true }));
     assert(visible('#transfer-line-color-picker') && !tab('appearance').hidden && !visible('#line-pattern-enabled'), '线路色应直接可见，底纹放外观');

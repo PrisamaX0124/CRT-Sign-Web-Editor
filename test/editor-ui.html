@@ -209,7 +209,6 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
     });
     await test('右栏对齐按钮直接切换，混合值不选中，四向内边距直接显示', function () {
       application.select(elements[4].id);
-      query('#right-panel [data-property-tab-button="layout"]').click();
       var group = query('#right-panel-body [data-align="align"]');
       assert(group.querySelectorAll('button svg').length === 3 && !group.querySelector('select'));
       var button = group.querySelector('[data-value="right"]'); button.focus(); button.click();
