@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>站台本地多项目测试</title>
+<style>body{font:14px system-ui}.pass{color:#087338}.fail{color:#bd2222}iframe{width:1280px;height:850px}</style>
+<h1>站台本地多项目测试</h1><p id="summary">运行中…</p><ol id="results"></ol><iframe id="editor" title="站台编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor'), results = document.getElementById('results');
+  const legacyKey = 'public-platform-sign-project-v1', previousLegacy = localStorage.getItem(legacyKey);
+  let editor, app, databaseNumber = 0;
+  const assert = (condition, message = '断言失败') => { if (!condition) throw new Error(message); };
+  async function waitFor(check) { const end = Date.now() + 10000; while (!check()) { assert(Date.now() < end, '等待超时'); await new Promise(resolve => setTimeout(resolve, 20)); } }
+  async function open() {
+    await new Promise(resolve => { frame.onload = resolve; frame.src = '../platform.html'; });
+    editor = frame.contentWindow; await editor.App.ready; app = editor.App;
+    assert(app.projects?.current, editor.document.getElementById('platform-save').textContent);
+  }
+  const control = name => editor.document.getElementById('platform-project-' + name);
+  async function test(name, action) {
+    const item = document.createElement('li');
+    try { await action(); item.className = 'pass'; item.textContent = name; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '：' + error.message; console.error(name, error); }
+    results.append(item);
+  }
+  const edit = name => app.update(state => editor.PlatformState.settings(state, { lineName: name }));
+  try {
+    await open();
+    await test('旧版自动存档完整迁移，重复初始化不增加项目，旧原文一直保留', async () => {
+      const Projects = editor.PlatformProjects, source = editor.PlatformState.serialize(app.state);
+      localStorage.setItem(legacyKey, source);
+      const store = await Projects.openStore(editor.indexedDB, 'platform-project-migration-' + Date.now() + ++databaseNumber);
+      let state = app.state;
+      const manager = Projects.createManager({ store, getState: () => state, applyState: value => { state = value; }, onStatus() {}, onCurrent() {} });
+      await manager.initialize(source); const id = manager.current.id;
+      assert(manager.current.data === source, '迁移没有保留完整工程');
+      await manager.initialize(source); assert((await store.list()).length === 1 && manager.current.id === id);
+      await manager.initialize('{'); assert((await store.list()).length === 1, '迁移完成后仍重复读取旧存档');
+      assert(localStorage.getItem(legacyKey) === source); store.close();
+      await app.projects.initialize(source);
+    });
+    await test('迁移事务中断后工程与迁移记录一起回退，重试只创建一份', async () => {
+      const Projects = editor.PlatformProjects, source = editor.PlatformState.serialize(app.state);
+      const store = await Projects.openStore(editor.indexedDB, 'platform-project-interrupted-' + Date.now() + ++databaseNumber);
+      const add = editor.IDBObjectStore.prototype.add;
+      editor.IDBObjectStore.prototype.add = function (...args) { const request = add.apply(this, args); if (this.name === 'projects') this.transaction.abort(); return request; };
+      try { let failed = false; try { await store.initialize(Projects.record('迁移', app.state)); } catch { failed = true; } assert(failed); }
+      finally { editor.IDBObjectStore.prototype.add = add; }
+      assert((await store.list()).length === 0 && !(await store.hasMigration()), '中断留下半份迁移');
+      await store.initialize(Projects.record('迁移', app.state)); assert((await store.list()).length === 1);
+      assert(localStorage.getItem(legacyKey) === source); store.close();
+    });
+    await test('两个窗口同时首次迁移只写一份；删除最后一份时同时保存默认工程', async () => {
+      const Projects = editor.PlatformProjects;
+      const name = 'platform-project-concurrent-' + Date.now() + ++databaseNumber;
+      const first = await Projects.openStore(editor.indexedDB, name), second = await Projects.openStore(editor.indexedDB, name);
+      try {
+        await Promise.all([first.initialize(Projects.record('迁移甲', app.state)), second.initialize(Projects.record('迁移乙', app.state))]);
+        assert((await first.list()).length === 1, '同时迁移产生了重复工程');
+        let state = app.state;
+        const manager = Projects.createManager({ store: first, getState: () => state, applyState: value => { state = value; }, onStatus() {}, onCurrent() {} });
+        await manager.initialize(); const previous = manager.current.id;
+        const add = editor.IDBObjectStore.prototype.add;
+        editor.IDBObjectStore.prototype.add = function (...args) { const request = add.apply(this, args); if (this.name === 'projects') this.transaction.abort(); return request; };
+        try { let failed = false; try { await manager.remove(previous); } catch { failed = true; } assert(failed && manager.current.id === previous); }
+        finally { editor.IDBObjectStore.prototype.add = add; }
+        assert((await first.list()).length === 1 && (await first.read(previous)), '删除中断后原工程没有保留');
+        await manager.remove(previous); assert((await first.list()).length === 1 && manager.current.id !== previous);
+      } finally { first.close(); second.close(); }
+    });
+    await test('创建、重命名、复制、搜索、排序及删除确认，Esc 与焦点返回', async () => {
+      control('open').click(); await waitFor(() => control('dialog').open && editor.document.activeElement === control('search'));
+      control('new').click(); control('name').value = '测试线路甲';
+      control('name-dialog').querySelector('form').requestSubmit();
+      await waitFor(() => !control('name-dialog').open && app.projects.current.name === '测试线路甲');
+      const first = app.projects.current.id;
+      await app.projects.rename(first, '测试线路乙');
+      assert(control('current').textContent === '测试线路乙');
+      await app.projects.duplicate(first, '测试副本');
+      const duplicate = app.projects.current.id;
+      control('search').value = '测试副本'; control('search').dispatchEvent(new editor.Event('input'));
+      await waitFor(() => control('list').children.length === 1);
+      assert(control('list').firstElementChild.dataset.projectId === duplicate);
+      control('sort').value = 'oldest'; control('sort').dispatchEvent(new editor.Event('change'));
+      await waitFor(() => control('list').children.length === 1);
+      control('list').querySelector('[aria-label="删除 测试副本"]').click();
+      assert(control('delete-dialog').open && (await app.projects.list()).some(value => value.id === duplicate));
+      control('delete-dialog').querySelector('button').click();
+      assert((await app.projects.list()).some(value => value.id === duplicate), '取消删除仍删除了项目');
+      control('list').querySelector('[aria-label="删除 测试副本"]').click(); control('delete-confirm').click();
+      await waitFor(() => !control('delete-dialog').open);
+      assert(!(await app.projects.read(duplicate)));
+      control('dialog').dispatchEvent(new editor.Event('cancel', { cancelable: true }));
+      control('dialog').close(); await new Promise(resolve => setTimeout(resolve, 0));
+      await waitFor(() => editor.document.activeElement === control('open'));
+    });
+    await test('快速编辑与连续切换分别保存，复制完整底纹、站点、换乘并保持独立', async () => {
+      const State = editor.PlatformState;
+      app.update(state => State.settings(State.replaceStations(state, State.parseStations('01|甲站|Alpha|1,碧桐线~Bitong Line:#0057B8\n02|乙站|Beta|2', state.city)), { verticalVariant: 'double', verticalSwapped: true, linePattern: { enabled: true, source: 'line-5', size: 125, opacity: 70, image: null } }));
+      const first = app.projects.current.id;
+      edit('原项目线路'); await app.projects.flush(); const original = app.projects.current.data;
+      app.selectAll(); assert(app.selectedKeys().length > 0);
+      await app.projects.duplicate(first, '完整副本'); const second = app.projects.current.id;
+      assert(editor.PlatformState.serialize(app.state) === original, '复制丢失工程内容');
+      assert(!app.selectedKeys().length && editor.document.getElementById('undo').disabled && editor.document.getElementById('redo').disabled, '选区或历史跨项目保留');
+      for (let index = 0; index < 20; index++) edit('副本线路' + index);
+      await Promise.all([app.projects.open(first), app.projects.open(second), app.projects.open(first)]);
+      assert(app.state.lineName === '原项目线路');
+      assert(JSON.parse((await app.projects.read(second)).data).lineName === '副本线路19');
+      assert((await app.projects.read(first)).data === original, '副本修改污染原项目');
+    });
+    await test('保存空间不足时阻止切换，JSON 备份包含最后编辑内容，重试保存成功', async () => {
+      const first = app.projects.current.id; await app.projects.create('保存失败测试');
+      const second = app.projects.current.id, transaction = editor.IDBDatabase.prototype.transaction;
+      edit('尚未保存');
+      editor.IDBDatabase.prototype.transaction = function (names, mode, ...args) { if (mode === 'readwrite') throw new editor.DOMException('空间不足', 'QuotaExceededError'); return transaction.call(this, names, mode, ...args); };
+      try {
+        let failed = false; try { await app.projects.open(first); } catch { failed = true; }
+        assert(failed && app.projects.current.id === second && app.state.lineName === '尚未保存');
+        assert(editor.document.getElementById('platform-save').dataset.saveState === 'failed');
+        let file; const download = app.download; app.download = blob => { file = blob; };
+        editor.document.querySelector('#platform-save button').click(); app.download = download;
+        assert(JSON.parse(await file.text()).lineName === '尚未保存');
+      } finally { editor.IDBDatabase.prototype.transaction = transaction; }
+      await app.projects.flush(); assert(JSON.parse((await app.projects.read(second)).data).lineName === '尚未保存');
+    });
+    await test('切换项目后，较晚返回的剪贴板读取不能把站点粘贴到新项目', async () => {
+      const clipboard = editor.navigator.clipboard, write = clipboard.writeText, read = clipboard.readText;
+      const text = editor.PlatformState.serializeStations(app.state, [app.state.currentId]);
+      let finish, reading = false;
+      clipboard.writeText = async () => {};
+      clipboard.readText = () => { reading = true; return new Promise(resolve => { finish = resolve; }); };
+      try {
+        app.select(app.state.currentId); await editor.PlatformClipboard.copy(false);
+        const pending = editor.PlatformClipboard.paste(); await waitFor(() => reading);
+        await app.projects.create('等待剪贴板时切换'); const count = app.state.stations.length;
+        finish(text); await pending;
+        assert(app.state.stations.length === count, '旧项目的粘贴操作改动了新项目');
+      } finally { clipboard.writeText = write; clipboard.readText = read; }
+    });
+    await test('JSON 导入默认另建项目，损坏 JSON 不改变当前工程', async () => {
+      const first = app.projects.current.id, count = (await app.projects.list()).length;
+      const file = editor.document.getElementById('project-file');
+      function select(source) { const transfer = new editor.DataTransfer(); transfer.items.add(new editor.File([source], '导入工程.json')); file.files = transfer.files; file.dispatchEvent(new editor.Event('change')); }
+      select(editor.PlatformState.serialize(editor.PlatformState.settings(app.state, { lineName: '导入线路' })));
+      await waitFor(() => app.projects.current.id !== first);
+      assert((await app.projects.list()).length === count + 1 && app.state.lineName === '导入线路');
+      const imported = app.projects.current.id; select('{');
+      await waitFor(() => editor.document.getElementById('platform-notice').textContent.includes('导入失败'));
+      assert(app.projects.current.id === imported);
+    });
+    await test('刷新恢复最后打开的项目，旧自动存档不重复迁移', async () => {
+      const id = app.projects.current.id, count = (await app.projects.list()).length;
+      await app.projects.flush(); await open();
+      assert(app.projects.current.id === id && (await app.projects.list()).length === count);
+    });
+    await test('同项目双窗口冲突会停止保存，另存副本保留本页内容', async () => {
+      const otherFrame = document.createElement('iframe'); document.body.append(otherFrame);
+      try {
+        await new Promise(resolve => { otherFrame.onload = resolve; otherFrame.src = '../platform.html'; });
+        const other = otherFrame.contentWindow; await other.App.ready;
+        const first = app.projects.current.id;
+        edit('另一窗口已保存'); await app.projects.flush();
+        await waitFor(() => other.document.getElementById('platform-save').dataset.saveState === 'conflict');
+        other.App.update(state => other.PlatformState.settings(state, { lineName: '冲突窗口修改' }));
+        let blocked = false; try { await other.App.projects.flush(); } catch { blocked = true; } assert(blocked);
+        assert(JSON.parse((await app.projects.read(first)).data).lineName === '另一窗口已保存');
+        await other.App.projects.duplicate(first, '保留冲突修改');
+        assert(other.App.projects.current.id !== first && other.App.state.lineName === '冲突窗口修改');
+      } finally { otherFrame.remove(); }
+    });
+    await test('损坏工程可备份原文，打开失败不会覆盖当前项目', async () => {
+      const value = editor.PlatformProjects.record('损坏工程', app.state); value.data = '{';
+      const store = await editor.PlatformProjects.openStore(); await store.write(value, null);
+      const first = app.projects.current.id; let failed = false;
+      try { await app.projects.open(value.id); } catch { failed = true; }
+      assert(failed && app.projects.current.id === first && (await app.projects.read(value.id)).data === '{');
+      store.close();
+    });
+    await test('启动时当前工程损坏，临时编辑也不能被项目切换丢弃', async () => {
+      const value = editor.PlatformProjects.record('启动损坏工程', app.state); value.data = '{';
+      const good = app.projects.current;
+      const store = await editor.PlatformProjects.openStore(); await store.write(value, null); await store.select(value.id, value.revision);
+      const otherFrame = document.createElement('iframe'); document.body.append(otherFrame);
+      try {
+        await new Promise(resolve => { otherFrame.onload = resolve; otherFrame.src = '../platform.html'; });
+        const other = otherFrame.contentWindow; await other.App.ready;
+        assert(!other.App.projects.current);
+        other.App.update(state => other.PlatformState.settings(state, { lineName: '尚未保存的临时工程' }));
+        let blocked = false; try { await other.App.projects.open(good.id); } catch { blocked = true; }
+        assert(blocked && other.App.state.lineName === '尚未保存的临时工程', '切换丢弃了未保存的临时修改');
+      } finally { await store.select(good.id, good.revision); await store.remove(value.id, value.revision); otherFrame.remove(); store.close(); }
+    });
+    await test('IndexedDB 不可用和请求被阻塞时返回明确错误', async () => {
+      let failed = false; try { await editor.PlatformProjects.openStore(null); } catch (error) { failed = error.message.includes('未开放'); } assert(failed);
+      const fake = { open() { const request = {}; setTimeout(() => request.onblocked(), 0); return request; } };
+      failed = false; try { await editor.PlatformProjects.openStore(fake); } catch (error) { failed = error.message.includes('其他窗口'); } assert(failed);
+    });
+    await test('批量预览与导出沿用打开时的工程，切换项目后不会读到新线路', async () => {
+      edit('切换前的批量线路'); app.update(state => editor.PlatformState.settings(state, { line: '切换前的批量线路' })); await app.projects.flush();
+      const original = app.state;
+      editor.document.getElementById('open-batch-generation').click();
+      await app.projects.create('批量操作期间新建'); edit('切换后的新线路'); app.update(state => editor.PlatformState.settings(state, { line: '切换后的新线路' }));
+      editor.document.getElementById('batch-generation-preview').click();
+      await waitFor(() => editor.document.querySelector('#batch-generation-previews svg'));
+      assert(editor.document.querySelector('#batch-generation-previews svg').textContent.includes('切换前的批量线路'));
+      const plan = editor.PlatformBatch.createPlan(original, original.stations.map(station => station.id), 'vertical', 'current');
+      const prepared = await editor.PlatformExport.prepare(editor.PlatformBatch.stateForResult(plan, plan.results[0]));
+      assert(prepared.source.includes('切换前的批量线路') && !prepared.source.includes('切换后的新线路'));
+      editor.document.getElementById('close-batch-generation').click(); await app.projects.flush();
+    });
+  } catch (error) { await test('测试启动', () => { throw error; }); }
+  finally {
+    if (previousLegacy === null) localStorage.removeItem(legacyKey); else localStorage.setItem(legacyKey, previousLegacy);
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = (results.children.length - failed) + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = summary; document.title = (failed ? '✖ ' : '✔ ') + summary + ' 站台本地多项目测试';
+  }
+})();
+</script>
+</html>

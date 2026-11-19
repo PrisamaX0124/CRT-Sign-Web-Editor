@@ -24,6 +24,10 @@
 - 换乘标识的版式 A 和版式 B 分别保存。版式 A 的线路共用箭头和文字。版式 B 有单线路、「1 + 1」、「1 + 2」和「2 + 1」四种样式。每组的箭头和文字都在本组最后一条色带下方。点选箭头或文字，可以调整本组对齐，也可选择箭头放在文字哪一侧。各样式分别保存上下两组的设置。整组右对齐时，每列双语文字以墨区右沿对齐。点选牌面色带可编辑该条线路的名字、颜色和底纹，点选箭头可在导向标识共用的方向图标中选择。换乘标识与站台标识共用底纹控件和绘制规则。
 - 换乘标识中，输入数字或「6号线」这样的名称时，按数字线路排版。文字线路可另填英文名称，也可以只填英文名称。打开「放大线路名」后，中文名称末尾已有的「线」使用小字，与英文名称排在一列。数字线路和文字线路可放在同一组。
 
+## 站台本地多项目
+
+站台页通过顶部「我的项目」管理多份工程，JSON 导入默认创建新项目。导向与换乘编辑器沿用原有保存方式。项目资料、工程 JSON、旧存档迁移记录和当前项目标识保存在 IndexedDB；预设继续单独保存。存储事务在 `js/platform/project-store.js`，保存与切换在 `js/platform/projects.js`，对话框在 `js/platform/project-dialog.js`。[数据迁移、异常处理和测试审查清单](platform-projects.md)
+
 ## 测试
 
 运行 `node --test test/*.test.mjs` 检查状态、排版、导入导出、撤销、颜色和字体。可在命令中加入 `--experimental-test-coverage --test-coverage-exclude="vendor/**"` 查看单元测试覆盖率。
@@ -41,10 +45,13 @@
 | [test/editor-motion.html](../test/editor-motion.html) | 三栏布局、编辑器菜单与预览图、剪贴板提示、面板动画及减少动态效果 |
 | [test/editor-interaction-motion.html](../test/editor-interaction-motion.html) | 站序与整行避让、取消和撤销、新元素落位预演、本站高亮、批量预览、换乘分组和版式切换、缩放过渡 |
 | [test/transfer-editor.html](../test/transfer-editor.html) | 换乘标识切换、两种版式、线路分组和底纹、项目导入导出、预设与撤销、本地保存和图片导出 |
-| [test/autosave.html](../test/autosave.html) | 三个编辑器的保存状态、连续编辑、写入失败、项目备份和重新打开 |
+| [test/autosave.html](../test/autosave.html) | 导向与换乘编辑器的保存状态、连续编辑、写入失败、项目备份和重新打开 |
+| [test/platform-projects.html](../test/platform-projects.html) | 站台多项目操作、迁移与中断、写入失败、冲突、独立副本、切换后的临时状态和批量任务 |
 | [test/preview-zoom.html](../test/preview-zoom.html) | 三个编辑器的缩放档位、滚轮锚点、拖动和锁定、缩放后编辑及导出 |
 | [test/element-alignment.html](../test/element-alignment.html) | 导向标识的自动排版、跨行吸附、避让动画、多选、画布限位和左右移动，站台标识的牌面选择与位置微调 |
 | [test/image-upload.html](../test/image-upload.html) | 三个编辑器的原尺寸上传、密钥设置、两家上传进度、复制地址和单独重试 |
 | [test/platform-batch.html](../test/platform-batch.html) | 站台标识批量预览、逐站反向、单列和双列方向规则、逐张导出对比、压缩包内容、取消与本地处理 |
 
-请用测试地址或独立的浏览器窗口运行浏览器用例，测试会向同源的浏览器存储写入数据。
+已安装 Playwright 的测试环境可运行 `node test/run-browser-tests.mjs`，每个页面使用独立的浏览器环境。可用 `CRT_PLAYWRIGHT_MODULE` 指定 Playwright 安装位置，用 `CRT_BROWSER_PATH` 指定本地浏览器。脚本默认连接 `http://127.0.0.1:8000/`，可用 `CRT_TEST_ADDRESS` 修改。
+
+请用测试地址或独立的浏览器环境运行浏览器用例，测试会向同源的 localStorage 和 IndexedDB 写入数据。

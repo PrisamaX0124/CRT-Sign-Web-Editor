@@ -238,7 +238,8 @@
       try {
         var project = await readProjectFile(file, deserialize, limitSize);
         if (selection !== lastSelection) return;
-        applyProject(project);
+        await applyProject(project, file);
+        if (selection !== lastSelection) return;
         notice('项目已导入', 'success');
       } catch (error) {
         if (selection === lastSelection) notice('导入失败。' + error.message, 'error');

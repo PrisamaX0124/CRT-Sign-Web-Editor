@@ -94,3 +94,24 @@ test('较早选中的文件在异步校验时失败，不会覆盖后选文件�
   assert.deepEqual(projects, ['后来选择']);
   assert.deepEqual(notices, [['项目已导入', 'success']]);
 });
+
+test('异步保存导入项目失败时只显示失败，不误报导入成功', async () => {
+  const { storage, notice, notices, parse } = createProjectFiles();
+  const input = new EventTarget();
+  storage.bindProjectImport({ input, deserialize: parse, applyProject: async () => { throw new Error('项目写入失败'); }, notice });
+  input.files = [projectFile('"有效工程"')]; input.dispatchEvent(new Event('change'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(notices, [['导入失败。项目写入失败', 'error']]);
+});
+
+test('异步写入完成时已选择其他文件，旧文件的成功提示不盖住新文件错误', async () => {
+  const { storage, notice, notices, parse } = createProjectFiles();
+  const input = new EventTarget(); let finish;
+  storage.bindProjectImport({ input, deserialize: parse, applyProject: () => new Promise(resolve => { finish = resolve; }), notice });
+  input.files = [projectFile('"较早的项目"')]; input.dispatchEvent(new Event('change'));
+  await new Promise(resolve => setImmediate(resolve));
+  input.files = [projectFile('{')]; input.dispatchEvent(new Event('change'));
+  await new Promise(resolve => setImmediate(resolve));
+  finish(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(notices, [['导入失败。JSON 格式有误', 'error']]);
+});

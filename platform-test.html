@@ -14,6 +14,7 @@
     await waitFor(function () { return frame.contentWindow.App && frame.contentWindow.App.ready; });
     var w = frame.contentWindow, d = frame.contentDocument, A = w.App, S = w.PlatformState, R = w.PlatformRender;
     await A.ready;
+    await A.projectStorage.ready;
     var stations = S.parseStations("01|松林站|Pine Grove|1\n02|河西站|West River|5,6\n03|花园站|Garden Avenue|2\n04|沿江站|Riverside|4\n05|中央站|Central Station|1\n06|湖边站|Lakeside|9\n07|北广场站|North Square\n08|客运站|Coach Station", 'chongqing');
     var original = S.settings(S.replaceStations(S.create(), stations), { currentId: stations[4].id, line: '10', lineName: '10号线', color: '#5F249F' });
     A.update(function () { return original; }); A.select(original.currentId);
@@ -583,10 +584,11 @@
       await choose(S.serialize(imported)); await waitFor(function () { return A.state.mode === 'vertical' && A.state.line === '5'; }); assert(A.state.color === '#00A3E0' && A.state.stations.length === 8);
       var before = S.serialize(A.state); await choose('{"kind":"wrong","stations":[]}'); await waitFor(function () { return $('platform-notice').textContent.includes('导入失败'); }); assert(S.serialize(A.state) === before);
     });
-    await test('站台项目使用相同的按钮和文件提示，导入后回到整牌设置，支持撤销和重做', async function () {
+    await test('站台 JSON 导入为新项目，导入后回到整牌设置，历史记录不跨项目', async function () {
       restore();
-      assert($('save-project').textContent === '导出项目 JSON' && $('import-project').textContent === '导入项目 JSON',
-        '项目按钮用语与其他编辑器不一致');
+      assert($('save-project').textContent === '导出项目 JSON' && $('import-project').textContent === '导入 JSON 为新项目',
+        '导入按钮应说明会另建项目');
+      var previousProjectId = A.projects.current.id;
       var initial = S.serialize(A.state);
       var selected = A.selectedKeys().join('|');
       var imported = S.serialize(S.settings(A.state, { mode: 'vertical', lineName: '导入后的线路' }));
@@ -598,6 +600,7 @@
       }
       submit('站台项目.json', imported);
       await waitFor(function () { return S.serialize(A.state) === imported; });
+      assert(A.projects.current.id !== previousProjectId, '导入没有另建项目');
       assert(!A.selectedKeys().length && !$('save-project').closest('section').hidden, '导入后应回到整牌设置');
       var damagedPattern = JSON.parse(imported);
       damagedPattern.linePattern = { source: 'custom', image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB' };
@@ -612,9 +615,11 @@
         assert(S.serialize(A.state) === imported && !A.selectedKeys().length, '错误文件改动了当前项目或选中项');
       }
       A.undo();
-      assert(S.serialize(A.state) === initial && A.selectedKeys().join('|') === selected, '撤销未恢复导入前的项目和选中项');
+      assert(S.serialize(A.state) === imported && !A.selectedKeys().length, '撤销不应恢复其他项目');
       A.redo();
-      assert(S.serialize(A.state) === imported && !A.selectedKeys().length, '重做未恢复导入结果');
+      assert(S.serialize(A.state) === imported && !A.selectedKeys().length, '重做不应带入其他项目');
+      await A.projects.open(previousProjectId);
+      assert(S.serialize(A.state) === initial, '导入覆盖了原项目');
     });
     await test('窄窗口仍可纵向拖动和滚动站点，横向滚动后可使用导出按钮', async function () {
       restore();
@@ -892,7 +897,8 @@
       $('line-pattern-clear').click();
       chooseFile('project-file', new w.File([project], '底纹项目.json', { type: 'application/json' }));
       await waitFor(function () { return A.state.linePattern.image === image; });
-      await waitFor(function () { return JSON.parse(w.localStorage.getItem(key)).linePattern.image === image; });
+      await A.projects.flush();
+      assert(JSON.parse((await A.projects.read(A.projects.current.id)).data).linePattern.image === image);
       $('return-to-settings').click();
       d.querySelector('[data-property-tab-button="appearance"]').click();
       input('line-pattern-source', 'line-1', 'change');
@@ -946,7 +952,11 @@
       restore();
     });
     await test('自动保存可恢复完整项目，页面离开前刷盘', async function () {
-      restore(); input('station-en', 'Autosave Test'); await waitFor(function () { var saved = localStorage.getItem(key); return saved && S.neighbors(S.deserialize(saved)).current.en === 'Autosave Test'; }); w.dispatchEvent(new w.Event('pagehide')); assert(S.deserialize(localStorage.getItem(key)).stations.length === A.state.stations.length);
+      restore(); input('station-en', 'Autosave Test'); await A.projects.flush();
+      var savedProject = await A.projects.read(A.projects.current.id);
+      assert(S.neighbors(S.deserialize(savedProject.data)).current.en === 'Autosave Test');
+      w.dispatchEvent(new w.Event('pagehide')); await A.projects.flush();
+      assert(S.deserialize((await A.projects.read(A.projects.current.id)).data).stations.length === A.state.stations.length);
     });
   } catch (err) { await test('测试启动', function () { throw err; }); }
   finally {

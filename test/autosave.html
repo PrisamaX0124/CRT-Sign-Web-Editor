@@ -76,7 +76,7 @@
 
   try {
     keys.forEach(key => localStorage.removeItem(key));
-    for (const settings of editors) {
+    for (const settings of editors.filter(settings => settings.name !== '站台标识')) {
       let editor = await open(settings.address);
       const status = () => editor.document.querySelector('#' + settings.indicator + ' [role="status"]');
       const backup = () => editor.document.querySelector('#' + settings.indicator + ' button');

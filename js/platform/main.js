@@ -26,7 +26,21 @@
   var App = global.App = {
     state: initial, selectedId: initial.currentId, selectedKey: null, selectionKeys: [], anchorKey: null, hoverKey: null, measure: Core.createCanvasMeasurer(), scene: null,
     update: function (fn, key, options) {
+      if (App.projects?.busy && !options?.activateProject) return;
       var next = fn(App.state);
+      if (options?.activateProject) {
+        finishStationDrag(true, false); stationLanding?.(); pagePointer = null;
+        previewZoom.resetInteraction(); suppressStationClick = suppressPageClick = false;
+        global.PlatformClipboard.resetProject();
+        undo = []; redo = []; groupKey = null; groupTime = 0;
+        App.state = next; App.selectedId = next.currentId;
+        App.selectionKeys = []; App.selectedKey = App.anchorKey = App.hoverKey = null;
+        listSignature = transferSignature = previousPanelSelection = '';
+        renderedCurrentId = renderedLayout = null;
+        document.querySelectorAll('.current-station-highlight').forEach(function (item) { item.remove(); });
+        ['batch-dialog', 'preset-dialog'].forEach(function (id) { if ($(id).open) $(id).close(); });
+        render(); return;
+      }
       if (JSON.stringify(next) === JSON.stringify(App.state)) return;
       var now = Date.now();
       if (!(key && key === groupKey && ((options && options.continuous) || now - groupTime < 800))) {
@@ -96,14 +110,7 @@
     },
     render: render,
   };
-  var autosave = global.SignStorage.createAutosave({
-    storageKey: KEY,
-    indicator: $('platform-save'),
-    serializeProject: serializeProject,
-    exportProject: exportProject,
-    delay: 500,
-    restored: Boolean(restoredProject),
-  });
+  var autosave = { schedule: function () { App.projectStorage?.schedule(); } };
   var previewZoom = global.PreviewZoom.create({
     viewport: $('platform-preview-scroll'),
     stage: $('platform-preview-scroll').firstElementChild,
@@ -126,7 +133,7 @@
     return left && left.id === id ? 'station:left' : right && right.id === id ? 'station:right' : 'route:' + id;
   }
   function history(from, to) {
-    if (!from.length) return;
+    if (!from.length || App.projects?.busy) return;
     to.push(snapshot());
     if (to.length > HISTORY_LIMIT) to.shift();
     var old = from.pop(); App.state = Core.isPalette(old.state.city) ? old.state : S.settings(old.state,{city:'chongqing'}); App.selectedId = old.selectedId; App.selectedKey = old.selectedKey; App.selectionKeys = old.selectionKeys; App.anchorKey = old.anchorKey; groupKey = null;
@@ -748,7 +755,11 @@
       await global.PlatformPatterns.validateImage(project.linePattern.image);
       return project;
     },
-    applyProject: function (project) { App.update(function () { return project; }, null, { replaceProject: true }); },
+    applyProject: async function (project, file) {
+      await App.projectStorage.ready;
+      if (!App.projects) throw new Error('本地项目存储不可用，请先导出备份并重试');
+      await App.projects.create(file.name.replace(/\.json$/i, '') || '导入项目', project);
+    },
     notice: notice,
   });
   function selectLibrary(name) {
@@ -870,4 +881,6 @@
   render();
   App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message); });
   global.PlatformBatchDialog.init(App, notice);
+  App.projectStorage = global.PlatformProjectDialog.init(App, { notice: notice, exportProject: exportProject });
+  App.ready = Promise.all([App.ready, App.projectStorage.ready]);
 })(window);

@@ -330,7 +330,7 @@
     if (global.ResizeObserver) new global.ResizeObserver(() => refresh()).observe(viewport);
     else global.addEventListener('resize', () => refresh());
 
-    return { refresh };
+    return { refresh, resetInteraction() { stopZoom(); stopDrag(); } };
   }
 
   global.PreviewZoom = { create, fitScale, scaleFromWheel, positionForAnchor };

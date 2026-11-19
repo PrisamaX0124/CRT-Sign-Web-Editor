@@ -116,6 +116,7 @@
     });
     editor = frame.contentWindow;
     await editor.App.ready;
+    assert(editor.App.projects.current, editor.document.getElementById('platform-save').textContent);
     const pattern = editor.document.createElement('canvas');
     pattern.width = pattern.height = 8;
     const drawing = pattern.getContext('2d');
@@ -134,8 +135,9 @@
       });
     }, null, { replaceProject: true });
     project = editor.App.state;
-    await waitFor(() => localStorage.getItem(projectKey) === editor.PlatformState.serialize(project), '测试项目尚未保存');
-    const saved = localStorage.getItem(projectKey);
+    await editor.App.projects.flush();
+    const saved = (await editor.App.projects.read(editor.App.projects.current.id)).data;
+    assert(saved === editor.PlatformState.serialize(project), '测试项目尚未保存');
     editor.SignStorage.download = (archive, filename) => downloads.push({ archive, filename });
     const fetchRequest = editor.fetch.bind(editor);
     editor.fetch = (address, options) => {
@@ -253,7 +255,7 @@
       assert(!control('dialog').open && !resultCards().length, '下载后应释放预览');
       assert(editor.App.state === project && editor.App.selectedKey === selection, '批量生成改动了项目或选中元素');
       assert([find('#undo').disabled, find('#redo').disabled].join() === history, '批量生成写入了撤销重做历史');
-      assert(localStorage.getItem(projectKey) === saved, '批量生成改动了本地项目');
+      assert((await editor.App.projects.read(editor.App.projects.current.id)).data === saved, '批量生成改动了本地项目');
       assert(JSON.stringify(Object.entries(editor.localStorage).sort()) === localStorageBefore, '批量文件写入了浏览器存储');
 
       const files = await unzip(downloads[0].archive);

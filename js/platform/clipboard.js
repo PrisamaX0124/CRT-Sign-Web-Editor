@@ -3,6 +3,7 @@
   'use strict';
   var S = global.PlatformState, App, notice, localText = '', localOnly = false;
   var pendingWrite = Promise.resolve(), copyVersion = 0, cutGap = null, entries = [], serial = 0;
+  var projectVersion = 0;
   function editing(target) {
     return !!(target && target.closest && target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])'));
   }
@@ -56,18 +57,20 @@
   function copyButton(isCut) {
     if (document.querySelector('dialog[open]')) return Promise.resolve(false);
     var text = selectionText(), ids = App.selectedStationIds(); if (!text || (isCut && !canCut(ids))) return Promise.resolve(false);
-    localText = text; var version = ++copyVersion, writing;
+    localText = text; var version = ++copyVersion, copyingProject = projectVersion, writing;
     try { writing = navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('clipboard unavailable')); }
     catch (err) { writing = Promise.reject(err); }
     pendingWrite = Promise.resolve(writing).then(function () { return true; }, function () { return false; }).then(function (system) { if (version === copyVersion) localOnly = !system; return system; });
     remember(text, isCut); if (isCut) cut(ids); else cutGap = null;
-    return pendingWrite.then(function (system) { notice((isCut ? '已剪切 ' : '已复制 ') + ids.length + ' 个站点' + (system ? '' : '（可在当前页面粘贴）')); return true; });
+    return pendingWrite.then(function (system) { if (copyingProject !== projectVersion) return false; notice((isCut ? '已剪切 ' : '已复制 ') + ids.length + ' 个站点' + (system ? '' : '（可在当前页面粘贴）')); return true; });
   }
   async function pasteButton() {
     if (document.querySelector('dialog[open]')) return false;
+    var pastingProject = projectVersion;
     await pendingWrite; var text = localText;
     try { if (navigator.clipboard && !localOnly) text = await navigator.clipboard.readText(); }
     catch (err) { /* Keep the local copy when clipboard permission is unavailable. */ }
+    if (pastingProject !== projectVersion) return false;
     try { return pasteText(text); } catch (err) { notice(err.message); return false; }
   }
   function sync() {
@@ -92,5 +95,6 @@
     });
     sync();
   }
-  global.PlatformClipboard = { init: init, sync: sync, copy: copyButton, paste: pasteButton, pasteText: pasteText, editing: editing };
+  function resetProject() { projectVersion++; cutGap = null; }
+  global.PlatformClipboard = { init: init, sync: sync, copy: copyButton, paste: pasteButton, pasteText: pasteText, editing: editing, resetProject: resetProject };
 })(typeof window !== 'undefined' ? window : globalThis);

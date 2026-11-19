@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 站台标识</title>
   <link rel="stylesheet" href="style.css?v=db6000bdd9f7">
-  <link rel="stylesheet" href="platform.css?v=e3421f531c96">
+  <link rel="stylesheet" href="platform.css?v=a1577897d52b">
   <link rel="stylesheet" href="image-upload.css?v=39bea1cc93e6">
 </head>
 <body class="editor-page platform-page">
@@ -31,10 +31,16 @@
           </a>
         </div>
       </nav>
+      <div class="platform-header-actions">
+      <div class="platform-project-heading">
+        <span id="platform-project-current" title="未命名项目">未命名项目</span>
+        <button type="button" class="btn" id="platform-project-open" aria-haspopup="dialog" aria-controls="platform-project-dialog">我的项目</button>
+      </div>
       <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="有帮助？求 Star！（前往仓库，在新标签页打开）">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
         <span>有帮助？求 Star！</span> <span class="repository-arrow" aria-hidden="true">&gt;</span>
       </a>
+      </div>
       <nav class="mode-tabs" aria-label="标识牌版式">
         <button data-mode="route" aria-pressed="true">全线吊板</button>
         <button data-mode="station" aria-pressed="false">本站吊板</button>
@@ -118,6 +124,9 @@
           <div class="project-save" id="platform-save">
             <span role="status">本地自动保存</span>
             <button type="button" hidden>备份项目 JSON</button>
+            <button type="button" id="platform-project-retry" hidden>重试保存</button>
+            <button type="button" id="platform-project-reload" hidden>重新打开</button>
+            <button type="button" id="platform-project-copy-conflict" hidden>另存副本</button>
           </div>
           <span id="platform-selection-status" class="selection-status" role="status"></span>
         </div>
@@ -249,7 +258,7 @@
         <section class="panel-section platform-section" data-property-tab="project">
           <div class="field-pair">
             <button type="button" id="save-project" class="btn">导出项目 JSON</button>
-            <button type="button" id="import-project" class="btn">导入项目 JSON</button>
+            <button type="button" id="import-project" class="btn">导入 JSON 为新项目</button>
           </div>
           <button id="save-preset-shortcut" class="btn">存为预设</button>
         </section>
@@ -344,11 +353,30 @@
   </dialog>
   <div id="platform-notice" role="status" hidden></div>
   <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button type="button" class="dialog-close" data-control-icon="close" aria-label="关闭预设保存"></button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required autofocus></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn btn-primary" id="save-preset-confirm">保存预设</button></div></form></dialog>
+  <dialog id="platform-project-dialog" aria-labelledby="platform-project-title">
+    <header class="batch-heading"><h2 id="platform-project-title">我的项目</h2><button type="button" id="platform-project-close" class="dialog-close" data-control-icon="close" aria-label="关闭我的项目"></button></header>
+    <p class="field-help">项目保存在当前浏览器。更换设备或长期保存时，请下载 JSON 备份。</p>
+    <div class="platform-project-controls">
+      <label class="field">搜索项目<input type="search" id="platform-project-search" placeholder="项目名称或线路名称" autofocus></label>
+      <label class="field">排序<select id="platform-project-sort"><option value="newest">最近编辑在前</option><option value="oldest">最早编辑在前</option></select></label>
+      <button type="button" class="btn btn-primary" id="platform-project-new" disabled>新建项目</button>
+      <button type="button" class="btn" id="platform-project-import">导入 JSON 为新项目</button>
+    </div>
+    <p id="platform-project-error" role="alert"></p>
+    <div id="platform-project-list"></div><p id="platform-project-empty" hidden>没有找到项目。</p>
+    <footer class="platform-project-actions"><button type="button" class="btn" id="platform-project-backup">备份当前工程 JSON</button><button type="button" class="btn" id="platform-project-legacy-backup">备份旧版自动存档</button><button type="button" class="btn" id="platform-project-retry-dialog">重试保存或读取</button></footer>
+  </dialog>
+  <dialog id="platform-project-name-dialog" aria-labelledby="platform-project-name-title"><form>
+    <div class="batch-heading"><h2 id="platform-project-name-title">项目名称</h2><button type="button" class="dialog-close" data-control-icon="close" aria-label="取消填写名称" onclick="this.closest('dialog').close()"></button></div>
+    <label class="field">项目名称<input id="platform-project-name" maxlength="80" required autofocus></label><p id="platform-project-name-error" role="alert"></p>
+    <div class="batch-buttons"><button type="submit" class="btn btn-primary">保存</button></div>
+  </form></dialog>
+  <dialog id="platform-project-delete-dialog" aria-labelledby="platform-project-delete-title"><h2 id="platform-project-delete-title">删除项目</h2><p id="platform-project-delete-message"></p><div class="batch-buttons"><button type="button" class="btn" autofocus onclick="this.closest('dialog').close()">取消</button><button type="button" class="btn" id="platform-project-delete-confirm">确定删除</button></div></dialog>
   <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
   <script src="js/editor-motion.js?v=46757705e313"></script>
   <script src="js/property-tabs.js?v=9090db99e9cc"></script>
-  <script src="js/preview-zoom.js?v=acec1aa66512"></script>
+  <script src="js/preview-zoom.js?v=9426a1545fa9"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
   <script src="js/palette-manager.js?v=800486182d2f"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
@@ -363,13 +391,16 @@
   <script src="js/platform/vertical.js?v=b7e6216e0ef9"></script>
   <script src="js/platform/render.js?v=public-1a8db166e6e2"></script>
   <script src="js/platform/presets.js?v=public-4107bb30cd88"></script>
-  <script src="js/platform/clipboard.js?v=public-15d857755771"></script>
+  <script src="js/platform/clipboard.js?v=8a0a1dad4a22"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
   <script src="js/platform/patterns.js?v=cc2c94583c53"></script>
-  <script src="js/storage.js?v=5156bc2ae677"></script>
+  <script src="js/storage.js?v=811e77115bb2"></script>
   <script src="vendor/zip.min.js?v=2.25.0"></script>
   <script src="js/platform/batch.js?v=77ffb48c2c7c"></script>
   <script src="js/platform/batch-dialog.js?v=7db851c565b8"></script>
-  <script src="js/platform/main.js?v=12866ab653fb"></script>
+  <script src="js/platform/projects.js?v=d9f22da70df7"></script>
+  <script src="js/platform/project-store.js?v=6087caf930a1"></script>
+  <script src="js/platform/project-dialog.js?v=e4d052b747f3"></script>
+  <script src="js/platform/main.js?v=20b08adee56c"></script>
 </body>
 </html>
