@@ -467,6 +467,24 @@
         });
       }
     }
+    await test('120 站纵向线路图可完整适应画布，显示小于 25% 的真实比例', async () => {
+      const editor = await open('../platform.html');
+      editor.App.update(state => editor.PlatformState.settings(editor.PlatformState.replaceStations(state,
+        Array.from({ length: 120 }, (_, index) => ({ id: 'long-' + index, code: String(index + 1), zh: '测试站', en: 'Station' }))),
+        { mode: 'vertical', verticalVariant: 'left', sizes: { ...state.sizes, vertical: { width: 384, height: 8192 } } }));
+      const viewport = editor.document.querySelector('#platform-preview-scroll');
+      const graphic = editor.document.querySelector('#platform-svg');
+      const menu = editor.document.querySelector('#platform-zoom select');
+      menu.value = 'fit';
+      menu.dispatchEvent(new editor.Event('change', { bubbles: true }));
+      await waitFor(() => !viewport.dataset.zoomTransition);
+      const area = viewport.getBoundingClientRect();
+      const bounds = graphic.getBoundingClientRect();
+      const actual = bounds.height / editor.App.scene.output.height * 100;
+      const shown = Number(menu.selectedOptions[0].textContent.match(/([\d.]+)%/)[1]);
+      assert(actual < 25 && shown > 0 && Math.abs(actual - shown) < 0.05, '没有显示真实的低比例');
+      assert(bounds.top >= area.top && bounds.bottom <= area.bottom && bounds.left >= area.left && bounds.right <= area.right, '长线路图未完整进入预览区');
+    });
   } catch (error) {
     await test('打开编辑器', () => { throw error; });
   } finally {

@@ -9,11 +9,26 @@ const browser = {};
 runInNewContext(readFileSync(filename, 'utf8'), browser, { filename });
 const { fitScale, scaleFromWheel, positionForAnchor } = browser.PreviewZoom;
 
-test('适应画布同时考虑宽和高，最低为 25%，能完整显示的小牌面保持实际尺寸', () => {
+test('适应画布可低于 25%，同时考虑宽和高，小牌面保持实际尺寸', () => {
   assert.equal(fitScale(800, 200, 600, 450), 0.75);
   assert.equal(fitScale(200, 800, 600, 400), 0.5);
-  assert.equal(fitScale(8000, 8000, 600, 400), 0.25);
+  assert.equal(fitScale(8000, 8000, 600, 400), 0.05);
+  assert.equal(fitScale(200, 8000, 600, 500), 0.0625);
   assert.equal(fitScale(100, 75, 600, 400), 1);
+});
+
+test('超长牌面显示实际的小数比例，手动缩放仍从 25% 起', () => {
+  const preview = createPreview();
+  preview.resize(600, 400);
+  preview.zoom.refresh(200, 8000);
+  assert.equal(preview.paper.style.height, '400px');
+  assert.equal(preview.percent(), '5%');
+  preview.zoom.refresh(200, 160000);
+  assert.equal(preview.percent(), '0.25%');
+  preview.choose(25);
+  assert.equal(preview.paper.style.height, '40000px');
+  preview.choose('fit');
+  assert.equal(preview.paper.style.height, '400px');
 });
 
 test('滚轮支持像素、行、页和只提供横向滚动量的设备', () => {
@@ -108,7 +123,7 @@ function createPreview({ alignTop = false, observeResize = true } = {}) {
   return {
     zoom, viewport, stage, paper, graphic, zoomMenu, position, shackle,
     percent() {
-      if (zoomMenu.value === 'fit') return fittingOption.textContent.match(/\d+%/)[0];
+      if (zoomMenu.value === 'fit') return fittingOption.textContent.match(/[\d.]+%/)[0];
       if (zoomMenu.value === 'current') return currentOption.textContent;
       return zoomMenu.value + '%';
     },

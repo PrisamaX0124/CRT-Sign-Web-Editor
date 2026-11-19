@@ -8,24 +8,33 @@ const filename = fileURLToPath(new URL('../js/storage.js', import.meta.url));
 const source = readFileSync(filename, 'utf8');
 const storageKey = 'project';
 
-function createEditor({ delay = 500, restored } = {}) {
+function createEditor({ delay = 500, restored, initialReadFails = false } = {}) {
   const status = { textContent: '本地自动保存' };
   const backup = { hidden: true, addEventListener: (event, listener) => { backup.click = listener; } };
   const indicator = {
     dataset: {},
     querySelector: selector => selector === 'button' ? backup : status,
+    append: control => { indicator.reload = control; },
   };
   const timers = new Map();
   const windowEvents = new EventTarget();
   const document = new EventTarget();
+  document.createElement = () => ({ addEventListener: (event, listener) => { indicator.reloadClick = listener; } });
   const writes = [];
+  const stored = new Map();
   const exports = [];
   let project = '初始内容';
   let timerNumber = 0;
   const browser = {
     document,
     addEventListener: windowEvents.addEventListener.bind(windowEvents),
-    localStorage: { setItem: (key, value) => writes.push([key, value]) },
+    localStorage: {
+      getItem: key => {
+        if (initialReadFails) { initialReadFails = false; throw new Error('存储暂时不可用'); }
+        return stored.get(key) ?? null;
+      },
+      setItem: (key, value) => { stored.set(key, value); writes.push([key, value]); },
+    },
     setTimeout: (callback, milliseconds) => {
       assert.equal(milliseconds, delay);
       timers.set(++timerNumber, callback);
@@ -40,7 +49,7 @@ function createEditor({ delay = 500, restored } = {}) {
     exportProject: () => exports.push(project),
   });
   return {
-    browser, document, windowEvents, status, backup, timers, writes, exports,
+    browser, document, windowEvents, status, backup, timers, writes, exports, stored, indicator,
     edit(value) {
       project = value;
       autosave.schedule(delay ? undefined : JSON.stringify(value));
@@ -60,6 +69,85 @@ test('没有存档时提示本地自动保存，恢复存档后显示已保存',
   assert.equal(editor.status.textContent, '已保存');
   assert.equal(editor.backup.hidden, true);
   assert.deepEqual(editor.writes, []);
+});
+
+test('同类型项目被其他页面修改后，取消待保存内容并保留备份入口', () => {
+  const editor = createEditor();
+  editor.edit('本页未保存的内容');
+  editor.stored.set(storageKey, '其他页面的内容');
+  editor.windowEvents.dispatchEvent(Object.assign(new Event('storage'), { key: storageKey }));
+  editor.finishDelay();
+  assert.equal(editor.indicator.dataset.saveState, 'conflict');
+  assert.match(editor.status.textContent, /其他窗口/);
+  assert.equal(editor.backup.hidden, false);
+  editor.backup.click();
+  assert.deepEqual(editor.exports, ['本页未保存的内容']);
+  let reloads = 0;
+  editor.browser.location = { reload: () => { reloads += 1; } };
+  editor.indicator.reloadClick();
+  assert.equal(reloads, 1);
+  assert.equal(editor.indicator.reload.textContent, '重新加载');
+  editor.edit('冲突后继续编辑');
+  editor.windowEvents.dispatchEvent(new Event('pagehide'));
+  assert.deepEqual(editor.writes, []);
+  assert.equal(editor.stored.get(storageKey), '其他页面的内容');
+});
+
+test('其他页面删除存档或清空存储后，本页不会重新写回旧项目', () => {
+  for (const key of [storageKey, null]) {
+    const editor = createEditor();
+    editor.edit('本页已保存');
+    editor.finishDelay();
+    editor.stored.clear();
+    editor.windowEvents.dispatchEvent(Object.assign(new Event('storage'), { key }));
+    editor.edit('继续编辑');
+    editor.finishDelay();
+    assert.equal(editor.indicator.dataset.saveState, 'conflict');
+    assert.equal(editor.writes.length, 1);
+    assert.equal(editor.stored.size, 0);
+  }
+});
+
+test('旧存储事件晚到时，以当前存档为准，不误报冲突', () => {
+  const editor = createEditor();
+  editor.edit('已保存');
+  editor.finishDelay();
+  editor.windowEvents.dispatchEvent(Object.assign(new Event('storage'), { key: storageKey, newValue: '较早的内容' }));
+  assert.equal(editor.indicator.dataset.saveState, 'saved');
+});
+
+test('启动时无法读取存储，恢复后发现其他存档时先保留备份，不覆盖未知内容', () => {
+  const editor = createEditor({ initialReadFails: true });
+  editor.stored.set(storageKey, '其他窗口保存的项目');
+  editor.edit('本页修改');
+  editor.finishDelay();
+  assert.equal(editor.indicator.dataset.saveState, 'conflict');
+  assert.equal(editor.backup.hidden, false);
+  assert.deepEqual(editor.writes, []);
+});
+
+test('保存前检查最新存档，即使未收到存储事件也不会覆盖其他页面', () => {
+  for (const delay of [0, 500]) {
+    const editor = createEditor({ delay });
+    editor.stored.set(storageKey, '其他页面抢先保存');
+    editor.edit('本页修改');
+    editor.finishDelay();
+    assert.equal(editor.indicator.dataset.saveState, 'conflict');
+    assert.deepEqual(editor.writes, []);
+  }
+});
+
+test('其他类型的项目和本页已保存的数据不会误报，未修改页面离开时不写入', () => {
+  const editor = createEditor();
+  editor.windowEvents.dispatchEvent(new Event('pagehide'));
+  assert.deepEqual(editor.writes, []);
+  editor.windowEvents.dispatchEvent(Object.assign(new Event('storage'), { key: 'another-project' }));
+  editor.edit('正常保存');
+  editor.finishDelay();
+  editor.windowEvents.dispatchEvent(Object.assign(new Event('storage'), { key: storageKey }));
+  assert.equal(editor.indicator.dataset.saveState, 'saved');
+  editor.windowEvents.dispatchEvent(new Event('beforeunload'));
+  assert.equal(editor.writes.length, 1);
 });
 
 test('连续修改只留下一个等待中的保存，写入最后一次修改', () => {

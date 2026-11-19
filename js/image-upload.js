@@ -108,30 +108,46 @@
     return '上传失败，请检查图床设置后重试。';
   }
 
-  function sendUpload(provider, { address, form }, showProgress, createRequest = () => new global.XMLHttpRequest()) {
+  function sendUpload(provider, { address, form }, showProgress, createRequest = () => new global.XMLHttpRequest(), signal) {
     return new Promise((resolve, reject) => {
+      let request;
+      let finished = false;
+      function finish(error, address) {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener('abort', cancel);
+        if (error) reject(error); else resolve(address);
+      }
+      function cancel() {
+        finish(new DOMException('上传已取消。', 'AbortError'));
+        request?.abort();
+      }
+      if (signal?.aborted) { cancel(); return; }
       try {
-        const request = createRequest();
+        request = createRequest();
         request.open('POST', address);
         request.responseType = 'json';
         request.timeout = uploadTimeout;
         request.upload.onprogress = event => {
-          if (event.lengthComputable && event.total > 0) showProgress(Math.round(event.loaded * 100 / event.total));
+          if (!finished && event.lengthComputable && event.total > 0) showProgress(Math.round(event.loaded * 100 / event.total));
         };
-        request.upload.onload = () => showProgress(100);
-        request.ontimeout = () => reject(new Error(uploadError(provider, 408)));
-        request.onerror = () => reject(new Error('无法连接，请检查网络后重试。'));
+        request.upload.onload = () => { if (!finished) showProgress(100); };
+        request.ontimeout = () => finish(new Error(uploadError(provider, 408)));
+        request.onerror = () => finish(new Error('无法连接，请检查网络后重试。'));
+        request.onabort = () => finish(new DOMException('上传已取消。', 'AbortError'));
         request.onload = () => {
+          if (finished) return;
           try {
             if (request.status < 200 || request.status >= 300) throw new Error(uploadError(provider, request.status));
-            resolve(getImageAddress(provider, request.response));
+            finish(null, getImageAddress(provider, request.response));
           } catch (error) {
-            reject(error);
+            finish(error);
           }
         };
+        signal?.addEventListener('abort', cancel, { once: true });
         request.send(form);
       } catch {
-        reject(new Error('无法开始上传，请检查图床设置后重试。'));
+        finish(new Error('无法开始上传，请检查图床设置后重试。'));
       }
     });
   }

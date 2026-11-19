@@ -193,6 +193,7 @@
   const autosave = global.SignStorage.createAutosave({
     storageKey,
     indicator: element('transfer-save'),
+    serializeProject: () => state.serialize(App.state),
     exportProject,
     restored: Boolean(restoredProject),
   });

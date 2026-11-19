@@ -11,7 +11,7 @@
   }
 
   function fitScale(width, height, availableWidth, availableHeight) {
-    return clamp(Math.min(availableWidth / width, availableHeight / height), minimumScale, 1);
+    return Math.min(Math.max(availableWidth, 1) / width, Math.max(availableHeight, 1) / height, 1);
   }
 
   function scaleFromWheel(scale, event, pageHeight) {
@@ -69,7 +69,7 @@
     }
 
     function updateControls() {
-      const percent = Math.round(scale * 100);
+      const percent = scale < minimumScale ? Number((scale * 100).toPrecision(3)) : Math.round(scale * 100);
       fittingOption.textContent = fitting ? '适应画布（' + percent + '%）' : '适应画布';
       currentOption.textContent = percent + '%';
       const exactStop = zoomStops.includes(percent) && Math.abs(scale - percent / 100) < 1e-8;

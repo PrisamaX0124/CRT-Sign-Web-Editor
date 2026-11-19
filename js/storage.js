@@ -47,6 +47,11 @@
     var status = indicator.querySelector('[role="status"]');
     var backup = indicator.querySelector('button');
     var saveTimer;
+    var pending = false;
+    var conflict = false;
+    var lastSaved;
+    var reload;
+    try { lastSaved = global.localStorage.getItem(storageKey); } catch { /* 存储恢复后仍需允许重试。 */ }
     backup.addEventListener('click', exportProject);
 
     function showStatus(state, message) {
@@ -54,24 +59,56 @@
       if (status.textContent !== message) status.textContent = message;
     }
 
+    function showConflict() {
+      conflict = true;
+      clearTimeout(saveTimer);
+      showStatus('conflict', '项目已在其他窗口修改，自动保存已停止');
+      backup.hidden = false;
+      if (!reload) {
+        reload = document.createElement('button');
+        reload.type = 'button';
+        reload.className = backup.className;
+        reload.textContent = '重新加载';
+        reload.title = '请先导出本页备份，再加载其他窗口保存的项目';
+        reload.addEventListener('click', function () { global.location.reload(); });
+        indicator.append(reload);
+      }
+    }
+
+    function changedElsewhere() {
+      var stored = global.localStorage.getItem(storageKey);
+      if (stored !== (lastSaved ?? null)) {
+        showConflict();
+        return true;
+      }
+      return false;
+    }
+
     function writeProject(serializedProject) {
+      if (conflict) return;
       try {
-        global.localStorage.setItem(storageKey, serializedProject ?? serializeProject());
+        if (changedElsewhere()) return;
+        var content = serializedProject ?? serializeProject();
+        global.localStorage.setItem(storageKey, content);
+        lastSaved = content;
       } catch {
         showStatus('failed', '保存失败');
         backup.hidden = false;
         return;
       }
       showStatus('saved', '已保存');
+      pending = false;
       backup.hidden = true;
     }
 
     function flush() {
       clearTimeout(saveTimer);
-      writeProject();
+      if (pending) writeProject();
     }
 
     function schedule(serializedProject) {
+      if (conflict) return;
+      pending = true;
       showStatus('saving', '保存中');
       if (!delay) {
         writeProject(serializedProject);
@@ -82,6 +119,10 @@
     }
 
     if (restored) showStatus('saved', '已保存');
+    global.addEventListener('storage', function (event) {
+      if (conflict || (event.key !== storageKey && event.key !== null)) return;
+      try { changedElsewhere(); } catch { /* 浏览器可能暂时禁止读取，稍后仍需允许重试。 */ }
+    });
     if (delay) {
       // 浏览器可能在页面离开或切到后台时暂停计时。
       global.addEventListener('beforeunload', flush);

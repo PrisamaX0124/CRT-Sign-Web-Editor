@@ -1324,20 +1324,29 @@
         var panel = $('#right-panel');
         var properties = $('#right-panel-body');
         var canvas = $('#canvas-scroll');
+        var zoomMenu = canvas.closest('main').querySelector('.preview-zoom select');
         for (var mode of ['fixed', 'dynamic']) {
           editor.App.update(function (sign) { return state.updateSignSettings(sign, { widthMode: mode }); });
+          zoomMenu.value = '100';
+          zoomMenu.dispatchEvent(new editor.Event('change', { bubbles: true }));
+          await waitFor(function () { return !canvas.dataset.zoomTransition; });
           properties.scrollTop = properties.scrollHeight;
           var panelBounds = panel.getBoundingClientRect();
           var deleteBounds = properties.querySelector('[data-control-icon="delete"]').getBoundingClientRect();
           ok('S39 多行牌面下右栏仍从窗口顶部延伸到底部，宽度模式为 ' + mode,
             panelBounds.top === 0 && panelBounds.bottom <= editor.innerHeight && panelBounds.right <= editor.innerWidth + 1);
           ok('S39 右栏滚动后可到达删除按钮，宽度模式为 ' + mode, deleteBounds.bottom <= panelBounds.bottom + 1);
-          ok('S39 高牌面在画布内滚动，宽度模式为 ' + mode, canvas.scrollHeight > canvas.clientHeight);
+          ok('S39 手动设为原尺寸后高牌面可在画布内滚动，宽度模式为 ' + mode, canvas.scrollHeight > canvas.clientHeight);
         }
       } finally {
         await resizeEditor(1280);
         editor.App.update(function () { return saved; });
         editor.App.select(null);
+        if (zoomMenu) {
+          zoomMenu.value = 'fit';
+          zoomMenu.dispatchEvent(new editor.Event('change', { bubbles: true }));
+          await waitFor(function () { return !canvas.dataset.zoomTransition; });
+        }
       }
     }
 

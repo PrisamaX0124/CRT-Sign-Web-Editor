@@ -325,6 +325,33 @@
       }
     });
 
+    await test('单张预览失败保留其他图片、勾选和方向，可以单独重试', async () => {
+      open();
+      const metrics = editor.PlatformRender.metrics;
+      let fail = true;
+      editor.PlatformRender.metrics = function (state, measure) {
+        if (fail && state.currentId === 'middle') throw new Error('测试时本站无法排版');
+        return metrics(state, measure);
+      };
+      try {
+        click('preview');
+        await waitFor(() => control('cancel').hidden, '预览没有结束');
+        const cards = resultCards();
+        assert(cards.length === 3 && cards[0].querySelector('svg') && cards[2].querySelector('svg'), '单张失败丢失了整套预览');
+        const retry = cards[1].querySelector('[data-retry-batch-preview]');
+        assert(retry && cards[1].textContent.includes('本站无法排版'), '失败卡片缺少原因或重试按钮');
+        assert(control('download').disabled, '选中失败图片时应先重试或取消勾选');
+        cards[1].querySelector('input').click();
+        assert(!control('download').disabled, '取消失败图片后其他图片应可下载');
+        cards[0].querySelector('.batch-generation-reverse').click();
+        const reversed = normalized(cards[0].querySelector('svg'));
+        fail = false;
+        retry.click();
+        assert(cards[1].querySelector('svg') && retry.hidden, '单张重试未恢复预览');
+        assert(!cards[1].querySelector('input').checked && normalized(cards[0].querySelector('svg')) === reversed, '重试丢失了勾选或方向');
+      } finally { editor.PlatformRender.metrics = metrics; }
+    });
+
     await test('120 个站点分成 20 页，可跨页取消勾选并取消预览', async () => {
       editor.App.update(state => editor.PlatformState.replaceStations(state,
         Array.from({ length: 120 }, (_, index) => ({

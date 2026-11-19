@@ -17,6 +17,7 @@
     let stationInputs = [];
     const selectedResults = new Set();
     const reversedResults = new Set();
+    const failedResults = new Set();
 
     function stationLabel(station) {
       return (station.code.trim() || '无编号') + ' ' + batch.stationName(station);
@@ -63,7 +64,8 @@
       control('results').hidden = !plan;
       control('back').hidden = !plan || Boolean(task);
       control('download').hidden = !plan;
-      control('download').disabled = Boolean(task) || !selectedResults.size;
+      control('download').disabled = Boolean(task) || !selectedResults.size ||
+        [...failedResults].some(result => selectedResults.has(result));
       previews.inert = Boolean(task) && !loadingPreviews;
       if (plan) {
         const pages = Math.ceil(plan.results.length / pageSize);
@@ -93,6 +95,7 @@
       previews.replaceChildren();
       selectedResults.clear();
       reversedResults.clear();
+      failedResults.clear();
       status.textContent = '';
     }
 
@@ -167,6 +170,17 @@
       const caption = document.createElement('p');
       summary.append(caption);
       card.append(summary);
+      const errorMessage = document.createElement('p');
+      errorMessage.setAttribute('role', 'alert');
+      errorMessage.hidden = true;
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'btn';
+      retry.dataset.retryBatchPreview = '';
+      retry.textContent = '重试这张预览';
+      retry.hidden = true;
+      retry.addEventListener('click', show);
+      card.append(errorMessage, retry);
       const alternate = batch.oppositeResult(plan, result);
       let reverse;
       if (alternate) {
@@ -191,18 +205,32 @@
         reverse.setAttribute('aria-label', action + ' · ' + title);
       }
       function show() {
-        const active = chosenResult(result);
-        scene = global.PlatformRender.metrics(batch.stateForResult(plan, active), app.measure);
-        const drawing = global.PlatformExport.drawSVG(scene);
-        drawing.setAttribute('aria-hidden', 'true');
-        picture.replaceChildren(drawing);
-        picture.disabled = false;
-        if (reverse) reverse.disabled = false;
         syncDescription();
-        global.EditorMotion.fadeIn(drawing);
+        try {
+          const active = chosenResult(result);
+          scene = global.PlatformRender.metrics(batch.stateForResult(plan, active), app.measure);
+          const drawing = global.PlatformExport.drawSVG(scene);
+          drawing.setAttribute('aria-hidden', 'true');
+          picture.replaceChildren(drawing);
+          picture.disabled = false;
+          if (reverse) reverse.disabled = false;
+          errorMessage.hidden = retry.hidden = true;
+          failedResults.delete(result);
+          syncControls();
+          global.EditorMotion.fadeIn(drawing);
+        } catch (error) { fail(error); }
+      }
+      function fail(error) {
+        failedResults.add(result);
+        picture.replaceChildren();
+        picture.disabled = true;
+        if (reverse) reverse.disabled = false;
+        errorMessage.textContent = '这张预览生成失败。' + (error.message || '请重试。');
+        errorMessage.hidden = retry.hidden = false;
+        syncControls();
       }
       syncDescription();
-      return { card, show };
+      return { card, show, fail };
     }
 
     async function showPage(number) {
@@ -227,9 +255,8 @@
         status.textContent = '';
       } catch (error) {
         if (controller.signal.aborted) return;
-        clearPlan();
-        status.textContent = '预览失败。' + error.message;
-        syncControls();
+        for (const preview of cards) preview.fail(error);
+        status.textContent = '预览失败，可在对应卡片中重试。';
       } finally {
         if (task === controller) {
           task = null;

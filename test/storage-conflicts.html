@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>多窗口项目保存测试</title>
+<style>body { font: 14px system-ui; } iframe { width: 1280px; height: 850px; } .pass { color: #087338; } .fail { color: #bd2222; }</style>
+<h1>多窗口项目保存测试</h1>
+<p id="summary">运行中…</p>
+<ol id="results"></ol>
+<script>
+(async function () {
+  const results = document.getElementById('results');
+  const editors = [
+    { name: '导向标识', address: '../index.html', key: 'public-sign-autosave', indicator: 'guidance-save',
+      edit: (editor, value) => editor.App.update(project => editor.SignState.updateSignSettings(project, { frameWidth: value })),
+      serialize: editor => editor.SignState.serializeSign(editor.App.state) },
+    { name: '站台标识', address: '../platform.html', key: 'public-platform-sign-project-v1', indicator: 'platform-save',
+      edit: (editor, value) => editor.App.update(project => editor.PlatformState.settings(project, { lineName: '窗口测试' + value })),
+      serialize: editor => editor.PlatformState.serialize(editor.App.state) },
+    { name: '换乘标识', address: '../index.html?editor=transfer', key: 'public-transfer-sign-project-v1', indicator: 'transfer-save',
+      edit: (editor, value) => editor.App.update(project => editor.TransferState.settings(project, { width: 768 + value })),
+      serialize: editor => editor.TransferState.serialize(editor.App.state) },
+  ];
+  const stored = [...editors.map(settings => settings.key), 'public-sign-instance'].map(key => [key, localStorage.getItem(key)]);
+  const frames = [];
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  async function waitFor(check) {
+    const deadline = Date.now() + 10000;
+    while (!check()) {
+      assert(Date.now() < deadline, '等候编辑器超时');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
+  async function ready(frame) {
+    await waitFor(() => {
+      const editor = frame.contentWindow;
+      editor.document.querySelector('.modal [data-act="ok"]')?.click();
+      return editor.App?.state && editor.App.measure;
+    });
+    await frame.contentWindow.App.ready;
+    return frame.contentWindow;
+  }
+  async function open(address) {
+    const frame = document.createElement('iframe');
+    frames.push(frame);
+    await new Promise(resolve => {
+      frame.onload = resolve;
+      frame.src = address;
+      document.body.append(frame);
+    });
+    return { frame, editor: await ready(frame) };
+  }
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try { await run(); item.className = 'pass'; item.textContent = name; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '。' + error.message; }
+    finally { for (const frame of frames.splice(0)) frame.remove(); }
+    results.append(item);
+  }
+  try {
+    for (const [key] of stored) localStorage.removeItem(key);
+    for (const settings of editors.filter(settings => settings.name === '换乘标识')) {
+      await test(settings.name + '检测其他窗口修改，保留本页备份并可重新加载', async () => {
+        const first = await open(settings.address);
+        const second = await open(settings.address);
+        settings.edit(first.editor, 41);
+        const latest = settings.serialize(first.editor);
+        const indicator = () => second.editor.document.getElementById(settings.indicator);
+        await waitFor(() => indicator().dataset.saveState === 'conflict');
+        assert(localStorage.getItem(settings.key) === latest, '其他窗口保存内容有误');
+        settings.edit(second.editor, 52);
+        second.editor.dispatchEvent(new second.editor.Event('pagehide'));
+        assert(localStorage.getItem(settings.key) === latest, '冲突后覆盖了其他窗口的存档');
+        assert(indicator().textContent.includes('其他窗口') && !indicator().querySelector('button').hidden, '缺少冲突提示或备份入口');
+        const downloads = [];
+        first.editor.SignStorage.download = (file, filename) => downloads.push({ file, filename });
+        second.editor.SignStorage.download = (file, filename) => downloads.push({ file, filename });
+        second.editor.App.download = second.editor.SignStorage.download;
+        indicator().querySelector('button').click();
+        assert(downloads.length === 1 && await downloads[0].file.text() === settings.serialize(second.editor), '备份不是本页最新内容');
+        const loaded = new Promise(resolve => second.frame.addEventListener('load', resolve, { once: true }));
+        [...indicator().querySelectorAll('button')].find(button => button.textContent === '重新加载').click();
+        await loaded;
+        second.editor = await ready(second.frame);
+        assert(settings.serialize(second.editor) === latest, '重新加载未恢复其他窗口保存的内容');
+      });
+    }
+    await test('站台和换乘编辑器各存各的项目，不会相互报冲突', async () => {
+      const platform = await open(editors[1].address);
+      const transfer = await open(editors[2].address);
+      editors[1].edit(platform.editor, 65);
+      editors[2].edit(transfer.editor, 65);
+      await waitFor(() => platform.editor.document.getElementById('platform-save').dataset.saveState === 'saved');
+      assert(transfer.editor.document.getElementById('transfer-save').dataset.saveState === 'saved', '不同类型编辑器发生冲突');
+    });
+  } finally {
+    for (const frame of frames) frame.remove();
+    for (const [key, value] of stored) {
+      if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value);
+    }
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = (results.children.length - failed) + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = summary;
+    document.title = (failed ? '✖ ' : '✔ ') + summary + ' 多窗口项目保存测试';
+  }
+})();
+</script>
+</html>

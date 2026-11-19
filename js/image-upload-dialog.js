@@ -55,6 +55,7 @@
         </div>
       </details>
       <button id="start-image-upload" type="button" class="btn btn-primary">上传并复制图片地址</button>
+      <button id="cancel-image-upload" type="button" class="btn" hidden>取消上传</button>
       <div class="image-upload-results"></div>`;
 
     const find = selector => dialog.querySelector(selector);
@@ -63,6 +64,7 @@
     const settingsMessage = find('.image-upload-settings-message');
     const relayAddress = find('#image-upload-relay');
     const startButton = find('#start-image-upload');
+    const cancelButton = find('#cancel-image-upload');
     const results = find('.image-upload-results');
     const keyControls = providers.map(provider => {
       const input = find('#image-upload-key-' + provider);
@@ -88,6 +90,29 @@
     });
     let createImage;
     let activeUploads = 0;
+    let currentBatch;
+
+    function cancelUploads() {
+      const batch = currentBatch;
+      currentBatch = null;
+      batch?.controller.abort();
+      if (batch) batch.image = null;
+      for (const result of batch?.results || []) {
+        result.retry.hidden = true;
+        if (!result.uploading) continue;
+        result.uploading = false;
+        result.status.textContent = '上传已取消。';
+        result.progress.hidden = true;
+      }
+      activeUploads = 0;
+      startButton.disabled = providerChoice.disabled = false;
+      cancelButton.hidden = true;
+    }
+
+    function closeDialog() {
+      cancelUploads();
+      dialog.close();
+    }
 
     function selectedProviders() {
       return providerChoice.value === 'both' ? providers : [providerChoice.value];
@@ -130,8 +155,10 @@
       async function copyAddress(manual) {
         try {
           await navigator.clipboard.writeText(address.value);
+          if (!dialog.open || !row.isConnected) return;
           status.textContent = '已复制原图地址。';
         } catch {
+          if (!dialog.open || !row.isConnected) return;
           status.textContent = manual ? '请选中地址手动复制。' : '上传成功，请点「复制」。';
           if (manual) address.focus();
         }
@@ -142,31 +169,40 @@
     }
 
     async function uploadImage(batch, result) {
-      if (result.uploading) return;
+      if (result.uploading || currentBatch !== batch || batch.controller.signal.aborted) return;
+      const isCurrent = () => currentBatch === batch && !batch.controller.signal.aborted && dialog.open;
       const { provider, status, progress, addressBox, address, retry } = result;
       result.uploading = true;
       activeUploads += 1;
       startButton.disabled = providerChoice.disabled = true;
+      cancelButton.hidden = false;
       retry.hidden = true;
       status.textContent = '正在生成图片…';
       try {
         const currentSettings = providerSettings(provider);
         upload.checkSettings(provider, currentSettings);
         if (!batch.image) {
-          batch.image = Promise.resolve().then(batch.createImage).catch(error => {
+          batch.image = Promise.resolve().then(() => {
+            batch.controller.signal.throwIfAborted();
+            return batch.createImage();
+          }).catch(error => {
             batch.image = null;
             throw error;
           });
         }
         const image = await batch.image;
+        if (!isCurrent()) return;
         const request = upload.makeRequest(provider, currentSettings, image);
         status.textContent = '正在上传…';
         progress.removeAttribute('value');
         progress.hidden = false;
-        address.value = await upload.sendUpload(provider, request, percent => {
+        const uploadedAddress = await upload.sendUpload(provider, request, percent => {
+          if (!isCurrent()) return;
           progress.value = percent;
           if (percent === 100) status.textContent = '等待图床返回地址…';
-        });
+        }, undefined, batch.controller.signal);
+        if (!isCurrent()) return;
+        address.value = uploadedAddress;
         addressBox.hidden = false;
         status.textContent = '上传成功。';
         if (!batch.triedFirstCopy) {
@@ -174,17 +210,25 @@
           result.copyAddress(false);
         }
       } catch (error) {
+        if (!isCurrent()) return;
         status.textContent = error.message || '上传失败，请重试。';
         retry.hidden = false;
       } finally {
-        progress.hidden = true;
-        result.uploading = false;
-        activeUploads -= 1;
-        startButton.disabled = providerChoice.disabled = activeUploads > 0;
+        if (currentBatch === batch) {
+          progress.hidden = true;
+          result.uploading = false;
+          activeUploads -= 1;
+          startButton.disabled = providerChoice.disabled = activeUploads > 0;
+          cancelButton.hidden = activeUploads === 0;
+        }
       }
     }
 
-    find('.image-upload-heading button').addEventListener('click', () => dialog.close());
+    find('.image-upload-heading button').addEventListener('click', closeDialog);
+    cancelButton.addEventListener('click', cancelUploads);
+    dialog.addEventListener('cancel', event => { event.preventDefault(); closeDialog(); });
+    dialog.addEventListener('close', () => { if (!dialog.open) cancelUploads(); });
+    global.addEventListener('pagehide', cancelUploads);
     providerChoice.addEventListener('change', () => {
       settings.choice = providerChoice.value;
       openMissingSettings();
@@ -192,11 +236,13 @@
     relayAddress.addEventListener('input', () => { settings.relay = relayAddress.value; });
     startButton.addEventListener('click', () => {
       if (activeUploads) return;
-      const batch = { createImage, image: null, triedFirstCopy: false };
+      cancelUploads();
+      const batch = currentBatch = { createImage, image: null, triedFirstCopy: false, controller: new AbortController() };
       results.replaceChildren();
       settingsPanel.open = false;
       openMissingSettings();
       const rows = selectedProviders().map(makeResult);
+      batch.results = rows;
       for (const result of rows) {
         result.retry.addEventListener('click', () => uploadImage(batch, result));
         uploadImage(batch, result);
@@ -207,6 +253,7 @@
     return {
       open(generateImage) {
         if (dialog.open) return;
+        cancelUploads();
         createImage = generateImage;
         providerChoice.value = settings.choice;
         relayAddress.value = settings.relay;

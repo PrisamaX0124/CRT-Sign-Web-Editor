@@ -169,6 +169,36 @@ test('浏览器拒绝创建请求时，提示重试且不显示密钥', async ()
   }
 });
 
+test('取消上传会中止请求，旧进度和旧响应不再生效', async () => {
+  const controller = new AbortController();
+  const progress = [];
+  const request = {
+    upload: {}, open() {}, send() {},
+    abort() { this.aborted = true; this.onabort(); },
+  };
+  const result = upload.sendUpload('imgbb', { address: imgbbAddress, form: image },
+    value => progress.push(value), () => request, controller.signal);
+  const oldProgress = request.upload.onprogress;
+  const oldLoad = request.onload;
+  controller.abort();
+  assert.equal(request.aborted, true);
+  await assert.rejects(result, { name: 'AbortError' });
+  oldProgress({ lengthComputable: true, loaded: 1, total: 1 });
+  request.status = 200;
+  request.response = { data: { url: imgbbAddress } };
+  oldLoad();
+  assert.deepEqual(progress, []);
+});
+
+test('开始前已取消的上传不会创建请求，浏览器中止请求也能结束等待', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(upload.sendUpload('imgbb', {}, () => {},
+    () => { throw new Error('不应创建请求'); }, controller.signal), { name: 'AbortError' });
+  const request = { upload: {}, open() {}, send() { this.onabort(); } };
+  await assert.rejects(upload.sendUpload('imgbb', {}, () => {}, () => request), { name: 'AbortError' });
+});
+
 test('网页入口使用浏览器存储和上传请求', async () => {
   const storage = makeStorage();
   storage.setItem('sign-image-upload-provider', '过时的选项');

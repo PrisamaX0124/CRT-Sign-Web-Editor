@@ -56,6 +56,7 @@
       upload = {};
       open(method, address) { this.method = method; this.address = address; }
       send(form) { this.form = form; requests.push(this); }
+      abort() { this.aborted = true; this.onabort?.(); }
       progress(loaded, total) { this.upload.onprogress({ lengthComputable: true, loaded, total }); }
       reply(response) { this.status = 200; this.response = response; this.onload(); }
     };
@@ -140,6 +141,51 @@
         assert(localStorage.getItem(keys[2]) === null, '默认不应保存密钥');
       });
     }
+
+    for (const { name, address } of editors) {
+      await test(name + '关闭或取消上传会中止两家请求，重开后旧响应不能复制地址', async () => {
+        await open(address);
+        setValue(find('#image-upload-provider'), 'both', 'change');
+        setValue(key('imgbb'), '假密钥');
+        setValue(key('freeimage'), '假密钥');
+        setValue(find('#image-upload-relay'), relayAddress);
+        click('#start-image-upload');
+        await waitFor(() => requests.length === 2, '未开始双图床上传');
+        const old = [...requests];
+        click('.image-upload-heading button');
+        click('[data-open-image-upload]');
+        assert(old.every(request => request.aborted), '关闭窗口没有中止所有请求');
+        assert(!find('#start-image-upload').disabled, '重新打开后不能上传');
+        click('#start-image-upload');
+        await waitFor(() => requests.length === 4, '重开后没有开始新上传');
+        old[0].reply({ data: { url: imgbbAddress } });
+        old[1].reply({ image: { url: freeimageAddress } });
+        await Promise.resolve();
+        assert(copies.length === 0 && find('#start-image-upload').disabled, '旧响应干扰了新任务');
+        click('#cancel-image-upload');
+        assert(requests.slice(2).every(request => request.aborted), '取消按钮没有中止请求');
+        assert(!find('#start-image-upload').disabled && result('imgbb').textContent.includes('已取消'), '取消后没有恢复控件或显示结果');
+        click('.image-upload-heading button');
+      });
+    }
+
+    await test('生成图片时关闭上传窗口，旧图片生成完成后不会发出请求', async () => {
+      await open(editors[1].address);
+      setValue(find('#image-upload-provider'), 'imgbb', 'change');
+      setValue(key('imgbb'), '假密钥');
+      const createBlob = editor.HTMLCanvasElement.prototype.toBlob;
+      let finish;
+      editor.HTMLCanvasElement.prototype.toBlob = function (callback) { finish = callback; };
+      try {
+        click('#start-image-upload');
+        await waitFor(() => finish, '图片没有开始生成');
+        find('#image-upload-dialog').dispatchEvent(new editor.Event('cancel', { cancelable: true }));
+        click('[data-open-image-upload]');
+        finish(new editor.Blob(['图片'], { type: 'image/png' }));
+        await new Promise(resolve => setTimeout(resolve, 30));
+        assert(requests.length === 0 && !find('#start-image-upload').disabled, '关闭后仍上传了生成的图片');
+      } finally { editor.HTMLCanvasElement.prototype.toBlob = createBlob; }
+    });
 
     await test('图床选择跨页面保存，两家密钥可分别记住和清除', async () => {
       await open(editors[1].address);
