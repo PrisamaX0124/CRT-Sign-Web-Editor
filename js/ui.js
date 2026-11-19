@@ -32,6 +32,7 @@
   }
 
   function restoreHistory(from, to) {
+    if (App.projects?.busy) return false;
     App.breakHistoryGroup();
     if (!from.length) return false;
     to.push(snapshot());
@@ -53,6 +54,22 @@
 
     /** 状态变更入口：pureFn(sign) → 新 sign；continuous用于显式结束的指针会话。 */
     update: function (pureFn, key, options) {
+      if (options?.activateProject) {
+        SignInteract.resetProject();
+        SignClipboard.resetProject();
+        App.previewZoom?.resetInteraction();
+        undoStack = [];
+        redoStack = [];
+        historyKey = null;
+        historyTime = 0;
+        App.presetPreviewId = null;
+        App.selection = { elementId: null, elementIds: [], anchorId: null };
+        App.state = pureFn(App.state);
+        document.getElementById('right-panel-body').scrollTop = 0;
+        App.renderAll();
+        return;
+      }
+      if (App.projects?.busy) return;
       var before = App.layout && global.SignRender?.anchorExistingPositions
         ? SignRender.anchorExistingPositions(App.state, App.layout) : App.state;
       var next = pureFn(before);

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="style.css?v=db6000bdd9f7">
   <link rel="stylesheet" href="platform.css?v=e3421f531c96">
   <link rel="stylesheet" href="transfer.css?v=5ffa0b585f03">
+  <link rel="stylesheet" href="project-dialog.css?v=5b9826220110">
   <link rel="stylesheet" href="image-upload.css?v=39bea1cc93e6">
 </head>
 <body class="editor-page">
@@ -40,10 +41,13 @@
           </a>
         </div>
       </nav>
-      <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="在新标签页打开 GitHub 仓库" title="GitHub 仓库">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
-        <span class="repository-arrow" aria-hidden="true">&gt;</span>
-      </a>
+      <div class="project-header-actions">
+        <button type="button" class="btn project-entry" id="guidance-project-open" data-control-icon="property-project" aria-haspopup="dialog" aria-controls="guidance-project-dialog">我的项目</button>
+        <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="在新标签页打开 GitHub 仓库" title="GitHub 仓库">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
+          <span class="repository-arrow" aria-hidden="true">&gt;</span>
+        </a>
+      </div>
       <nav class="mode-tabs" id="transfer-modes" aria-label="换乘标识版式" hidden>
         <button type="button" data-transfer-mode="guidance" aria-pressed="true">版式 A</button>
         <button type="button" data-transfer-mode="separate" aria-pressed="false">版式 B</button>
@@ -69,7 +73,7 @@
     <main id="center-panel" class="editor-center">
       <div class="preview-toolbar">
         <div class="preview-heading">
-          <strong>导向标识</strong>
+          <strong class="project-preview-title"><span id="guidance-project-current">未命名项目</span><span aria-hidden="true"> / </span><span>导向标识</span></strong>
           <span id="guidance-preview-dimensions" class="preview-dimensions"></span>
         </div>
         <div class="preview-toolbar-actions">
@@ -328,23 +332,24 @@
   <script src="js/render.js?v=016de8532237"></script>
   <script src="js/editor-motion.js?v=46757705e313"></script>
   <script src="js/property-tabs.js?v=9090db99e9cc"></script>
-  <script src="js/preview-zoom.js?v=acec1aa66512"></script>
+  <script src="js/preview-zoom.js?v=9426a1545fa9"></script>
   <script src="js/element-alignment.js?v=fb06e19d0663"></script>
-  <script src="js/ui.js?v=ba88dad55ced"></script>
-  <script src="js/clipboard.js?v=public-1c7f4d30022d"></script>
+  <script src="js/ui.js?v=03119f28497a"></script>
+  <script src="js/clipboard.js?v=ada1bd0c3e21"></script>
   <script src="js/presets.js?v=0150088dc5b0"></script>
-  <script src="js/storage.js?v=5156bc2ae677"></script>
+  <script src="js/storage.js?v=811e77115bb2"></script>
   <script src="js/exporters.js?v=f439220b937f"></script>
   <script src="js/image-upload.js?v=7a2caa6e67ea"></script>
   <script src="js/image-upload-dialog.js?v=95e0fd6ff5d6"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
-  <script src="js/panel.js?v=920a7fee7ffd"></script>
-  <script src="js/interact.js?v=e279e60a71e2"></script>
+  <script src="js/panel.js?v=1fa8a6acdf2f"></script>
+  <script src="js/interact.js?v=9a8147c28e38"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = 'CRT标识编辑器 - 换乘标识';
       document.body.classList.add('platform-page');
       document.getElementById('app').hidden = true;
+      document.getElementById('guidance-project-open').hidden = true;
       document.getElementById('transfer-editor').hidden = false;
       document.getElementById('transfer-modes').hidden = false;
       document.querySelector('.editor-navigation [aria-current]').removeAttribute('aria-current');
@@ -352,7 +357,10 @@
     }
   </script>
   <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
-  <script src="js/main.js?v=e412c4bd5878"></script>
+  <script src="js/projects/manager.js?v=505228470ad0"></script>
+  <script src="js/projects/store.js?v=46b5ba86f1fe"></script>
+  <script src="js/projects/dialog.js?v=7a0bc72f140a"></script>
+  <script src="js/main.js?v=0a1f7d771735"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
   <script src="js/platform/patterns.js?v=cc2c94583c53"></script>
   <script src="js/transfer/state.js?v=6892c96cc48e"></script>

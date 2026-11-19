@@ -649,7 +649,7 @@
   function buildProjectPanel() {
     var files = panelSection('项目文件', 'project-files', 'project');
     var download = h('button', { class: 'btn', id: 'guidance-export-project', text: '导出项目 JSON' });
-    var upload = h('button', { class: 'btn', id: 'guidance-import-project', text: '导入项目 JSON' });
+    var upload = h('button', { class: 'btn', id: 'guidance-import-project', text: '导入 JSON 为新项目' });
     download.addEventListener('click', function () { App.exportProject(); });
     upload.addEventListener('click', function () { document.getElementById('guidance-project-file').click(); });
     files.append(download, upload);

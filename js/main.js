@@ -2,7 +2,7 @@
 /**
  * main.js — 启动装配
  *
- * 顺序：实例守卫 → 字体预加载（测量依赖）→ 恢复/新建状态 → 装配 UI → 首帧渲染。
+ * 字体、项目和编辑器启动。
  */
 (function (global) {
   'use strict';
@@ -76,64 +76,64 @@
     });
   }
 
-  function showBlockedNotice() {
-    document.body.innerHTML = '';
-    var div = document.createElement('div');
-    div.style.cssText = 'height:100vh;display:flex;align-items:center;justify-content:center;' +
-      'flex-direction:column;gap:12px;color:#6b7684;font-size:15px;font-family:system-ui,sans-serif;';
-    div.textContent = '已取消启动，以保护另一标签页中的编辑数据。请直接关闭此页面。';
-    document.body.appendChild(div);
-  }
-
   function boot() {
     if (document.getElementById('app').hidden) return;
-    showLoading('正在检查编辑器实例…');
+    showLoading('正在加载 MiSans 与编号字体…');
 
-    SignStorage.setupInstanceGuard().then(function (proceed) {
-      if (!proceed) {
-        hideLoading();
-        showBlockedNotice();
-        return;
-      }
-      showLoading('正在加载 MiSans 与编号字体…');
-      loadFonts().then(function (fontsReady) {
-        App.measure = SignCore.createCanvasMeasurer();
-        var restoredProject = SignStorage.loadAutosave();
-        App.state = restoredProject || SignState.createSign();
-        function serializeProject() { return SignState.serializeSign(App.state); }
-        App.exportProject = function () {
-          SignStorage.exportProject(serializeProject, 'sign-project-' + SignStorage.timestamp() + '.json', SignUI.toast);
-        };
-        SignStorage.bindProjectImport({
-          input: document.getElementById('guidance-project-file'),
-          deserialize: SignState.deserializeSign,
-          applyProject: function (project) { App.update(function () { return project; }, null, { replaceProject: true }); },
-          notice: SignUI.toast,
-          limitSize: false,
-        });
-        App.autosave = SignStorage.createAutosave({
-          storageKey: SignStorage.AUTOSAVE_KEY,
-          indicator: document.getElementById('guidance-save'),
-          serializeProject: serializeProject,
-          exportProject: App.exportProject,
-          delay: 500,
-          restored: Boolean(restoredProject),
-        });
-        App.prefs = SignStorage.loadPrefs();
+    App.ready = loadFonts().then(async function (fontsReady) {
+      App.state = SignStorage.loadAutosave() || SignState.createSign();
+      App.prefs = SignStorage.loadPrefs();
 
-        SignInteract.init();
-        SignClipboard.init();
-        wireStaticButtons();
-        SignPanel.buildPalette();
-        App.renderAll();
-        hideLoading();
-        if (!fontsReady) {
-          SignUI.toast('字体未能完全加载，文字度量可能不准，建议刷新重试', 'error');
-        }
-
-        // 字体全部就绪后再刷一帧，避免度量差异
-        document.fonts.ready.then(function () { App.renderAll(); });
+      function serializeProject() { return SignState.serializeSign(App.state); }
+      App.exportProject = function () {
+        SignStorage.exportProject(serializeProject, 'sign-project-' + SignStorage.timestamp() + '.json', SignUI.toast);
+      };
+      const library = SignProjects.createLibrary({
+        databaseName: 'public-guidance-projects',
+        legacyKey: SignStorage.AUTOSAVE_KEY,
+        legacyName: '原有导向项目',
+        createDefault: SignState.createSign,
+        serialize: SignState.serializeSign,
+        deserialize: SignState.deserializeSign,
+        describe: state => ({
+          rowCount: state.rows.length,
+          elementCount: state.rows.reduce((count, row) => count + row.elements.length, 0),
+        }),
       });
+
+      SignInteract.init();
+      SignClipboard.init();
+      wireStaticButtons();
+      App.autosave = SignProjectDialog.init(App, {
+        library,
+        editor: 'guidance',
+        fileInput: document.getElementById('guidance-project-file'),
+        notice: SignUI.toast,
+        exportProject: App.exportProject,
+        showProject: name => {
+          const title = document.getElementById('guidance-project-current');
+          title.textContent = title.title = name;
+        },
+        formatDetails: project => (project.rowCount ?? 0) + ' 行 · ' + (project.elementCount ?? 0) + ' 个元素',
+      });
+      SignStorage.bindProjectImport({
+        input: document.getElementById('guidance-project-file'),
+        deserialize: SignState.deserializeSign,
+        applyProject: async function (project, file) {
+          await App.autosave.ready;
+          if (!App.projects) throw new Error('本地项目存储不可用，请先导出备份并重试');
+          await App.projects.create(file.name.replace(/\.json$/i, '').trim() || '导入项目', project);
+        },
+        notice: SignUI.toast,
+        limitSize: false,
+      });
+      await App.autosave.ready;
+      App.measure = SignCore.createCanvasMeasurer();
+      SignPanel.buildPalette();
+      App.renderAll();
+      hideLoading();
+      if (!fontsReady) SignUI.toast('字体未能完全加载，文字尺寸可能不准，建议刷新重试', 'error');
+      document.fonts.ready.then(function () { App.renderAll(); });
     });
   }
 

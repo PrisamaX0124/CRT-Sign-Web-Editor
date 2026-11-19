@@ -273,14 +273,14 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
         }
       }
     });
-    await test('导向项目可下载、导入并撤销，错误文件保留项目和撤销记录', async function () {
+    await test('导向项目可下载和导入，导入另建项目且清空原有历史，错误文件保留当前项目', async function () {
       application.select(null);
       query('#right-panel [data-property-tab-button="project"]').click();
       var exportButton = query('#guidance-export-project');
       var importButton = query('#guidance-import-project');
       var file = query('#guidance-project-file');
-      assert(exportButton?.textContent === '导出项目 JSON' && importButton?.textContent === '导入项目 JSON',
-        '项目按钮用语与其他编辑器不一致');
+      assert(exportButton?.textContent === '导出项目 JSON' && importButton?.textContent === '导入 JSON 为新项目',
+        '项目按钮应说明导入会创建新项目');
       var download, originalDownload = editorWindow.SignStorage.download, openPicker = file.click;
       editorWindow.SignStorage.download = function (blob, name) { download = { blob: blob, name: name }; };
       function submit(name, source) {
@@ -291,6 +291,7 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
       }
       try {
         var original = state.serializeSign(application.state);
+        var originalProject = application.projects.current.id;
         exportButton.click();
         assert(download?.name.endsWith('.json') && await download.blob.text() === original, '下载内容与项目不同');
         var pickerOpened = false;
@@ -300,6 +301,7 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
         var imported = state.updateSignSettings(application.state, { backgroundColor: '#213C5C' });
         submit('导向项目.JSON', state.serializeSign(imported));
         await waitFor(function () { return state.serializeSign(application.state) === state.serializeSign(imported); });
+        assert(application.projects.current.id !== originalProject, '导入覆盖了原项目');
         for (var [name, source, message] of [
           ['导向项目.txt', original, '请选择 JSON 文件'],
           ['导向项目.json', '{', 'JSON 格式有误'],
@@ -309,9 +311,9 @@ iframe { width: 1280px; height: 860px; border: 1px solid #bbb; }
           await waitFor(function () { return editorDocument.getElementById('toasts').textContent.includes(message); });
           assert(state.serializeSign(application.state) === state.serializeSign(imported), '错误文件改动了当前项目');
         }
-        assert(application.undo() && state.serializeSign(application.state) === original, '一次撤销应回到导入前');
-        assert(application.redo() && state.serializeSign(application.state) === state.serializeSign(imported), '重做未恢复导入结果');
-        application.undo();
+        assert(!application.undo() && !application.redo(), '撤销和重做不应跨项目');
+        await application.projects.open(originalProject);
+        assert(state.serializeSign(application.state) === original, '原工程被改动');
       } finally {
         editorWindow.SignStorage.download = originalDownload;
         file.click = openPicker;

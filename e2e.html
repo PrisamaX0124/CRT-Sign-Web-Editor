@@ -429,8 +429,9 @@
     async function s16_autosavePresent() {
       var w = W();
       // 自动保存防抖 500ms：等待落盘而非立即断言，消除快速机器上的竞态
-      var saved = await waitFor(function () { return !!w.localStorage.getItem('public-sign-autosave'); });
-      ok('S16 自动保存存档存在', saved);
+      await waitFor(function () { return w.document.getElementById('guidance-save').dataset.saveState === 'saved'; });
+      var saved = await w.App.projects.read(w.App.projects.current.id);
+      ok('S16 自动保存存档存在', !!saved?.data);
     }
 
     // ─── 回归：属性面板编辑与对齐渲染 ─────────────────────
@@ -1269,12 +1270,13 @@
       w.App.update(function (st) {
         return w.SignState.updateSignSettings(st, { frameWidth: 7 });
       });
-      w.localStorage.removeItem('public-sign-autosave');
-      w.dispatchEvent(new w.Event('pagehide')); // 防抖 500ms 未到即模拟离页
-      var raw = w.localStorage.getItem('public-sign-autosave');
+      // 离开页面时可能还没到定时保存的时间。
+      w.dispatchEvent(new w.Event('pagehide'));
+      await waitFor(function () { return w.document.getElementById('guidance-save').dataset.saveState === 'saved'; });
+      var raw = (await w.App.projects.read(w.App.projects.current.id)).data;
       var data = null;
       try { data = raw ? JSON.parse(raw) : null; } catch (e) { /* 非法存档按失败 */ }
-      ok('S37 pagehide 立即刷盘自动存档', !!data && data.sign && data.sign.frameWidth === 7,
+      ok('S37 离开页面立即保存最新修改', !!data && data.sign && data.sign.frameWidth === 7,
         raw ? 'frameWidth=' + (data && data.sign && data.sign.frameWidth) : 'null');
       w.App.update(function (st) {
         return w.SignState.updateSignSettings(st, { frameWidth: 0 });

@@ -96,8 +96,16 @@
     wrap.addEventListener('dragover', onPaletteDragOver);
     wrap.addEventListener('drop', onPaletteDrop);
     wrap.addEventListener('dragleave', onPaletteDragLeave);
-    document.addEventListener('dragstart', function (event) { palettePayload = readDragKind(event) === 'new' ? readDragPayload(event, 'new') : null; });
-    document.addEventListener('dragend', function () { resetPaletteDrop(); palettePayload = null; });
+    document.addEventListener('dragstart', function (event) {
+      paletteDragActive = Boolean(readDragKind(event));
+      paletteDragCancelled = false;
+      palettePayload = readDragKind(event) === 'new' ? readDragPayload(event, 'new') : null;
+    });
+    document.addEventListener('dragend', function () {
+      resetPaletteDrop();
+      palettePayload = null;
+      paletteDragActive = paletteDragCancelled = false;
+    });
   }
 
   // ─── 覆盖层渲染 ────────────────────────────────────────────
@@ -596,7 +604,7 @@
     if (suppressClick) { suppressClick = false; return; }
     var target = ev.target;
     if (!target || !target.closest || ev.defaultPrevented) return;
-    if (document.querySelector('.modal-mask')) return;
+    if (document.querySelector('.modal-mask, dialog.project-dialog[open]')) return;
     var g = target.closest('g.element');
     if (g && svg.contains(g)) {
       App.select(g.getAttribute('data-element-id'), { toggle: ev.ctrlKey || ev.metaKey, range: ev.shiftKey });
@@ -618,6 +626,7 @@
 
   function onKeyDown(ev) {
     if (ev.defaultPrevented || ev.isComposing) return;
+    if (App.projects?.busy || document.querySelector('dialog.project-dialog[open]')) return;
     if (ev.key === 'Escape' && rowDrag) { ev.preventDefault(); finishRowDrag(false); return; }
     // 焦点在输入控件内时不拦截（文本编辑优先）
     var t = ev.target;
@@ -922,6 +931,7 @@
   }
 
   function onPaletteDragOver(ev) {
+    if (paletteDragCancelled || App.projects?.busy) return;
     var kind = readDragKind(ev);
     if (!kind) return; // 非本应用拖拽，不拦截
     ev.preventDefault();
@@ -1000,7 +1010,7 @@
     var kind = readDragKind(ev);
     var target = paletteDropTarget;
     resetPaletteDrop();
-    if (!kind || kind !== target?.kind) return;
+    if (paletteDragCancelled || !kind || kind !== target?.kind) return;
     var payload = readDragPayload(ev, kind);
     if (!payload) return;
 
@@ -1061,8 +1071,21 @@
     });
   }
 
+  var paletteDragActive = false, paletteDragCancelled = false;
+  function resetProject() {
+    cancelElementDrag();
+    finishRowDrag(false, false);
+    positionMovement?.cancel();
+    resetPaletteDrop();
+    palettePayload = null;
+    paletteDragCancelled = paletteDragActive;
+    pagePointer = null;
+    suppressClick = false;
+  }
+
   global.SignInteract = {
     init: init,
+    resetProject: resetProject,
     renderOverlay: renderOverlay,
     toSignPoint: toSignPoint,
     rowIndexAt: rowIndexAt,

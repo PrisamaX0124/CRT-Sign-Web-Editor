@@ -18,18 +18,6 @@
   const results = document.getElementById('results');
   const editors = [
     {
-      name: '导向标识', address: '../index.html', storageKey: 'public-sign-autosave',
-      indicator: 'guidance-save', delay: 500,
-      edit: (editor, value) => editor.App.update(project => editor.SignState.updateSignSettings(project, { frameWidth: value })),
-      serialize: editor => editor.SignState.serializeSign(editor.App.state),
-    },
-    {
-      name: '站台标识', address: '../platform.html', storageKey: 'public-platform-sign-project-v1',
-      indicator: 'platform-save', delay: 500,
-      edit: (editor, value) => editor.App.update(project => editor.PlatformState.settings(project, { lineName: '测试线路 ' + value })),
-      serialize: editor => editor.PlatformState.serialize(editor.App.state),
-    },
-    {
       name: '换乘标识', address: '../index.html?editor=transfer', storageKey: 'public-transfer-sign-project-v1',
       indicator: 'transfer-save', delay: 0,
       edit: (editor, value) => editor.App.update(project => editor.TransferState.settings(project, { width: 768 + value })),
@@ -76,7 +64,7 @@
 
   try {
     keys.forEach(key => localStorage.removeItem(key));
-    for (const settings of editors.filter(settings => settings.name !== '站台标识')) {
+    for (const settings of editors) {
       let editor = await open(settings.address);
       const status = () => editor.document.querySelector('#' + settings.indicator + ' [role="status"]');
       const backup = () => editor.document.querySelector('#' + settings.indicator + ' button');

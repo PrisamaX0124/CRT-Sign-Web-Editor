@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>导向本地多项目测试</title>
+<style>body{font:14px system-ui}iframe{width:1280px;height:850px}.fail{color:#bd2222}</style>
+<h1>导向本地多项目测试</h1>
+<p id="summary">运行中…</p><ol id="results"></ol>
+<iframe title="导向编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.querySelector('iframe');
+  const results = document.getElementById('results');
+  const legacyKey = 'public-sign-autosave';
+  const previous = localStorage.getItem(legacyKey);
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  let editor, app;
+  const control = name => editor.document.getElementById('guidance-project-' + name);
+  const edit = settings => app.update(state => editor.SignState.updateSignSettings(state, settings));
+  async function waitFor(check) {
+    const deadline = Date.now() + 6000;
+    while (!check()) {
+      assert(Date.now() < deadline, '等待编辑器更新超时');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
+  async function open(address = '../index.html', target = frame) {
+    await new Promise(resolve => { target.onload = resolve; target.src = address; });
+    const view = target.contentWindow;
+    await view.App?.ready;
+    return view;
+  }
+  async function test(name, action) {
+    const item = document.createElement('li');
+    try { await action(); item.className = 'pass'; item.textContent = name; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '：' + error.message; }
+    results.append(item);
+  }
+  try {
+    await test('旧存档完整迁移，两次刷新都只保留一份项目', async () => {
+      const old = { version: 1, sign: { width: 1280, rowHeight: 192, frameWidth: 8, frameColor: '#234567', backgroundColor: '#345678', rows: [{ id: 'old-row', backgroundColor: '#456789', elements: [] }] } };
+      const source = JSON.stringify(old);
+      localStorage.setItem(legacyKey, source);
+      editor = await open(); app = editor.App;
+      assert(app?.projects?.current, '导向编辑器没有恢复本地项目');
+      const id = app.projects.current.id;
+      assert(app.projects.current.data === source && app.state.frameWidth === 8 && app.state.rows[0].backgroundColor === '#456789', '旧工程内容未完整保留');
+      assert((await app.projects.list()).length === 1, '迁移项目数量不正确');
+      for (let count = 0; count < 2; count++) {
+        editor = await open(); app = editor.App;
+        assert(app.projects.current.id === id && (await app.projects.list()).length === 1, '刷新重复迁移或丢失当前项目');
+      }
+      assert(localStorage.getItem(legacyKey) === source, '旧数据被覆盖');
+    });
+    await test('项目入口、标题、列表视图、菜单、备份和删除确认可以操作', async () => {
+      const previousId = app.projects.current.id;
+      assert(control('open').dataset.controlIcon === 'property-project', '项目入口缺少文件夹图标');
+      control('open').click();
+      await waitFor(() => control('list').querySelector('.project-card'));
+      assert(editor.document.activeElement === control('search') && !control('tools').open, '焦点或备份收起状态不正确');
+      control('dialog').querySelector('[data-project-view="list"]').click();
+      assert(control('list').dataset.view === 'list', '没有切换到列表视图');
+      control('new').click(); control('name').value = '新建导向';
+      control('name-dialog').querySelector('form').requestSubmit();
+      await waitFor(() => !control('name-dialog').open && app.projects.current.name === '新建导向');
+      assert(app.state.rows.length === 1 && app.state.rows[0].elements.length === 0, '新建项目有旧工程内容');
+      assert(control('current').parentElement.textContent.includes('新建导向 / 导向标识'), '项目名称没有显示在标题栏');
+      control('search').value = '新建导向'; control('search').dispatchEvent(new editor.Event('input'));
+      await waitFor(() => control('list').children.length === 1);
+      const menu = control('list').querySelector('details');
+      assert(!menu.open, '项目操作没有默认收起'); menu.querySelector('summary').click();
+      assert(menu.open, '无法展开项目操作');
+      menu.querySelector('[aria-label="重命名 新建导向"]').click();
+      control('name').value = '站厅导向'; control('name-dialog').querySelector('form').requestSubmit();
+      await waitFor(() => !control('name-dialog').open && app.projects.current.name === '站厅导向');
+      control('search').value = '站厅导向'; control('search').dispatchEvent(new editor.Event('input'));
+      await waitFor(() => control('list').querySelector('[aria-label="删除 站厅导向"]'));
+      const target = app.projects.current.id;
+      const deleteButton = control('list').querySelector('[aria-label="删除 站厅导向"]');
+      deleteButton.closest('details').querySelector('summary').click(); deleteButton.click();
+      control('delete-cancel').click();
+      assert(await app.projects.read(target), '取消时删除了项目');
+      deleteButton.click(); control('delete-confirm').click();
+      await waitFor(() => !control('delete-dialog').open && app.projects.current.id === previousId);
+      assert(!(await app.projects.read(target)), '确认后没有删除项目');
+      control('close').click();
+      await waitFor(() => editor.document.activeElement === control('open'));
+    });
+    await test('复制保留完整标识牌，连续修改和切换各自保存', async () => {
+      const state = editor.SignState;
+      const first = app.projects.current.id;
+      app.update(project => state.addElement(state.addRow(project), project.rows[0].id, state.createElement('bilingual-text', { zh: '站厅', en: 'Concourse' })));
+      edit({ frameWidth: 16, frameColor: '#667788', backgroundColor: '#123456', width: 1536 });
+      await app.projects.flush();
+      const stored = (await app.projects.read(first)).data;
+      await app.projects.duplicate(first, '独立副本');
+      const second = app.projects.current.id;
+      assert(first !== second && state.serializeSign(app.state) === stored, '副本未保留完整设置');
+      for (let count = 20; count <= 40; count++) edit({ frameWidth: count });
+      await Promise.all([app.projects.open(first), app.projects.open(second), app.projects.open(first)]);
+      assert(app.state.frameWidth === 16 && (await app.projects.read(first)).data === stored, '副本改动污染原项目');
+      assert(state.deserializeSign((await app.projects.read(second)).data).frameWidth === 40, '连改没有保存最后一笔');
+    });
+    await test('切换清空多选、撤销重做、预设预览和进行中的拖动及粘贴', async () => {
+      const State = editor.SignState;
+      const first = app.projects.current.id;
+      const element = State.createElement('arrow');
+      app.update(project => State.addElement(project, project.rows[0].id, element));
+      app.selectAll();
+      assert(app.selectedIds().length >= 2, '未建立多选');
+      const clipboard = editor.navigator.clipboard, write = clipboard.writeText, read = clipboard.readText;
+      let finishReading;
+      clipboard.writeText = async () => {};
+      clipboard.readText = () => new Promise(resolve => { finishReading = resolve; });
+      const data = State.serializeElements(app.state, app.selectedIds());
+      try {
+        await editor.SignClipboard.copy(false);
+        const paste = editor.SignClipboard.paste();
+        await waitFor(() => finishReading);
+        const handle = editor.document.querySelector('.row-handle');
+        const bounds = handle.getBoundingClientRect();
+        const pointer = (type, target, y) => target.dispatchEvent(new editor.PointerEvent(type, {
+          bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', button: 0, clientX: bounds.x + 2, clientY: y,
+        }));
+        pointer('pointerdown', handle, bounds.y + 2);
+        pointer('pointermove', editor.document, bounds.y + 100);
+        assert(editor.document.querySelector('.row-drag-ghost'), '没有开始拖动行');
+        await app.projects.create('项目切换测试');
+        pointer('pointerup', editor.document, bounds.y + 100);
+        finishReading(data);
+        await paste;
+        assert(!app.selectedIds().length && !app.undo() && !app.redo() && !app.presetPreviewId, '选择或历史留在新项目');
+        assert(!editor.document.querySelector('.row-drag-ghost') && app.state.rows.length === 1 && app.state.rows[0].elements.length === 0, '原项目的拖动或粘贴修改了新项目');
+        await app.projects.open(first);
+        assert(!app.selectedIds().length && !app.undo(), '重新打开项目恢复了旧选区或历史');
+      } finally { clipboard.writeText = write; clipboard.readText = read; }
+    });
+    await test('写入失败时不切换，备份包含最新编辑，重试后保存成功', async () => {
+      const first = app.projects.current.id;
+      await app.projects.create('保存失败测试');
+      const second = app.projects.current.id;
+      const transaction = editor.IDBDatabase.prototype.transaction;
+      edit({ frameWidth: 52 });
+      editor.IDBDatabase.prototype.transaction = function (names, mode, ...options) {
+        if (mode === 'readwrite') throw new editor.DOMException('', 'QuotaExceededError');
+        return transaction.call(this, names, mode, ...options);
+      };
+      let backup;
+      const download = editor.SignStorage.download;
+      try {
+        let rejected = false;
+        try { await app.projects.open(first); } catch { rejected = true; }
+        assert(rejected && app.projects.current.id === second && app.state.frameWidth === 52, '保存失败丢失修改或切换了项目');
+        const status = editor.document.getElementById('guidance-save');
+        assert(status.dataset.saveState === 'failed' && status.textContent.includes('空间不足'), '没有显示保存失败原因');
+        editor.SignStorage.download = file => { backup = file; };
+        status.querySelector('button').click();
+        assert(JSON.parse(await backup.text()).sign.frameWidth === 52, '备份不包含尚未保存的修改');
+      } finally { editor.IDBDatabase.prototype.transaction = transaction; editor.SignStorage.download = download; }
+      control('retry').click();
+      await waitFor(() => editor.document.getElementById('guidance-save').dataset.saveState === 'saved');
+      assert(JSON.parse((await app.projects.read(second)).data).sign.frameWidth === 52, '重试没有保存最后内容');
+    });
+    await test('同一项目检测窗口冲突，不同项目可并行编辑，旧标签页标记不拦截', async () => {
+      const oldGuard = localStorage.getItem('public-sign-instance');
+      localStorage.setItem('public-sign-instance', JSON.stringify({ id: 'old-window', ts: Date.now() }));
+      const otherFrame = document.createElement('iframe'); document.body.append(otherFrame);
+      try {
+        const other = await open('../index.html', otherFrame);
+        assert(other.App.projects.current.id === app.projects.current.id && !other.document.querySelector('.modal-mask'), '打开时被旧实例检查拦住');
+        edit({ frameWidth: 61 }); await app.projects.flush();
+        await waitFor(() => other.document.getElementById('guidance-save').dataset.saveState === 'conflict');
+        other.App.update(state => other.SignState.updateSignSettings(state, { frameWidth: 62 }));
+        let rejected = false; try { await other.App.projects.flush(); } catch { rejected = true; }
+        assert(rejected, '没有阻止覆盖其他窗口');
+        await other.App.projects.duplicate(other.App.projects.current.id, '冲突副本');
+        assert(other.App.state.frameWidth === 62 && other.App.projects.current.id !== app.projects.current.id, '副本丢失本页修改');
+        edit({ frameWidth: 63 }); await app.projects.flush();
+        await other.App.projects.check();
+        assert(other.document.getElementById('guidance-save').dataset.saveState === 'saved', '不同项目被误报冲突');
+      } finally {
+        otherFrame.remove();
+        if (oldGuard === null) localStorage.removeItem('public-sign-instance'); else localStorage.setItem('public-sign-instance', oldGuard);
+      }
+    });
+    await test('站台沿用自己的工程，换乘没有项目入口，两种工程不能混用', async () => {
+      const guidance = app.projects.current.id, current = app.state;
+      const extra = document.createElement('iframe'); document.body.append(extra);
+      try {
+        const platform = await open('../platform.html', extra);
+        assert((await platform.App.projects.list()).every(project => project.id !== guidance), '站台列表混入导向项目');
+        await platform.App.projects.create('站台独立项目');
+        const station = platform.App.projects.current;
+        assert(!(await app.projects.read(station.id)), '导向列表混入站台项目');
+        let rejected = false; try { editor.SignState.deserializeSign(station.data); } catch { rejected = true; }
+        assert(rejected && app.state === current, '站台工程被导入导向编辑器');
+        const transfer = await open('../index.html?editor=transfer', extra);
+        assert(transfer.document.getElementById('guidance-project-open').hidden && !transfer.document.querySelector('dialog.project-dialog') && !transfer.App.projects, '换乘显示了项目管理');
+      } finally { extra.remove(); }
+    });
+  } finally {
+    if (previous === null) localStorage.removeItem(legacyKey); else localStorage.setItem(legacyKey, previous);
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = (results.children.length - failed) + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = summary;
+    document.title = (failed ? '✖ ' : '✔ ') + summary + ' 导向本地多项目测试';
+  }
+})();
+</script>
+</html>

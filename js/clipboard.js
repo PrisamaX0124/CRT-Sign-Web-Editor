@@ -3,12 +3,13 @@
   'use strict';
   var App = global.App, State = global.SignState, UI = global.SignUI;
   var localText = '', pendingWrite = Promise.resolve(), cutTarget = null, localOnly = false, copyVersion = 0;
+  var projectVersion = 0;
 
   function editing(target) {
     return !!(target && target.closest && target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])'));
   }
 
-  function blocked(target) { return editing(target) || !!document.querySelector('.modal-mask'); }
+  function blocked(target) { return App.projects?.busy || editing(target) || !!document.querySelector('.modal-mask, dialog.project-dialog[open]'); }
 
   function selectionText() {
     var ids = App.selectedIds();
@@ -65,11 +66,12 @@
   }
 
   function copyButton(isCut) {
-    if (document.querySelector('.modal-mask')) return Promise.resolve(false);
+    if (blocked()) return Promise.resolve(false);
     var text = selectionText(), ids = App.selectedIds();
     if (!text) return Promise.resolve(false);
     localText = text;
     var version = ++copyVersion;
+    var copyingProject = projectVersion;
     var writing;
     try { writing = navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('clipboard unavailable')); }
     catch (e) { writing = Promise.reject(e); }
@@ -79,17 +81,20 @@
     });
     if (isCut) cut(ids); else cutTarget = null;
     return pendingWrite.then(function (system) {
+      if (copyingProject !== projectVersion) return false;
       UI.toast((isCut ? '已剪切 ' : '已复制 ') + ids.length + ' 个元素' + (system ? '' : '（可在当前页面粘贴）'));
       return true;
     });
   }
 
   async function pasteButton() {
-    if (document.querySelector('.modal-mask')) return false;
+    if (blocked()) return false;
+    var pastingProject = projectVersion;
     var text = localText;
     await pendingWrite;
     try { if (navigator.clipboard && !localOnly) text = await navigator.clipboard.readText(); }
     catch (e) { /* 无系统剪贴板权限时使用页面内副本。 */ }
+    if (pastingProject !== projectVersion || blocked()) return false;
     try { return pasteText(text); } catch (e) { UI.toast(e.message, 'error'); return false; }
   }
 
@@ -117,5 +122,10 @@
     sync();
   }
 
-  global.SignClipboard = { init: init, sync: sync, copy: copyButton, paste: pasteButton, pasteText: pasteText, editing: editing };
+  function resetProject() {
+    projectVersion++;
+    cutTarget = null;
+  }
+
+  global.SignClipboard = { init: init, sync: sync, copy: copyButton, paste: pasteButton, pasteText: pasteText, editing: editing, resetProject: resetProject };
 })(typeof window !== 'undefined' ? window : globalThis);
