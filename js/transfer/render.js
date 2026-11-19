@@ -8,6 +8,7 @@
   const inkColor = '#161616';
   const chineseCaptionSize = 51;
   const englishCaptionSize = 29;
+  const largeLineSize = 116;
   const enlargedNameGap = 14;
 
   function box(text, role, family, size, measure) {
@@ -31,7 +32,7 @@
 
   function numberColumns(number, measure, scale) {
     return [
-      { gapBefore: 8 * scale, main: box(number, 'line-number', core.FONT_NUM, 116 * scale, measure) },
+      { gapBefore: 8 * scale, main: box(number, 'line-number', core.FONT_NUM, largeLineSize * scale, measure) },
       captionColumn('号线', 'Line', (number === '1' ? 12 : 8) * scale, measure, scale),
     ];
   }
@@ -44,16 +45,16 @@
     const english = line.englishName
       ? box(line.englishName, 'line-english-name', core.FONT_EN, englishCaptionSize * scale, measure) : null;
     const main = name
-      ? box(splitSuffix ? name.slice(0, -1) : name, 'line-name', core.FONT_ZH, (enlarged ? 116 : chineseCaptionSize) * scale, measure)
+      ? box(splitSuffix ? name.slice(0, -1) : name, 'line-name', core.FONT_ZH, (enlarged ? largeLineSize : chineseCaptionSize) * scale, measure)
       : null;
     if (!splitSuffix) return [{ gapBefore, main, english, enlarged }];
     return [
       { gapBefore, main, enlarged },
-      { gapBefore, main: box('线', 'line-name-suffix', core.FONT_ZH, chineseCaptionSize * scale, measure), english },
+      { gapBefore, main: box('线', 'line-name-suffix', core.FONT_ZH, chineseCaptionSize * scale, measure), english, alignLeft: true },
     ];
   }
 
-  function label(lines, measure, scale) {
+  function label(lines, measure, scale, largeSeparator) {
     const columns = [captionColumn('换乘', 'Transfer', 0, measure, scale)];
     const visibleLines = lines.filter(line => line.line || line.englishName);
     if (visibleLines.length && visibleLines.every(line => line.number)) {
@@ -62,7 +63,9 @@
       visibleLines.forEach((line, index) => {
         if (index) {
           const gapBefore = (columns.at(-1).enlarged ? enlargedNameGap : 8) * scale;
-          columns.push({ gapBefore, main: box('/', 'line-separator', core.FONT_ZH, chineseCaptionSize * scale, measure) });
+          const family = largeSeparator ? core.FONT_NUM : core.FONT_ZH;
+          const size = largeSeparator ? largeLineSize : chineseCaptionSize;
+          columns.push({ gapBefore, main: box('/', 'line-separator', family, size * scale, measure) });
         }
         columns.push(...(line.number ? numberColumns(line.number, measure, scale) : namedColumns(line, measure, scale)));
       });
@@ -78,10 +81,10 @@
     const captionBaseline = pairedHeight + rowGap + englishAscent;
     const englishBaseline = columns.some(column => column.enlarged)
       ? captionBaseline : Math.max(captionBaseline, tallestText - englishDescent);
-    const positionedColumns = columns.map(({ gapBefore, main, english, enlarged }) => {
+    const positionedColumns = columns.map(({ gapBefore, main, english, enlarged, alignLeft }) => {
       const englishTop = enlarged ? main.height + rowGap : englishBaseline - (english?.ascent || 0);
       return {
-        gapBefore,
+        gapBefore, alignLeft,
         width: Math.max(main?.width || 0, english?.width || 0),
         text: [main && { ...main, top: 0 }, english && { ...english, top: englishTop }].filter(Boolean),
       };
@@ -106,7 +109,7 @@
   }
 
   function measureLabel(group, measure, scale, arrowBesideText) {
-    const { columns, height: textHeight } = label(group.lines, measure, scale);
+    const { columns, height: textHeight } = label(group.lines, measure, scale, arrowBesideText);
     const width = columns.reduce((total, column) => total + column.gapBefore + column.width, 0);
     const arrowSize = arrowBesideText ? 78 * scale : 0;
     const arrowGap = arrowBesideText ? 14 * scale : 0;
@@ -133,7 +136,7 @@
       columnLeft += column.gapBefore;
       for (const item of column.text) {
         const textTop = center - textHeight / 2 + item.top;
-        const textLeft = group.alignment === 'right' ? columnLeft + column.width - item.width : columnLeft;
+        const textLeft = group.alignment === 'right' && !column.alignLeft ? columnLeft + column.width - item.width : columnLeft;
         nodes.push({
           tag: 'text',
           text: item.text,
@@ -199,7 +202,7 @@
       const captionHeight = sharedBands ? 144 : 176;
       addLabel(nodes, group, measure, sharedBands ? 704 : 620, fitLabel(group, measure, captionHeight));
     }
-    const usedFonts = { zh400: true, num400: nodes.some(node => node.attributes['data-role'] === 'line-number') };
+    const usedFonts = { zh400: true, num400: nodes.some(node => node.attributes['font-family'] === core.FONT_NUM) };
     return { width, height, nodes, elements: selectionBounds(nodes), patterns: linePatterns, usedFonts };
   }
 

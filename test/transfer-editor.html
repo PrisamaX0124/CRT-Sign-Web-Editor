@@ -706,6 +706,40 @@
       assert(english.value === 'Loop Line' && checked(), '改回文字线路后丢失英文或放大设置');
     });
 
+    await test('版式 B 的 1+2 和 2+1 中，数字和文字混排的斜杠与编号同字号，放大后的线字左对齐', () => {
+      const previous = editor.App.state;
+      editor.App.update(() => editor.TransferState.create());
+      try {
+        mode('separate');
+        const measure = editor.App.measure;
+        const inkLeft = node => Number(node.getAttribute('x')) - measure.ink(node.textContent, node.getAttribute('font-family'),
+          400, Number(node.getAttribute('font-size'))).abl;
+        for (const [setting, numbered, named, group] of [['1+2', 'second', 'third', 'lower'], ['2+1', 'first', 'second', 'upper']]) {
+          arrangement(setting);
+          line(numbered, '9');
+          line(named, '环线');
+          input('#transfer-line-english-name', 'Loop Line');
+          if (element('#transfer-line-large-name').getAttribute('aria-checked') === 'true') click('#transfer-line-large-name');
+          const checkSeparator = () => {
+            const [separator] = drawing('line-separator');
+            const number = drawing('line-number').find(node => node.textContent === '9');
+            assert(separator?.textContent === '/' && number, '没有显示数字与文字线路之间的斜杠');
+            assert(separator.getAttribute('font-size') === number.getAttribute('font-size') &&
+              separator.getAttribute('font-family') === number.getAttribute('font-family'), '斜杠没有使用线路编号的字体和字号');
+          };
+          checkSeparator();
+          click('#transfer-line-large-name');
+          select('label:' + group);
+          input('#transfer-group-alignment select', 'right', 'change');
+          checkSeparator();
+          const [suffix] = drawing('line-name-suffix');
+          const [translation] = drawing('line-english-name');
+          assert(suffix?.textContent === '线' && translation?.textContent === 'Loop Line' &&
+            Math.abs(inkLeft(suffix) - inkLeft(translation)) < 0.01, '线字和英文名的墨区左沿没有对齐');
+        }
+      } finally { editor.App.update(() => previous); }
+    });
+
     await test('版式 B 重新打开后按线路恢复中文、英文、放大设置和分组', async () => {
       mode('separate');
       arrangement('1+2');

@@ -114,6 +114,7 @@ function createPreview({ alignTop = false, observeResize = true } = {}) {
   } : undefined;
   browser.addEventListener = (event, callback) => { assert.equal(event, 'resize'); resize = callback; };
   browser.setTimeout = setTimeout;
+  browser.clearTimeout = clearTimeout;
   let changes = 0;
   const zoom = browser.PreviewZoom.create({
     viewport, stage, paper, graphic, alignTop, controls: { querySelector: selector => selector === 'button' ? position : zoomMenu },
@@ -256,4 +257,20 @@ test('锁定后保留位置和比例，解锁后恢复缩放和拖动', () => {
   preview.pointer('pointerup', 300, 225, 1);
   preview.wheel({ shiftKey: true });
   assert.equal(preview.percent(), '120%');
+});
+
+test('切换项目解除锁定和滚动，下一张长图从适应比例开始', () => {
+  const preview = createPreview();
+  preview.zoom.refresh(1000, 800);
+  preview.choose(100);
+  preview.viewport.scrollLeft = 120;
+  preview.viewport.scrollTop = 80;
+  preview.toggleLock();
+  preview.zoom.resetForProject();
+  preview.zoom.refresh(250, 6000);
+  assert.equal(preview.position['aria-pressed'], 'false');
+  assert.equal(preview.zoomMenu.disabled, false);
+  assert.equal(preview.viewport.scrollLeft, 0);
+  assert.equal(preview.viewport.scrollTop, 0);
+  assert.equal(preview.percent(), '7.5%');
 });

@@ -6,7 +6,7 @@
   <title>CRT标识编辑器 - 站台标识</title>
   <link rel="stylesheet" href="style.css?v=3f3055915bc4">
   <link rel="stylesheet" href="platform.css?v=e3421f531c96">
-  <link rel="stylesheet" href="project-dialog.css?v=5b9826220110">
+  <link rel="stylesheet" href="project-dialog.css?v=aecc417f1128">
   <link rel="stylesheet" href="image-upload.css?v=39bea1cc93e6">
 </head>
 <body class="editor-page platform-page">
@@ -66,7 +66,7 @@
     <main class="platform-preview editor-center">
       <div class="preview-toolbar">
         <div class="preview-heading">
-          <strong class="project-preview-title"><span id="platform-project-current">未命名项目</span><span aria-hidden="true"> / </span><span id="preview-title">全线吊板</span></strong>
+          <strong class="project-preview-title"><button type="button" id="platform-project-current" class="project-title-button" data-control-icon="property-edit" aria-haspopup="dialog" disabled>未命名项目</button><span aria-hidden="true"> / </span><span id="preview-title">全线吊板</span></strong>
           <span id="preview-dimensions" class="preview-dimensions"></span>
         </div>
         <div class="preview-toolbar-actions">
@@ -350,9 +350,9 @@
   <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button type="button" class="dialog-close" data-control-icon="close" aria-label="关闭预设保存"></button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required autofocus></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn btn-primary" id="save-preset-confirm">保存预设</button></div></form></dialog>
   <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
-  <script src="js/editor-motion.js?v=46757705e313"></script>
+  <script src="js/editor-motion.js?v=eb549798c2c0"></script>
   <script src="js/property-tabs.js?v=9090db99e9cc"></script>
-  <script src="js/preview-zoom.js?v=50ef3a6499ca"></script>
+  <script src="js/preview-zoom.js?v=88de2a46de57"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
   <script src="js/palette-manager.js?v=800486182d2f"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
@@ -374,10 +374,11 @@
   <script src="vendor/zip.min.js?v=2.25.0"></script>
   <script src="js/platform/batch.js?v=77ffb48c2c7c"></script>
   <script src="js/platform/batch-dialog.js?v=7f5085bd72fa"></script>
-  <script src="js/projects/manager.js?v=505228470ad0"></script>
-  <script src="js/projects/store.js?v=46b5ba86f1fe"></script>
-  <script src="js/projects/dialog.js?v=7a0bc72f140a"></script>
+  <script src="js/projects/manager.js?v=cc1fd786bbb3"></script>
+  <script src="js/projects/store.js?v=e86ebcfcd560"></script>
+  <script src="js/projects/thumbnails.js?v=35633448b66b"></script>
+  <script src="js/projects/dialog.js?v=a0dd69de95c9"></script>
   <script src="js/platform/projects.js?v=7415e8c7a872"></script>
-  <script src="js/platform/main.js?v=f107b0cf8896"></script>
+  <script src="js/platform/main.js?v=371a22df523f"></script>
 </body>
 </html>

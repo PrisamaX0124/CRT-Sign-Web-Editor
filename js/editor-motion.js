@@ -22,8 +22,24 @@
     return play(element, [{ opacity: 0 }, { opacity: 1 }], durationName);
   }
 
-  function prepareGraphicCrossfade(graphic, drawPrevious) {
+  function stopGraphicTransition(graphic) {
     graphicTransitions.get(graphic)?.();
+  }
+
+  function revealGraphic(graphic) {
+    stopGraphicTransition(graphic);
+    const animation = play(graphic, [{ opacity: .52 }, { opacity: 1 }], 'reveal');
+    if (!animation) return;
+    function clear() {
+      if (graphicTransitions.get(graphic) === clear) graphicTransitions.delete(graphic);
+      animation.cancel();
+    }
+    graphicTransitions.set(graphic, clear);
+    animation.finished.then(clear, clear);
+  }
+
+  function prepareGraphicCrossfade(graphic, drawPrevious) {
+    stopGraphicTransition(graphic);
     if (!timing(graphic, 'reveal').duration) return;
     const before = graphic.getBoundingClientRect();
     if (!before.width || !before.height) return;
@@ -114,5 +130,5 @@
     else callback();
   }
 
-  global.EditorMotion = { timing, play, fadeIn, prepareGraphicCrossfade, reveal, setToolbarVisible, placeToolbar, afterMotion };
+  global.EditorMotion = { timing, play, fadeIn, stopGraphicTransition, revealGraphic, prepareGraphicCrossfade, reveal, setToolbarVisible, placeToolbar, afterMotion };
 })(typeof window !== 'undefined' ? window : globalThis);

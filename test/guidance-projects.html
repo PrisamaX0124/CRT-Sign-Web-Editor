@@ -32,7 +32,7 @@
   async function test(name, action) {
     const item = document.createElement('li');
     try { await action(); item.className = 'pass'; item.textContent = name; }
-    catch (error) { item.className = 'fail'; item.textContent = name + '：' + error.message; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '：' + error.message; console.error(name, error); }
     results.append(item);
   }
   try {
@@ -62,14 +62,27 @@
       control('new').click(); control('name').value = '新建导向';
       control('name-dialog').querySelector('form').requestSubmit();
       await waitFor(() => !control('name-dialog').open && app.projects.current.name === '新建导向');
+      assert(!control('dialog').open, '新建成功后仍停留在项目列表');
       assert(app.state.rows.length === 1 && app.state.rows[0].elements.length === 0, '新建项目有旧工程内容');
       assert(control('current').parentElement.textContent.includes('新建导向 / 导向标识'), '项目名称没有显示在标题栏');
-      control('search').value = '新建导向'; control('search').dispatchEvent(new editor.Event('input'));
+      control('current').focus(); control('current').click();
+      assert(control('name-dialog').open && editor.document.activeElement === control('name'), '标题不能直接改名');
+      control('name').value = '标题改名 <&>';
+      control('name-dialog').querySelector('form').requestSubmit();
+      await waitFor(() => !control('name-dialog').open && control('current').textContent === '标题改名 <&>');
+      await waitFor(() => editor.document.activeElement === control('current'));
+      control('open').click();
+      assert(control('list').dataset.view === 'list', '重新打开后未保留列表视图');
+      control('search').value = '不存在的导向'; control('search').dispatchEvent(new editor.Event('input'));
+      await waitFor(() => !control('empty').hidden && control('list').children.length === 0);
+      control('clear-search').click();
+      assert(!control('search').value && editor.document.activeElement === control('search'));
+      control('search').value = '标题改名'; control('search').dispatchEvent(new editor.Event('input'));
       await waitFor(() => control('list').children.length === 1);
       const menu = control('list').querySelector('details');
       assert(!menu.open, '项目操作没有默认收起'); menu.querySelector('summary').click();
       assert(menu.open, '无法展开项目操作');
-      menu.querySelector('[aria-label="重命名 新建导向"]').click();
+      menu.querySelector('[aria-label="重命名 标题改名 <&>"]').click();
       control('name').value = '站厅导向'; control('name-dialog').querySelector('form').requestSubmit();
       await waitFor(() => !control('name-dialog').open && app.projects.current.name === '站厅导向');
       control('search').value = '站厅导向'; control('search').dispatchEvent(new editor.Event('input'));
@@ -133,6 +146,30 @@
         await app.projects.open(first);
         assert(!app.selectedIds().length && !app.undo(), '重新打开项目恢复了旧选区或历史');
       } finally { clipboard.writeText = write; clipboard.readText = read; }
+    });
+    await test('切换时取消旧工程的清空确认，较晚返回的文件读取不会另建项目', async () => {
+      const current = app.projects.current.id, original = app.state;
+      const field = control('file'), readFile = editor.SignStorage.readProjectFile;
+      let finishReading;
+      editor.SignStorage.readProjectFile = () => new Promise(resolve => { finishReading = resolve; });
+      try {
+        const selection = new editor.DataTransfer();
+        selection.items.add(new editor.File(['{}'], '读取中的工程.json'));
+        field.files = selection.files;
+        field.dispatchEvent(new editor.Event('change'));
+        editor.document.querySelector('[data-section="project-actions"] button').click();
+        const confirm = editor.document.querySelector('#modal-root .modal-mask [data-act="ok"]');
+        assert(confirm, '没有打开清空标识牌确认');
+        await app.projects.duplicate(current, '确认未完成的副本');
+        const copy = app.projects.current.id;
+        assert(!editor.document.querySelector('#modal-root .modal-mask'), '旧工程的确认仍覆盖画布');
+        confirm.click();
+        finishReading(original);
+        await new Promise(resolve => setTimeout(resolve, 80));
+        assert(app.projects.current.id === copy && app.state.rows[0].elements.length === original.rows[0].elements.length,
+          '较早的确认或文件读取影响了新项目');
+        await app.projects.open(current);
+      } finally { editor.SignStorage.readProjectFile = readFile; }
     });
     await test('写入失败时不切换，备份包含最新编辑，重试后保存成功', async () => {
       const first = app.projects.current.id;

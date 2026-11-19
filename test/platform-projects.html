@@ -26,6 +26,28 @@
   const edit = name => app.update(state => editor.PlatformState.settings(state, { lineName: name }));
   try {
     await open();
+    await test('旧数据库升级后列表只读取项目资料，原工程和当前项目仍在', async () => {
+      const name = 'platform-project-old-' + Date.now();
+      const original = editor.PlatformProjects.record('旧数据库工程', app.state);
+      delete original.contentRevision;
+      await new Promise((resolve, reject) => {
+        const request = editor.indexedDB.open(name, 1);
+        request.onupgradeneeded = () => {
+          const database = request.result;
+          database.createObjectStore('projects', { keyPath: 'id' }).add(original);
+          database.createObjectStore('settings', { keyPath: 'key' }).add({ key: 'current', value: original.id });
+        };
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => { request.result.close(); resolve(); };
+      });
+      const store = await editor.PlatformProjects.openStore(editor.indexedDB, name);
+      try {
+        const [details] = await store.list();
+        assert(details.id === original.id && details.name === original.name && !('data' in details));
+        assert((await store.read(details.id)).data === original.data);
+        assert((await store.initialize()).id === original.id);
+      } finally { store.close(); }
+    });
     await test('旧版自动存档完整迁移，重复初始化不增加项目，旧原文一直保留', async () => {
       const Projects = editor.PlatformProjects, source = editor.PlatformState.serialize(app.state);
       localStorage.setItem(legacyKey, source);
@@ -78,12 +100,19 @@
       control('new').click(); control('name').value = '测试线路甲';
       control('name-dialog').querySelector('form').requestSubmit();
       await waitFor(() => !control('name-dialog').open && app.projects.current.name === '测试线路甲');
+      assert(!control('dialog').open, '新建成功后仍停留在项目列表');
       const first = app.projects.current.id;
       await app.projects.rename(first, '测试线路乙');
       assert(control('current').textContent === '测试线路乙');
       assert(control('current').parentElement.textContent.includes('测试线路乙 / 全线吊板'));
-      await app.projects.duplicate(first, '测试副本');
+      control('open').click();
+      await waitFor(() => control('list').querySelector('[aria-label="复制 测试线路乙"]'));
+      control('list').querySelector('[aria-label="复制 测试线路乙"]').click();
+      control('name').value = '测试副本'; control('name-dialog').querySelector('form').requestSubmit();
+      await waitFor(() => !control('name-dialog').open && app.projects.current.name === '测试副本');
+      assert(!control('dialog').open, '副本打开后仍停留在项目列表');
       const duplicate = app.projects.current.id;
+      control('open').click();
       control('search').value = '测试副本'; control('search').dispatchEvent(new editor.Event('input'));
       await waitFor(() => control('list').children.length === 1);
       const actions = control('list').querySelector('details');
@@ -101,6 +130,37 @@
       control('dialog').dispatchEvent(new editor.Event('cancel', { cancelable: true }));
       control('dialog').close(); await new Promise(resolve => setTimeout(resolve, 0));
       await waitFor(() => editor.document.activeElement === control('open'));
+    });
+    await test('保存失败时保留名称弹窗和旧名称，切换项目时解除锁定并适应长图', async () => {
+      const initial = app.projects.current, transaction = editor.IDBDatabase.prototype.transaction;
+      const zoom = editor.document.querySelector('#platform-zoom select');
+      const lock = editor.document.querySelector('#platform-zoom button');
+      zoom.value = '200'; zoom.dispatchEvent(new editor.Event('change'));
+      await waitFor(() => !editor.document.querySelector('[data-zoom-transition]'));
+      lock.click();
+      control('current').click(); control('name').value = '写入失败';
+      editor.IDBDatabase.prototype.transaction = function (names, mode, ...args) {
+        if (mode === 'readwrite') throw new editor.DOMException('空间不足', 'QuotaExceededError');
+        return transaction.call(this, names, mode, ...args);
+      };
+      try {
+        control('name-dialog').querySelector('form').requestSubmit();
+        await waitFor(() => control('name-error').textContent.includes('空间不足'));
+        assert(control('name-dialog').open && control('current').textContent === initial.name);
+      } finally { editor.IDBDatabase.prototype.transaction = transaction; }
+      control('name-cancel').click();
+      const State = editor.PlatformState;
+      const stations = Array.from({ length: 100 }, (_, index) => `${index + 1}|车站${index + 1}|Station ${index + 1}`).join('\n');
+      const long = State.settings(State.replaceStations(app.state, State.parseStations(stations, app.state.city)), {
+        mode: 'vertical', sizes: { ...app.state.sizes, vertical: { height: 8192 } },
+      });
+      await app.projects.create('长线路', long);
+      assert(lock.getAttribute('aria-pressed') === 'false' && zoom.value === 'fit', '新工程继承了锁定或缩放');
+      assert(parseFloat(editor.document.getElementById('platform-svg').style.height) / app.scene.output.height < 0.25, '长图无法缩到 25% 以下');
+      zoom.value = '50'; zoom.dispatchEvent(new editor.Event('change'));
+      await waitFor(() => !editor.document.querySelector('[data-zoom-transition]'));
+      app.select(app.state.stations.at(-1).id); edit('编辑后保留比例');
+      assert(zoom.value === '50', '普通编辑重置了缩放');
     });
     await test('快速编辑与连续切换分别保存，复制完整底纹、站点、换乘并保持独立', async () => {
       const State = editor.PlatformState;
@@ -150,12 +210,15 @@
       const first = app.projects.current.id, count = (await app.projects.list()).length;
       const file = editor.document.getElementById('project-file');
       function select(source) { const transfer = new editor.DataTransfer(); transfer.items.add(new editor.File([source], '导入工程.json')); file.files = transfer.files; file.dispatchEvent(new editor.Event('change')); }
+      control('open').click();
       select(editor.PlatformState.serialize(editor.PlatformState.settings(app.state, { lineName: '导入线路' })));
-      await waitFor(() => app.projects.current.id !== first);
+      await waitFor(() => app.projects.current.id !== first && !control('dialog').open);
       assert((await app.projects.list()).length === count + 1 && app.state.lineName === '导入线路');
-      const imported = app.projects.current.id; select('{');
+      const imported = app.projects.current.id;
+      control('open').click(); select('{');
       await waitFor(() => editor.document.getElementById('platform-notice').textContent.includes('导入失败'));
-      assert(app.projects.current.id === imported);
+      assert(app.projects.current.id === imported && control('dialog').open && control('error').textContent.includes('导入失败'));
+      control('close').click();
     });
     await test('刷新恢复最后打开的项目，旧自动存档不重复迁移', async () => {
       const id = app.projects.current.id, count = (await app.projects.list()).length;

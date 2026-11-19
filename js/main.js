@@ -107,25 +107,20 @@
       App.autosave = SignProjectDialog.init(App, {
         library,
         editor: 'guidance',
+        graphic: document.getElementById('sign-svg'),
         fileInput: document.getElementById('guidance-project-file'),
         notice: SignUI.toast,
         exportProject: App.exportProject,
-        showProject: name => {
-          const title = document.getElementById('guidance-project-current');
-          title.textContent = title.title = name;
+        deserialize: SignState.deserializeSign,
+        limitSize: false,
+        drawThumbnail: async (state, signal) => {
+          await App.ready;
+          signal.throwIfAborted();
+          const drawing = document.createElementNS(SignCore.SVG_NS, 'svg');
+          const size = SignRender.renderSignInto(drawing, state, App.measure, { clean: true });
+          return { drawing, size, usedFonts: SignExporters.collectUsedFonts(state) };
         },
         formatDetails: project => (project.rowCount ?? 0) + ' 行 · ' + (project.elementCount ?? 0) + ' 个元素',
-      });
-      SignStorage.bindProjectImport({
-        input: document.getElementById('guidance-project-file'),
-        deserialize: SignState.deserializeSign,
-        applyProject: async function (project, file) {
-          await App.autosave.ready;
-          if (!App.projects) throw new Error('本地项目存储不可用，请先导出备份并重试');
-          await App.projects.create(file.name.replace(/\.json$/i, '').trim() || '导入项目', project);
-        },
-        notice: SignUI.toast,
-        limitSize: false,
       });
       await App.autosave.ready;
       App.measure = SignCore.createCanvasMeasurer();

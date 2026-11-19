@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>项目交互动效测试</title>
+<style>body{font:14px system-ui}iframe{width:1280px;height:850px}.fail{color:#bd2222}</style>
+<h1>项目交互动效测试</h1>
+<p id="summary">运行中…</p><ol id="results"></ol>
+<iframe title="标识编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.querySelector('iframe'), results = document.getElementById('results');
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const wait = duration => new Promise(resolve => setTimeout(resolve, duration));
+  let editor, app, reduced;
+  const control = name => editor.document.getElementById('platform-project-' + name);
+  const dialog = () => control('dialog');
+  const list = () => control('list');
+  async function waitFor(check, message) {
+    const deadline = performance.now() + 8000;
+    while (!check()) {
+      assert(performance.now() < deadline, message);
+      await wait(20);
+    }
+  }
+  async function test(name, action) {
+    const item = document.createElement('li');
+    try { await action(); item.className = 'pass'; item.textContent = name; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '：' + error.message; console.error(name, error); }
+    results.append(item);
+  }
+  function activeAnimations(element) {
+    element.getBoundingClientRect();
+    return element.getAnimations().filter(animation => animation.playState === 'running');
+  }
+  try {
+    await new Promise(resolve => { frame.onload = resolve; frame.src = '../platform.html'; });
+    editor = frame.contentWindow; app = editor.App;
+    await app.ready;
+    reduced = editor.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    await test('弹窗淡入淡出，快速关闭和重开时仍可立刻聚焦和操作', async () => {
+      control('open').click();
+      assert(dialog().open && editor.document.activeElement === control('search'), '打开时未立刻聚焦搜索框');
+      assert(reduced ? !activeAnimations(dialog()).length : activeAnimations(dialog()).length, '弹窗打开动效与系统设置不符');
+      await waitFor(() => list().children.length > 0, '项目列表未载入');
+      await wait(260);
+      control('close').click();
+      assert(!dialog().open, '动画阻止了弹窗立即关闭');
+      assert(dialog().inert, '关闭中的按钮仍可参与键盘导航');
+      assert(reduced ? !activeAnimations(dialog()).length : activeAnimations(dialog()).length, '弹窗关闭动效与系统设置不符');
+      assert(editor.getComputedStyle(dialog()).pointerEvents === 'none' || editor.getComputedStyle(dialog()).display === 'none', '关闭动效仍会拦截鼠标');
+      control('open').click();
+      await wait(270);
+      assert(dialog().open && !dialog().inert && editor.document.activeElement === control('search'), '重新打开时关闭动效抢走了焦点');
+    });
+    await test('切换视图复用卡片，搜索保留仍匹配的卡片，新图显示时淡入', async () => {
+      const current = list().firstElementChild;
+      dialog().querySelector('[data-project-view="list"]').click();
+      assert(list().firstElementChild === current, '切换视图重建了卡片');
+      assert(reduced ? !activeAnimations(list()).length : activeAnimations(list()).length, '视图切换动效与系统设置不符');
+      dialog().querySelector('[data-project-view="cards"]').click();
+      assert(activeAnimations(list()).length <= 1, '组件叠加了旧动效');
+      const search = control('search');
+      search.value = app.projects.current.name;
+      search.dispatchEvent(new editor.Event('input'));
+      assert(list().firstElementChild === current, '输入搜索时重建了匹配卡片');
+      let fade;
+      const original = editor.EditorMotion.fadeIn;
+      editor.EditorMotion.fadeIn = (element, ...args) => {
+        const animation = original(element, ...args);
+        if (element.matches('.project-card-preview img')) fade = !!animation;
+        return animation;
+      };
+      try {
+        await waitFor(() => fade !== undefined, '缩略图未淡入');
+        assert(fade !== reduced, '缩略图动效与系统设置不符');
+      } finally { editor.EditorMotion.fadeIn = original; }
+      control('clear-search').click();
+    });
+    await test('创建后高亮项目卡片，新画布适应大小且连续切换只保留一次动效', async () => {
+      control('new').click();
+      control('name').value = '动画测试项目';
+      control('name-dialog').querySelector('form').requestSubmit();
+      await waitFor(() => !dialog().open && app.projects.current.name === '动画测试项目', '项目未保存或没有进入画布');
+      const id = app.projects.current.id;
+      const graphic = editor.document.getElementById('platform-svg');
+      assert(reduced ? !activeAnimations(graphic).length : activeAnimations(graphic).length === 1, '切换画布动效与系统设置不符');
+      assert(editor.document.querySelector('#platform-zoom select').value === 'fit', '切换后画布没有立即适应');
+      control('open').click();
+      await waitFor(() => list().firstElementChild?.dataset.projectId === id, '列表没有显示新项目');
+      const current = list().firstElementChild;
+      assert(reduced ? !activeAnimations(current).length : activeAnimations(current).length, '新项目卡片动效与系统设置不符');
+      control('close').click();
+      await Promise.all([app.projects.create('连续切换一'), app.projects.create('连续切换二')]);
+      assert(app.projects.current.name === '连续切换二' && activeAnimations(graphic).length <= 1, '旧画布动效影响后一次切换');
+      assert(!editor.document.querySelector('.outgoing-sign-preview'), '旧画布还盖在新画布上');
+    });
+    await test('窄窗口仍能看清被截断的项目名，尺寸和按钮各有足够空间', async () => {
+      frame.style.width = '1120px';
+      await app.projects.rename(app.projects.current.id, '很长的项目名'.repeat(13));
+      const title = control('current');
+      const toolbar = title.closest('.preview-toolbar');
+      const heading = title.closest('.preview-heading').getBoundingClientRect();
+      const dimensions = toolbar.querySelector('.preview-dimensions').getBoundingClientRect();
+      const tools = toolbar.querySelector('.preview-toolbar-actions').getBoundingClientRect();
+      assert(title.clientWidth > 65 && title.scrollWidth > title.clientWidth, '长名称完全被挤掉或没有截断');
+      assert(tools.top >= heading.bottom || tools.left >= dimensions.right, '工具遮住标题或画布尺寸');
+    });
+  } catch (error) { await test('测试启动', () => { throw error; }); }
+  const passed = results.querySelectorAll('.pass').length, failed = results.querySelectorAll('.fail').length;
+  document.getElementById('summary').textContent = passed + ' 通过 / ' + failed + ' 失败';
+  document.title = (failed ? '✖ ' : '✔ ') + document.getElementById('summary').textContent + ' 项目交互动效测试';
+})();
+</script>

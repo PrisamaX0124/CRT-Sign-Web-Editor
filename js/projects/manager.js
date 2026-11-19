@@ -2,9 +2,10 @@
   'use strict';
 
   function createLibrary({ databaseName, legacyKey, legacyName, createDefault, serialize, deserialize, describe }) {
-    function conflictError() {
+    function conflictError(projectId) {
       const error = new Error('项目已在其他窗口修改，请先导出备份，再重新打开，或另存副本。');
       error.name = 'ProjectConflictError';
+      error.projectId = projectId;
       return error;
     }
 
@@ -19,7 +20,7 @@
       deserialize(data);
       return {
         id: global.SignCore.uuid(), name: projectName(name), createdAt: Date.now(), updatedAt: Date.now(),
-        revision: 1, data, ...describe(state),
+        revision: 1, contentRevision: 1, data, ...describe(state),
       };
     }
 
@@ -32,10 +33,10 @@
     }
 
     function createManager({ store, getState, applyState, onStatus, onCurrent, onBusy = () => {}, publish = () => {}, delay = 500 }) {
-      let current = null, savedContent, dirty = false, conflict = false, timer, queue = Promise.resolve(), busy = false;
+      let current = null, savedContent, dirty = false, conflict = false, timer, queue = Promise.resolve(), busy = false, activation = 0;
       function status(state, message) { onStatus(state, message); }
       function failed(error) {
-        if (error.name === 'ProjectConflictError') conflict = true;
+        if (error.name === 'ProjectConflictError' && (!error.projectId || error.projectId === current?.id)) conflict = true;
         const reason = error.name === 'QuotaExceededError' ? '浏览器存储空间不足' : error.name === 'SecurityError' ? '浏览器不允许保存本地项目' : error.message || '浏览器存储不可用';
         status(conflict ? 'conflict' : 'failed', conflict ? error.message : '保存失败：' + reason + '。请导出 JSON 备份。');
       }
@@ -50,8 +51,10 @@
         return task;
       }
       function activate(value, state) {
+        const changedProject = value.id !== current?.id;
         current = value; savedContent = serialize(state); dirty = conflict = false;
-        applyState(state); onCurrent(current); status('saved', '已保存');
+        activation++;
+        applyState(state, changedProject); onCurrent(current); status('saved', '已保存');
       }
       async function read(id) {
         const value = await store.read(id);
@@ -70,7 +73,8 @@
           const data = serialize(getState());
           if (data === savedContent) { dirty = false; break; }
           const state = deserialize(data);
-          const next = { ...current, data, ...describe(state), updatedAt: Math.max(Date.now(), current.updatedAt + 1), revision: current.revision + 1 };
+          const revision = current.revision + 1;
+          const next = { ...current, data, ...describe(state), updatedAt: Math.max(Date.now(), current.updatedAt + 1), revision, contentRevision: revision };
           status('saving', '保存中');
           current = await store.write(next, current.revision);
           savedContent = data;
@@ -86,6 +90,7 @@
       }
       return {
         get current() { return current; }, get busy() { return busy; }, get pending() { return dirty || conflict; },
+        get activation() { return activation; },
         initialize(source) {
           return enqueue(async () => {
             let legacy = null, damagedLegacy = false;
@@ -113,6 +118,7 @@
         open(id) {
           return enqueue(async () => {
             await save();
+            if (id === current?.id) return;
             const { value, state } = await read(id);
             await store.select(id, value.revision);
             activate(value, state);
@@ -131,7 +137,9 @@
           return enqueue(async () => {
             await save();
             const { value } = await read(id);
-            const next = { ...value, name: projectName(name), updatedAt: Math.max(Date.now(), value.updatedAt + 1), revision: value.revision + 1 };
+            const title = projectName(name);
+            if (title === value.name) return;
+            const next = { ...value, name: title, updatedAt: Math.max(Date.now(), value.updatedAt + 1), revision: value.revision + 1, contentRevision: value.contentRevision ?? value.revision };
             await store.write(next, value.revision);
             if (id === current?.id) { current = next; onCurrent(current); }
             publish(next);
@@ -145,7 +153,11 @@
             let replacement, createReplacement = false;
             if (id === current?.id) {
               const list = (await store.list()).filter(item => item.id !== id).sort((a, b) => b.updatedAt - a.updatedAt);
-              for (const item of list) { try { replacement = { value: item, state: readState(item) }; break; } catch { /* 损坏项目保留原文供备份，不能自动覆盖。 */ } }
+              for (const item of list) {
+                const candidate = await store.read(item.id);
+                try { replacement = { value: candidate, state: readState(candidate) }; break; }
+                catch { /* 损坏项目保留原文供备份，不能自动覆盖。 */ }
+              }
               if (!replacement) {
                 const initial = record('未命名项目', createDefault());
                 createReplacement = true;
@@ -176,7 +188,7 @@
       };
     }
 
-    return { createManager, record, readState, conflictError, databaseName, legacyKey,
+    return { createManager, record, readState, projectName, conflictError, databaseName, legacyKey,
       openStore: (factory = global.indexedDB, name = databaseName) => global.SignProjectStore.open(factory, name, conflictError, () => record('未命名项目', createDefault())),
     };
   }

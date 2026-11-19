@@ -170,6 +170,24 @@ test('确认重新打开后载入其他窗口的内容，再次编辑可以保�
   app.edit('重新编辑'); await app.manager.flush(); assert.equal(app.manager.pending, false);
 });
 
+test('缩略图按工程内容版本更新，改名和同名保存沿用原版本', async () => {
+  const app = editor();
+  await app.manager.initialize();
+  const first = app.manager.current;
+  assert.equal(first.contentRevision, 1);
+  await app.manager.rename(first.id, '改名');
+  assert.equal(app.manager.current.revision, 2);
+  assert.equal(app.manager.current.contentRevision, 1);
+  await app.manager.rename(first.id, ' 改名 ');
+  assert.equal(app.manager.current.revision, 2);
+  app.edit('更新牌面');
+  await app.manager.flush();
+  assert.equal(app.manager.current.contentRevision, 3);
+  await app.manager.duplicate(first.id, '副本');
+  assert.notEqual(app.manager.current.id, first.id);
+  assert.equal(app.manager.current.contentRevision, 1);
+});
+
 test('共用存储按编辑器选择数据库、默认工程和列表资料，拒绝另一种工程', async () => {
   const { browser } = editor();
   const opened = [];

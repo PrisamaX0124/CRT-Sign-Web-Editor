@@ -42,6 +42,7 @@
     let drag = null;
     let zoom = null;
     let suppressClick = false;
+    let clickTimer;
     const shackleOutline = 'M8 12V7a4 4 0 0 1 8 0v';
 
     controls.innerHTML = `
@@ -268,7 +269,8 @@
       if (!moved) return;
       // 指针释放后浏览器还会发出单击，避免把一次拖动当作空白处取消选择。
       suppressClick = true;
-      setTimeout(() => { suppressClick = false; }, 0);
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => { suppressClick = false; }, 0);
     }
 
     function toggleLock() {
@@ -330,7 +332,24 @@
     if (global.ResizeObserver) new global.ResizeObserver(() => refresh()).observe(viewport);
     else global.addEventListener('resize', () => refresh());
 
-    return { refresh, resetInteraction() { stopZoom(); stopDrag(); } };
+    function resetInteraction() {
+      stopZoom();
+      stopDrag();
+      clearTimeout(clickTimer);
+      suppressClick = false;
+    }
+
+    function resetForProject() {
+      resetInteraction();
+      fitting = true;
+      locked = false;
+      lockedScroll = null;
+      viewport.style.paddingRight = viewport.style.paddingBottom = '';
+      viewport.scrollLeft = viewport.scrollTop = 0;
+      updateControls();
+    }
+
+    return { refresh, resetInteraction, resetForProject };
   }
 
   global.PreviewZoom = { create, fitScale, scaleFromWheel, positionForAnchor };

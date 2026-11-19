@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>项目缩略图测试</title>
+<style>body{font:14px system-ui}iframe{width:1280px;height:850px}.fail{color:#bd2222}</style>
+<h1>项目缩略图测试</h1>
+<p id="summary">运行中…</p><ol id="results"></ol>
+<iframe title="标识编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.querySelector('iframe'), results = document.getElementById('results');
+  let editor, app, prefix, store;
+  const control = name => editor.document.getElementById(prefix + '-project-' + name);
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  async function waitFor(check, message) {
+    const deadline = performance.now() + 18000;
+    while (!check()) {
+      assert(performance.now() < deadline, message);
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+  async function open(kind) {
+    store?.close();
+    await new Promise(resolve => { frame.onload = resolve; frame.src = kind === 'guidance' ? '../index.html' : '../platform.html'; });
+    editor = frame.contentWindow; app = editor.App; prefix = kind;
+    await app.ready;
+    store = await editor.SignProjectStore.open(editor.indexedDB, 'public-' + kind + '-projects');
+  }
+  async function test(name, action) {
+    const item = document.createElement('li');
+    try { await action(); item.className = 'pass'; item.textContent = name; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '：' + error.message; console.error(name, error); }
+    results.append(item);
+  }
+  function card(id) {
+    return [...control('list').children].find(item => item.dataset.projectId === id);
+  }
+  async function showList() {
+    if (!control('dialog').open) control('open').click();
+    await waitFor(() => !!card(app.projects.current.id), '项目列表未打开');
+  }
+  function search(name) {
+    control('search').value = name;
+    control('search').dispatchEvent(new editor.Event('input'));
+  }
+  async function imageFor(id) {
+    const image = () => card(id)?.querySelector('.project-card-preview img');
+    await waitFor(() => image()?.complete && image().naturalWidth > 0, '缩略图未显示');
+    return image();
+  }
+  function colors(image) {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    return context.getImageData(0, 0, canvas.width, canvas.height).data;
+  }
+  function pixelsWith(image, red, green, blue, tolerance = 22) {
+    const pixels = colors(image);
+    let count = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (Math.abs(pixels[index] - red) < tolerance && Math.abs(pixels[index + 1] - green) < tolerance && Math.abs(pixels[index + 2] - blue) < tolerance) count++;
+    }
+    return count;
+  }
+  try {
+    await open('guidance');
+    const guidance = editor.SignState;
+    const drawing = [
+      guidance.createElement('arrow', { color: '#FFFFFF' }),
+      guidance.createElement('number-line', { lines: [{ number: '10', color: '#0059C2' }], textColor: '#FFFFFF' }),
+      guidance.createElement('bilingual-text', { textZh: '站厅', textEn: 'Concourse', color: '#FFFFFF' }),
+    ].reduce((state, element) => guidance.addElement(state, state.rows[0].id, element),
+      guidance.updateSignSettings(guidance.createSign(), { width: 4000, backgroundColor: '#C12D52' }));
+    await app.projects.create('宽幅导向', drawing);
+    const wideProject = app.projects.current.id;
+    await test('导向旧缓存缺失时先用占位，随后显示有文字和图标的真实宽幅牌面', async () => {
+      assert(!await store.readThumbnail(wideProject), '尚未打开列表就生成了缩略图');
+      await showList();
+      const preview = card(wideProject).querySelector('.project-card-preview');
+      assert(preview && !preview.querySelector('img'), '缺少稳定的占位区');
+      const image = await imageFor(wideProject);
+      const ratio = app.layout.width / app.layout.height;
+      assert(Math.abs(image.naturalWidth / image.naturalHeight / ratio - 1) < .06, '宽幅导向比例变形');
+      assert(pixelsWith(image, 193, 45, 82) > image.naturalWidth, '未显示原标识牌底色');
+      assert(pixelsWith(image, 255, 255, 255) > 20 && pixelsWith(image, 0, 89, 194) > 8, '文字、箭头或蓝色线路编号未绘制');
+    });
+    await test('几十个项目优先绘制可见卡片，搜索、排序和重开复用缓存', async () => {
+      control('close').click();
+      const library = editor.SignProjects.createLibrary({
+        createDefault: guidance.createSign, serialize: guidance.serializeSign, deserialize: guidance.deserializeSign, describe: () => ({}),
+      });
+      for (let index = 0; index < 45; index++) {
+        const value = library.record('项目 ' + String(index).padStart(2, '0'), drawing);
+        value.updatedAt = app.projects.current.updatedAt - 100 - index;
+        await store.write(value, null);
+      }
+      const render = editor.SignRender.renderSignInto;
+      let draws = 0;
+      editor.SignRender.renderSignInto = function (...args) { if (args[3]?.clean) draws++; return render.apply(this, args); };
+      try {
+        await showList();
+        await waitFor(() => control('list').children.length === 47, '项目列表未完整显示');
+        const last = control('list').lastElementChild.dataset.projectId;
+        await imageFor(control('list').children[1].dataset.projectId);
+        assert(!await store.readThumbnail(last), '远离当前可见区域的卡片提前生成了缩略图');
+        control('sort').value = 'oldest'; control('sort').dispatchEvent(new editor.Event('change'));
+        assert(control('list').firstElementChild.dataset.projectId === last, '全部项目没有按时间正确排序');
+        control('sort').value = 'newest'; control('sort').dispatchEvent(new editor.Event('change'));
+        assert(control('list').firstElementChild.dataset.projectId === wideProject, '恢复最近编辑排序后顺序错误');
+        search('宽幅导向');
+        control('sort').value = 'oldest'; control('sort').dispatchEvent(new editor.Event('change'));
+        await imageFor(wideProject);
+        control('close').click(); await showList(); await imageFor(wideProject);
+        assert(control('list').children.length === 1 && draws < 12, '筛选或重新打开导致批量重绘');
+      } finally { editor.SignRender.renderSignInto = render; control('close').click(); }
+    });
+    await test('改名复用原图，复制有独立缩略图，保存内容后刷新，删除后清除缓存', async () => {
+      const first = await store.readThumbnail(wideProject);
+      assert(first?.image.size > 0, '没有缓存图片');
+      await app.projects.rename(wideProject, '宽幅导向改名');
+      await showList(); await imageFor(wideProject);
+      const renamed = await store.readThumbnail(wideProject);
+      assert(first.generatedAt === renamed.generatedAt && first.contentRevision === renamed.contentRevision, '改名导致重新绘制');
+      control('close').click();
+      await app.projects.duplicate(wideProject, '绿色副本');
+      const copy = app.projects.current.id;
+      search('绿色副本');
+      await showList(); await imageFor(copy);
+      app.update(state => guidance.updateSignSettings(state, { backgroundColor: '#128854' }));
+      await app.projects.flush();
+      await waitFor(() => !card(copy)?.querySelector('img'), '编辑后继续显示过期缩略图');
+      const image = await imageFor(copy);
+      assert(pixelsWith(image, 18, 136, 84) > image.naturalWidth, '副本没有显示新保存的底色');
+      control('close').click();
+      await app.projects.remove(copy);
+      assert(!await store.readThumbnail(copy) && (await store.readThumbnail(wideProject)).generatedAt === first.generatedAt, '删除副本影响原图或留下缓存');
+    });
+    await test('生成途中删除项目会取消旧任务，数据库拒收过期内容和已删除项目的图片', async () => {
+      await app.projects.create('生成途中删除', drawing);
+      const project = app.projects.current;
+      const prepare = editor.SignExporters.ensureUsedFontData;
+      let complete;
+      editor.SignExporters.ensureUsedFontData = (...args) => new Promise(resolve => {
+        complete = () => resolve(prepare(...args));
+      });
+      try {
+        search('生成途中删除'); await showList();
+        await waitFor(() => !!complete, '缩略图还未进入准备阶段');
+        await app.projects.remove(project.id);
+        await waitFor(() => !card(project.id), '已删除项目仍在列表');
+        complete();
+        const entry = await store.readThumbnail(wideProject);
+        assert(!await store.writeThumbnail({ ...entry, id: project.id }), '已删除项目仍接受新的图片');
+        assert(!await store.writeThumbnail({ ...entry, contentRevision: entry.contentRevision - 1 }), '过期内容仍能覆盖图片');
+        assert(!await store.readThumbnail(project.id), '已删除项目留下了图片');
+      } finally {
+        editor.SignExporters.ensureUsedFontData = prepare;
+        complete?.();
+        control('close').click();
+      }
+    });
+    await open('platform');
+    const platform = editor.PlatformState;
+    const stations = Array.from({ length: 90 }, (_, index) => `${index + 1}|新城${index + 1}站|New Town ${index + 1}|${index % 3 + 1}`).join('\n');
+    const base = platform.settings(platform.replaceStations(app.state, platform.parseStations(stations, app.state.city)), {
+      color: '#126058', linePattern: { enabled: true, source: 'line-5', size: 100, opacity: 95, image: null },
+    });
+    await test('全线吊板、本站吊板和超长纵向图各自显示真实颜色和合适的比例', async () => {
+      for (const [mode, name] of [['route', '全线吊板实例'], ['station', '本站吊板实例'], ['vertical', '纵向长图实例']]) {
+        const state = mode === 'vertical' ? base : platform.replaceStations(base, base.stations.slice(0, 5));
+        await app.projects.create(name, platform.settings(state, {
+          mode, direction: 1, currentId: state.stations[1].id,
+          sizes: { ...base.sizes, vertical: { height: 8192 } },
+        }));
+        search(name);
+        await showList();
+        const id = app.projects.current.id, image = await imageFor(id);
+        const preview = card(id).querySelector('.project-card-preview');
+        assert(image.getBoundingClientRect().height <= preview.getBoundingClientRect().height, name + '溢出卡片');
+        assert(pixelsWith(image, 18, 96, 88, 32) > 45, name + '缺少实际线路色');
+        if (mode === 'vertical') {
+          assert(preview.dataset.cropped === 'true' && image.naturalHeight / image.naturalWidth < 2.3, '超长纵向图仍被压成细条');
+        } else {
+          const ratio = app.scene.output.width / app.scene.output.height;
+          assert(Math.abs(image.naturalWidth / image.naturalHeight / ratio - 1) < .05, name + '比例变形');
+        }
+        control('close').click();
+      }
+    });
+    await test('缩略图失败时保留占位，工程可以保存、切换和导出 JSON', async () => {
+      await app.projects.create('缩略图绘制失败测试', base);
+      const id = app.projects.current.id;
+      const draw = editor.PlatformRender.draw;
+      editor.PlatformRender.draw = function (...args) {
+        if (args[2]?.clean) throw new Error('测试缩略图绘制失败');
+        return draw.apply(this, args);
+      };
+      try {
+        search('缩略图绘制失败测试'); await showList();
+        await waitFor(() => card(id)?.querySelector('[data-thumbnail-state="unavailable"]'), '绘制失败没有保留占位');
+        assert(!await store.readThumbnail(id), '绘制失败仍保存了缓存');
+        control('close').click();
+        editor.PlatformRender.draw = draw;
+        app.update(state => platform.settings(state, { lineName: '缩略图失败后继续保存' }));
+        await app.projects.flush();
+        let file;
+        const download = app.download; app.download = blob => { file = blob; };
+        try { editor.document.getElementById('save-project').click(); }
+        finally { app.download = download; }
+        assert(JSON.parse(await file.text()).lineName === '缩略图失败后继续保存', '缩略图失败影响项目导出');
+        const other = (await app.projects.list()).find(value => value.id !== id);
+        await app.projects.open(other.id);
+        assert(app.projects.current.id === other.id, '缩略图失败影响切换');
+      } finally { editor.PlatformRender.draw = draw; }
+    });
+    await test('缓存保留最近生成的六十四张图片，超出单图容量的图片仍可用于当次展示', async () => {
+      const limited = await editor.PlatformProjects.openStore(editor.indexedDB, 'project-thumbnail-limit-' + Date.now());
+      try {
+        const records = [];
+        for (let index = 0; index < 66; index++) {
+          const project = editor.PlatformProjects.record('项目 ' + index, editor.PlatformState.create());
+          await limited.write(project, null);
+          records.push(project);
+          await limited.writeThumbnail({ id: project.id, contentRevision: 1, version: 1, image: new Blob(['图片']), generatedAt: index });
+        }
+        assert(!await limited.readThumbnail(records[1].id) && await limited.readThumbnail(records[2].id), '磁盘缓存没有按生成时间限制张数');
+        const project = records[0];
+        assert(await limited.writeThumbnail({ id: project.id, contentRevision: 1, version: 1, image: new Blob([new Uint8Array(98305)]), generatedAt: 70 }), '超出缓存容量影响本次展示');
+        assert(!await limited.readThumbnail(project.id), '超出单图容量的图片被持久化');
+      } finally { limited.close(); }
+    });
+    await test('浏览器拒绝写入图片缓存时仍可显示本次图片，工程保存照常工作', async () => {
+      await app.projects.create('缓存写入受限', platform.replaceStations(base, base.stations.slice(0, 4)));
+      const id = app.projects.current.id;
+      const transaction = editor.IDBDatabase.prototype.transaction;
+      editor.IDBDatabase.prototype.transaction = function (names, mode, ...args) {
+        if (names.includes('project-thumbnails') && mode === 'readwrite') throw new editor.DOMException('空间不足', 'QuotaExceededError');
+        return transaction.call(this, names, mode, ...args);
+      };
+      try {
+        search('缓存写入受限'); await showList(); await imageFor(id);
+        assert(!await store.readThumbnail(id), '浏览器拒绝写入时缓存状态不正确');
+        app.update(state => platform.settings(state, { lineName: '缓存写入受限仍可保存' }));
+        await app.projects.flush();
+        assert(editor.document.getElementById('platform-save').dataset.saveState === 'saved', '图片写入失败使工程也无法保存');
+        control('close').click();
+      } finally { editor.IDBDatabase.prototype.transaction = transaction; }
+    });
+  } catch (error) { await test('测试启动', () => { throw error; }); }
+  finally { store?.close(); }
+  const passed = results.querySelectorAll('.pass').length, failed = results.querySelectorAll('.fail').length;
+  document.getElementById('summary').textContent = passed + ' 通过 / ' + failed + ' 失败';
+  document.title = (failed ? '✖ ' : '✔ ') + document.getElementById('summary').textContent + ' 项目缩略图测试';
+})();
+</script>

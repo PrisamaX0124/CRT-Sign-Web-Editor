@@ -473,6 +473,7 @@ test('同组文字线路各自显示中英文，英文缺省时保留中文，�
   assert.deepEqual(values(names), ['环线', '机场快线']);
   assert.deepEqual(values(translations), ['Loop Line', 'Airport Express']);
   assert.equal(scene.usedFonts.num400, false);
+  assert.equal(content(scene, 'line-separator')[0].attributes['font-family'], context.SignCore.FONT_ZH);
   for (const [index, name] of names.entries()) {
     assert.equal(name.bounds.left, translations[index].bounds.left);
     assert.ok(name.bounds.top + name.bounds.height < translations[index].bounds.top);
@@ -481,6 +482,27 @@ test('同组文字线路各自显示中英文，英文缺省时保留中文，�
   const partialScene = render.layout(partial, measure);
   assert.deepEqual(values(content(partialScene, 'line-name')), ['环线']);
   assert.deepEqual(values(content(partialScene, 'line-english-name')), ['Airport Express']);
+});
+
+test('版式 B 的 1+2 和 2+1 用线路编号的字体和字号绘制文字线路之间的斜杠', () => {
+  for (const [arrangement, first, second] of [['1+2', 'second', 'third'], ['2+1', 'first', 'second']]) {
+    const board = state.settings(initial, { mode: 'separate', arrangement });
+    for (const largeName of [false, true]) {
+      const project = state.changeLine(board, second, { name: '环线', englishName: 'Loop Line', largeName });
+      const scene = render.layout(project, measure);
+      const [separator] = content(scene, 'line-separator');
+      const number = content(scene, 'line-number').find(node => node.element.key === separator.element.key);
+      assert.equal(separator.text, '/');
+      assert.equal(separator.attributes['font-family'], context.SignCore.FONT_NUM);
+      assert.equal(separator.attributes['font-size'], number.attributes['font-size']);
+      assert.equal(separator.bounds.top, number.bounds.top);
+    }
+    const named = [first, second, arrangement === '1+2' ? 'first' : 'third'].reduce(
+      (project, identifier) => state.changeLine(project, identifier, { name: '环线', englishName: 'Loop Line' }), board);
+    const scene = render.layout(named, measure);
+    assert.equal(content(scene, 'line-number').length, 0);
+    assert.equal(scene.usedFonts.num400, true, '仅有文字线路时也需要为大斜杠内嵌编号字体');
+  }
 });
 
 test('两种版式的普通线路名与同组换乘提示的中英文字号一致', () => {
@@ -533,7 +555,7 @@ test('放大中文名时只拆开已有的线字，英文和线字同列，数�
   assert.ok(loop.attributes['font-size'] > suffix.attributes['font-size']);
   assert.equal(loop.bounds.top, suffix.bounds.top);
   const right = node => node.bounds.left + node.bounds.width;
-  assert.ok(Math.abs(right(suffix) - right(loopEnglish)) < 1e-8);
+  assert.equal(suffix.bounds.left, loopEnglish.bounds.left);
   assert.ok(Math.abs(right(express) - right(expressEnglish)) < 1e-8);
   assert.ok(expressEnglish.bounds.top > express.bounds.top + express.bounds.height);
   assert.ok(loopEnglish.bounds.top < expressEnglish.bounds.top);

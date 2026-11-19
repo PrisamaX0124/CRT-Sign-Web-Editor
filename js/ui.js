@@ -12,6 +12,7 @@
   var undoStack = [], redoStack = [];
   var historyKey = null, historyTime = 0;
   var HISTORY_LIMIT = 20;
+  var dialogCancellations = new WeakMap();
 
   function snapshot() {
     return { state: App.state, selection: Object.assign({}, App.selection, { elementIds: App.selectedIds() }) };
@@ -55,9 +56,13 @@
     /** 状态变更入口：pureFn(sign) → 新 sign；continuous用于显式结束的指针会话。 */
     update: function (pureFn, key, options) {
       if (options?.activateProject) {
+        document.querySelectorAll('#modal-root .modal-mask').forEach(function (dialog) {
+          dialogCancellations.get(dialog)?.();
+        });
         SignInteract.resetProject();
         SignClipboard.resetProject();
-        App.previewZoom?.resetInteraction();
+        if (options.changedProject) App.previewZoom?.resetForProject();
+        else App.previewZoom?.resetInteraction();
         undoStack = [];
         redoStack = [];
         historyKey = null;
@@ -426,11 +431,15 @@
         ]),
       ]);
       mask.appendChild(modal);
+      function finish(confirmed) {
+        if (dismissDialog(mask, previousFocus)) resolve(confirmed);
+      }
+      dialogCancellations.set(mask, function () { finish(false); });
       mask.addEventListener('click', function (ev) {
         var act = ev.target.getAttribute && ev.target.getAttribute('data-act');
         if (act === 'ok' || act === 'cancel' || ev.target === mask) {
           ev.stopPropagation();
-          if (dismissDialog(mask, previousFocus)) resolve(act === 'ok');
+          finish(act === 'ok');
         }
       });
       document.getElementById('modal-root').appendChild(mask);
@@ -460,6 +469,7 @@
       ]);
       mask.appendChild(modal);
       function done(value) { if (dismissDialog(mask, previousFocus)) resolve(value); }
+      dialogCancellations.set(mask, function () { done(null); });
       mask.addEventListener('click', function (ev) {
         var act = ev.target.getAttribute && ev.target.getAttribute('data-act');
         if (act === 'ok' || act === 'cancel' || ev.target === mask) {

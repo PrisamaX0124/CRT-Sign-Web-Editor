@@ -30,7 +30,9 @@
       var next = fn(App.state);
       if (options?.activateProject) {
         finishStationDrag(true, false); stationLanding?.(); pagePointer = null;
-        previewZoom.resetInteraction(); suppressStationClick = suppressPageClick = false;
+        if (options.changedProject) previewZoom.resetForProject();
+        else previewZoom.resetInteraction();
+        suppressStationClick = suppressPageClick = false;
         global.PlatformClipboard.resetProject();
         undo = []; redo = []; groupKey = null; groupTime = 0;
         App.state = next; App.selectedId = next.currentId;
@@ -147,7 +149,7 @@
     renderedCurrentId = App.state.currentId;
     var graphic = $('platform-svg'), previous = App.scene;
     var layout = App.state.mode === 'vertical' ? App.state.mode + ':' + App.state.verticalVariant : App.state.mode;
-    var finishCrossfade = previous && layout !== renderedLayout ? global.EditorMotion.prepareGraphicCrossfade(graphic, function (old) {
+    var finishCrossfade = previous && renderedLayout && layout !== renderedLayout ? global.EditorMotion.prepareGraphicCrossfade(graphic, function (old) {
       R.draw(old, previous, { clean: true });
     }) : null;
     renderedLayout = layout;
@@ -748,20 +750,6 @@
   var projectFile = $('project-file');
   $('save-project').addEventListener('click', exportProject);
   $('import-project').addEventListener('click', function () { projectFile.click(); });
-  global.SignStorage.bindProjectImport({
-    input: projectFile,
-    deserialize: async function (source) {
-      var project = S.deserialize(source);
-      await global.PlatformPatterns.validateImage(project.linePattern.image);
-      return project;
-    },
-    applyProject: async function (project, file) {
-      await App.projectStorage.ready;
-      if (!App.projects) throw new Error('本地项目存储不可用，请先导出备份并重试');
-      await App.projects.create(file.name.replace(/\.json$/i, '') || '导入项目', project);
-    },
-    notice: notice,
-  });
   function selectLibrary(name) {
     var changed = library !== name;
     library = name;
@@ -884,12 +872,20 @@
   App.projectStorage = global.SignProjectDialog.init(App, {
     library: global.PlatformProjects,
     editor: 'platform',
+    graphic: $('platform-svg'),
     fileInput: projectFile,
     notice: notice,
     exportProject: exportProject,
-    showProject: function (name) {
-      var title = $('platform-project-current');
-      title.textContent = title.title = name;
+    deserialize: async function (source) {
+      var project = S.deserialize(source);
+      await global.PlatformPatterns.validateImage(project.linePattern.image);
+      return project;
+    },
+    drawThumbnail: async function (state, signal) {
+      await App.ready;
+      signal.throwIfAborted();
+      const scene = R.metrics(state, App.measure);
+      return { drawing: drawExportSVG(scene), size: scene.output, usedFonts: scene.usedFonts, cropVertical: state.mode === 'vertical' };
     },
     formatDetails: function (project) { return (project.lineName || '未命名线路') + ' · ' + (project.stationCount || 0) + ' 站'; },
   });
