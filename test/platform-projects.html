@@ -70,16 +70,24 @@
     });
     await test('创建、重命名、复制、搜索、排序及删除确认，Esc 与焦点返回', async () => {
       control('open').click(); await waitFor(() => control('dialog').open && editor.document.activeElement === control('search'));
+      assert(!control('tools').open && control('open').dataset.controlIcon === 'property-project');
+      control('dialog').querySelector('[data-project-view="list"]').click();
+      assert(control('list').dataset.view === 'list');
+      control('dialog').querySelector('[data-project-view="cards"]').click();
+      assert(control('list').dataset.view === 'cards');
       control('new').click(); control('name').value = '测试线路甲';
       control('name-dialog').querySelector('form').requestSubmit();
       await waitFor(() => !control('name-dialog').open && app.projects.current.name === '测试线路甲');
       const first = app.projects.current.id;
       await app.projects.rename(first, '测试线路乙');
       assert(control('current').textContent === '测试线路乙');
+      assert(control('current').parentElement.textContent.includes('测试线路乙 / 全线吊板'));
       await app.projects.duplicate(first, '测试副本');
       const duplicate = app.projects.current.id;
       control('search').value = '测试副本'; control('search').dispatchEvent(new editor.Event('input'));
       await waitFor(() => control('list').children.length === 1);
+      const actions = control('list').querySelector('details');
+      assert(!actions.open); actions.querySelector('summary').click(); assert(actions.open);
       assert(control('list').firstElementChild.dataset.projectId === duplicate);
       control('sort').value = 'oldest'; control('sort').dispatchEvent(new editor.Event('change'));
       await waitFor(() => control('list').children.length === 1);

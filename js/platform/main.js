@@ -881,6 +881,17 @@
   render();
   App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message); });
   global.PlatformBatchDialog.init(App, notice);
-  App.projectStorage = global.PlatformProjectDialog.init(App, { notice: notice, exportProject: exportProject });
+  App.projectStorage = global.SignProjectDialog.init(App, {
+    library: global.PlatformProjects,
+    editor: 'platform',
+    fileInput: projectFile,
+    notice: notice,
+    exportProject: exportProject,
+    showProject: function (name) {
+      var title = $('platform-project-current');
+      title.textContent = title.title = name;
+    },
+    formatDetails: function (project) { return (project.lineName || '未命名线路') + ' · ' + (project.stationCount || 0) + ' 站'; },
+  });
   App.ready = Promise.all([App.ready, App.projectStorage.ready]);
 })(window);

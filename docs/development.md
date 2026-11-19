@@ -26,7 +26,7 @@
 
 ## 站台本地多项目
 
-站台页通过顶部「我的项目」管理多份工程，JSON 导入默认创建新项目。导向与换乘编辑器沿用原有保存方式。项目资料、工程 JSON、旧存档迁移记录和当前项目标识保存在 IndexedDB；预设继续单独保存。存储事务在 `js/platform/project-store.js`，保存与切换在 `js/platform/projects.js`，对话框在 `js/platform/project-dialog.js`。[数据迁移、异常处理和测试审查清单](platform-projects.md)
+站台页通过顶部「我的项目」管理多份工程，JSON 导入默认创建新项目。导向与换乘编辑器沿用原有保存方式。项目资料、工程 JSON、旧存档迁移记录和当前项目标识保存在 IndexedDB；预设继续单独保存。存储事务在 `js/projects/store.js`，保存与切换在 `js/projects/manager.js`，对话框在 `js/projects/dialog.js`。[数据迁移、异常处理和测试审查清单](platform-projects.md)
 
 ## 测试
 

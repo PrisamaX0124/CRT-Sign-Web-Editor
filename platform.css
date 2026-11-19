@@ -1,37 +1,4 @@
 .platform-page [hidden] { display: none !important; }
-.platform-header-actions { grid-area: 1 / 3; display: flex; justify-content: flex-end; align-items: center; gap: 10px; min-width: 0; }
-.platform-header-actions .editor-repository { flex: none; }
-.platform-project-heading { display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-width: 0; }
-#platform-project-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px; font-size: 13px; }
-.platform-project-heading .btn { flex: none; }
-@media (max-width: 1150px) {
-  .platform-header-actions { grid-area: 1 / 2; }
-}
-.platform-project-heading .btn, .platform-project-controls .btn, .platform-project-actions .btn { width: auto; margin: 0; }
-#platform-project-dialog, #platform-project-name-dialog, #platform-project-delete-dialog { margin: auto; background: var(--panel-bg); color: var(--text); border: 1px solid var(--border); border-radius: 12px; overflow: auto; box-shadow: 0 12px 48px #0003; }
-#platform-project-dialog::backdrop, #platform-project-name-dialog::backdrop, #platform-project-delete-dialog::backdrop { background: #0006; }
-.platform-project-controls label, #platform-project-name-dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
-.platform-project-controls input, #platform-project-name { background: var(--control-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 9px; width: 100%; }
-#platform-save { flex-wrap: wrap; }
-#platform-project-dialog { width: min(920px, calc(100vw - 64px)); max-height: calc(100vh - 64px); padding: 24px; }
-.platform-project-controls { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin: 18px 0; }
-.platform-project-controls .field { margin: 0; }
-.platform-project-controls .field:first-child { flex: 1; min-width: 180px; }
-#platform-project-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 16px 0; }
-.platform-project-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: var(--panel-bg); min-width: 0; }
-.platform-project-card[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
-.platform-project-card h3 { margin: 0 0 12px; overflow-wrap: anywhere; font-size: 15px; }
-.platform-project-line { display: flex; gap: 8px; align-items: center; overflow-wrap: anywhere; }
-.platform-project-color { width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px #8884; flex: none; }
-.platform-project-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.platform-project-card .platform-project-actions { margin-top: 14px; }
-#platform-project-error, #platform-project-name-error { color: var(--danger); }
-#platform-project-name-dialog, #platform-project-delete-dialog { width: 420px; max-width: calc(100vw - 64px); padding: 24px; }
-#platform-project-dialog[open], #platform-project-name-dialog[open], #platform-project-delete-dialog[open] { animation: platform-project-enter var(--motion-control-duration) var(--motion-enter); }
-@keyframes platform-project-enter { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
-@media (prefers-reduced-motion: reduce) {
-  #platform-project-dialog[open], #platform-project-name-dialog[open], #platform-project-delete-dialog[open] { animation: none; }
-}
 .station-direction-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
 .station-direction-option label { cursor: pointer; }
 .platform-page button:disabled { opacity: .4; cursor: default; }

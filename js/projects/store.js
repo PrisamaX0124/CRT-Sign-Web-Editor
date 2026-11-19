@@ -1,10 +1,7 @@
 (function (global) {
   'use strict';
 
-  const { record, conflictError, databaseName } = global.PlatformProjects;
-  const State = global.PlatformState;
-
-  function openStore(factory = global.indexedDB, name = databaseName) {
+  function open(factory, name, conflictError, createDefaultRecord) {
     return new Promise((resolve, reject) => {
       if (!factory) { reject(new Error('浏览器未开放本地项目存储，请导出 JSON 备份。')); return; }
       const request = factory.open(name, 1);
@@ -56,7 +53,7 @@
                   settings.put({ key: 'legacy-v1', value: legacy.id });
                 }
                 listen(projects.getAll(), list => {
-                  if (!list.length) { const initial = record('未命名项目', State.create()); projects.add(initial); list.push(initial); }
+                  if (!list.length) { const initial = createDefaultRecord(); projects.add(initial); list.push(initial); }
                   listen(settings.get('current'), selected => {
                     const current = list.find(item => item.id === selected?.value) || list.sort((a, b) => b.updatedAt - a.updatedAt)[0];
                     settings.put({ key: 'current', value: current.id });
@@ -99,5 +96,5 @@
     });
   }
 
-  global.PlatformProjects.openStore = openStore;
+  global.SignProjectStore = { open };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -4,13 +4,15 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
-const source = readFileSync(new URL('../js/platform/projects.js', import.meta.url), 'utf8');
+const managerPath = new URL('../js/projects/manager.js', import.meta.url);
+const platformPath = new URL('../js/platform/projects.js', import.meta.url);
 function editor() {
   let state = { line: '1', lineName: '一号线', color: '#123456', stations: [{ id: 'station', transfers: [1, 2] }], adjustments: { station: { x: 4 } }, linePattern: { image: '底纹' } };
   const records = new Map(), settings = new Map(), events = [];
   let number = 0, fail = false, pause;
   const browser = { setTimeout, clearTimeout, structuredClone, PlatformState: { create: () => structuredClone(state), serialize: JSON.stringify, deserialize: JSON.parse }, SignCore: { uuid: () => 'project-' + ++number } };
-  runInNewContext(source, browser, { filename: fileURLToPath(new URL('../js/platform/projects.js', import.meta.url)) });
+  runInNewContext(readFileSync(managerPath, 'utf8'), browser, { filename: fileURLToPath(managerPath) });
+  runInNewContext(readFileSync(platformPath, 'utf8'), browser, { filename: fileURLToPath(platformPath) });
   const copy = value => value && structuredClone(value);
   const store = {
     async hasMigration() { return settings.has('migration'); },
@@ -166,4 +168,32 @@ test('确认重新打开后载入其他窗口的内容，再次编辑可以保�
   app.edit('重新编辑'); await app.manager.flush();
   assert.equal(app.manager.pending, false);
   app.edit('重新编辑'); await app.manager.flush(); assert.equal(app.manager.pending, false);
+});
+
+test('共用存储按编辑器选择数据库、默认工程和列表资料，拒绝另一种工程', async () => {
+  const { browser } = editor();
+  const opened = [];
+  browser.SignProjectStore = { open(factory, name, conflict, makeDefault) { opened.push([factory, name, makeDefault()]); } };
+  const guidance = browser.SignProjects.createLibrary({
+    databaseName: 'guidance-projects',
+    legacyKey: 'guidance-legacy',
+    legacyName: '旧导向项目',
+    createDefault: () => ({ rows: [{ elements: [] }] }),
+    serialize: JSON.stringify,
+    deserialize: source => {
+      const project = JSON.parse(source);
+      if (!Array.isArray(project.rows)) throw new Error('请选择导向标识项目');
+      return project;
+    },
+    describe: project => ({ rowCount: project.rows.length }),
+  });
+  const factory = {};
+  browser.PlatformProjects.openStore(factory);
+  guidance.openStore(factory);
+  assert.equal(opened[0][1], 'public-platform-projects');
+  assert.equal(opened[1][1], 'guidance-projects');
+  assert.equal(opened[1][2].rowCount, 1);
+  assert.equal(opened[1][2].stationCount, undefined);
+  assert.equal(guidance.legacyKey, 'guidance-legacy');
+  assert.throws(() => guidance.readState(opened[0][2]), /项目内容损坏/);
 });

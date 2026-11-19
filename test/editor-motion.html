@@ -220,10 +220,10 @@
           assert(current?.getAttribute('href') === editor.path, '当前页应有明确标记');
           assert(other?.getAttribute('href') === editor.otherPath, '另一个编辑器应可直接打开');
           assert(repository?.host === 'github.com' && repository.pathname === '/PrisamaX0124/CRT-Sign-Web-Editor', '仓库链接不正确');
-          assert(repository.querySelector('svg') && repository.textContent.replace(/\s+/g, ' ').trim() === '有帮助？求 Star！ >',
-            '仓库按钮应显示「有帮助？求 Star！ >」');
-          assert(repository.getAttribute('aria-label') === '有帮助？求 Star！（前往仓库，在新标签页打开）' &&
-            repository.target === '_blank' && repository.relList.contains('noopener'), '读屏名称应包含按钮文字，并说明在新标签页打开仓库');
+          assert(repository.querySelector('svg') && repository.textContent.trim() === '>',
+            '仓库按钮只应显示 GitHub 图标和右箭头');
+          assert(repository.getAttribute('aria-label') === '在新标签页打开 GitHub 仓库' &&
+            repository.target === '_blank' && repository.relList.contains('noopener'), '读屏名称应说明按钮用途');
           const appearance = window.getComputedStyle(repository);
           assert(colorChannels(appearance.backgroundColor)[3] === 0 && appearance.boxShadow === 'none', '仓库按钮应无底色和阴影');
           const border = colorChannels(appearance.borderTopColor);
