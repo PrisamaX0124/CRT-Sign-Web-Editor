@@ -37,6 +37,33 @@
     editor = frame.contentWindow; app = editor.App;
     await app.ready;
     reduced = editor.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    await test('项目名旁平时不留铅笔空位，键盘聚焦时斜杠平缓移开', async () => {
+      const title = control('current'), separator = title.nextElementSibling;
+      const bounds = element => element.getBoundingClientRect();
+      const pencilOpacity = () => editor.getComputedStyle(title, '::before').opacity;
+      const tooltip = title.title;
+      const start = bounds(separator).left;
+      assert(parseFloat(editor.getComputedStyle(title).paddingInlineEnd) <= 4 && pencilOpacity() === '0', '项目名仍给隐藏的铅笔留了空位');
+      title.focus();
+      try {
+        bounds(separator);
+        const movement = title.getAnimations().find(animation => ['padding-inline-end', 'padding-right'].includes(animation.transitionProperty));
+        if (reduced) {
+          assert(!movement, '减少动态效果时仍然播放位移');
+        } else {
+          assert(movement, '铅笔出现时斜杠没有位移动画');
+          movement.pause();
+          movement.currentTime = movement.effect.getComputedTiming().duration / 2;
+          const middle = bounds(separator).left;
+          movement.finish();
+          const end = bounds(separator).left;
+          assert(middle > (start + end) / 2 && middle < end, '斜杠没有以先快后慢的速度移开');
+        }
+        await waitFor(() => pencilOpacity() === '1', '键盘聚焦时没有显示铅笔');
+        assert(bounds(separator).left >= start + 14 && title.title === tooltip, '铅笔空间或工具提示不正确');
+      } finally { title.blur(); }
+      await waitFor(() => pencilOpacity() === '0' && Math.abs(bounds(separator).left - start) < 1, '移开焦点后空位没有收回');
+    });
     await test('弹窗淡入淡出，快速关闭和重开时仍可立刻聚焦和操作', async () => {
       control('open').click();
       assert(dialog().open && editor.document.activeElement === control('search'), '打开时未立刻聚焦搜索框');
