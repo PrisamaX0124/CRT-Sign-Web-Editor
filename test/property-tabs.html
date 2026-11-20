@@ -108,8 +108,10 @@
 
   await test('换乘标识按选区提供颜色、排版或底纹，固定支持 PNG 三档倍率', async function () {
     await open('index.html?editor=transfer');
-    assert(!tab('layout') && tab('appearance').hidden && visible('#transfer-palette'), '整牌设置只需编辑与项目');
+    assert(!tab('layout') && !tab('appearance').hidden && visible('#transfer-palette'), '换乘整牌设置应显示编辑、外观和项目');
     checkFooter('#transfer-property-scroll', '#transfer-export-image', '#transfer-export-project');
+    tab('appearance').click();
+    assert(visible('#transfer-frame-width') && visible('#transfer-frame-color-picker'), '灰框设置应在整牌外观签');
     find('[data-transfer-element^="line:"]').dispatchEvent(new editor.MouseEvent('click', { bubbles: true }));
     assert(visible('#transfer-line-color-picker') && !tab('appearance').hidden && !visible('#line-pattern-enabled'), '线路色应直接可见，底纹放外观');
     tab('appearance').click();

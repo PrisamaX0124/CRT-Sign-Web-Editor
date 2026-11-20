@@ -33,6 +33,7 @@
   const lineLargeName = element('transfer-line-large-name');
   const palette = element('transfer-palette');
   const width = element('transfer-width');
+  const frameWidth = element('transfer-frame-width');
   const undoButton = element('transfer-undo');
   const redoButton = element('transfer-redo');
   const exportImage = element('transfer-export-image');
@@ -328,6 +329,21 @@
   });
   element('transfer-line-color-picker').append(colorPicker);
 
+  let framePalette;
+  const frameColorPicker = palettePicker.create({
+    scope: '灰框颜色',
+    value: state.board(App.state).frameColor,
+    hexId: 'transfer-frame-color-value',
+    getValue: () => state.board(App.state).frameColor,
+    getCity: () => framePalette ?? state.board(App.state).city,
+    onCityChange: city => {
+      framePalette = city;
+      frameColorPicker.sync();
+    },
+    onChange: color => App.update(project => state.settings(project, { frameColor: color }), 'frame-color'),
+  });
+  element('transfer-frame-color-picker').append(frameColorPicker);
+
   function arrowIcon(direction) {
     const icon = global.SignDirections.icon(direction);
     const image = document.createElementNS(global.SignCore.SVG_NS, 'svg');
@@ -590,6 +606,8 @@
     element('transfer-dimensions').textContent = scene.width + ' × ' + scene.height + ' 像素';
     for (const button of modeButtons) button.setAttribute('aria-pressed', String(button.dataset.transferMode === project.mode));
     width.value = board.width;
+    if (document.activeElement !== frameWidth) frameWidth.value = board.frameWidth;
+    frameColorPicker.sync();
     const revision = global.SignPalettes.revision();
     if (revision !== paletteRevision || shownPalette !== board.city) {
       palettePicker.syncPaletteSelect(palette, board.city);
@@ -707,6 +725,11 @@
     const current = state.board(App.state);
     changeSettings({ width: Number.isFinite(width.valueAsNumber) ? width.valueAsNumber : current.width });
     width.value = state.board(App.state).width;
+  });
+  frameWidth.max = state.maximumFrameWidth;
+  frameWidth.addEventListener('change', () => {
+    if (Number.isFinite(frameWidth.valueAsNumber)) changeSettings({ frameWidth: frameWidth.valueAsNumber });
+    frameWidth.value = state.board(App.state).frameWidth;
   });
   undoButton.addEventListener('click', () => restore('undo', 'redo'));
   redoButton.addEventListener('click', () => restore('redo', 'undo'));

@@ -105,6 +105,7 @@
       await waitFor(() => editor.App?.measure);
       guideArrows = Array.from(page.querySelectorAll('.direction-grid .direction-card'), card => card.querySelector('path').getAttribute('d'));
       editor.App.update(current => editor.SignState.updateSignSettings(current, { backgroundColor: '#102030' }));
+      await editor.App.projects.flush();
       await navigate(() => {
         element('.editor-switch').click();
         const link = element('.editor-navigation a[href="index.html?editor=transfer"]');
@@ -837,13 +838,14 @@
         const image = page.createElement('canvas');
         image.width = image.height = 2;
         mode('guidance');
-        editor.App.update(project => state.changeLine(state.settings(project, { width: 611, arrangement: '1' }), 'first', {
+        editor.App.update(project => state.changeLine(state.settings(project, { width: 611, arrangement: '1', frameWidth: 8, frameColor: '#334455' }), 'first', {
           name: '机场线', englishName: 'Airport Line', largeName: true, color: '#13579B',
           linePattern: { source: 'custom', image: image.toDataURL(), opacity: 46, size: 120 },
         }));
         direction('upper', 'left-down');
         mode('separate');
         arrangement('2+1');
+        editor.App.update(project => state.settings(project, { frameWidth: 17, frameColor: '#556677' }));
         editor.App.update(project => state.changeArrowPosition(state.changeAlignment(project, 'upper', 'right'), 'upper', 'right'));
         line('third', '17');
         direction('lower', 'right-up');
@@ -985,6 +987,67 @@
       click('#transfer-preset-list [aria-label="删除预设 换乘测试预设"]');
       click('.modal [data-act="ok"]');
       await waitFor(() => !page.querySelector('#transfer-preset-list [aria-label="载入预设 换乘测试预设"]'));
+    });
+    await test('灰框设置支持两个版式、撤销重做、关闭及 SVG 和 PNG 导出', async () => {
+      mode('separate');
+      returnToSettings();
+      propertyTab('appearance');
+      input('#transfer-frame-width', '17', 'change');
+      input('#transfer-frame-color-value', '#556677');
+      mode('guidance');
+      input('#transfer-width', '385', 'change');
+      propertyTab('appearance');
+      const width = input('#transfer-frame-width', '12', 'change');
+      input('#transfer-frame-color-value', '#123456');
+      const frames = () => [...element('#transfer-sign').querySelectorAll('.sign-frame')];
+      assert(element('#transfer-frame-width') === width, '修改颜色后灰框控件不应重建');
+      assert(frames().length === 4 && frames().every(rect => rect.getAttribute('fill') === '#123456' &&
+        rect.getAttribute('pointer-events') === 'none'), '四条边的颜色或指针设置不正确');
+      assert(Math.abs(frames()[0].getBoundingClientRect().width / element('#transfer-sign').getBoundingClientRect().width * 385 - 12) < 0.1,
+        '灰框宽度应按牌面像素计算');
+      mode('separate');
+      propertyTab('appearance');
+      assert(width.value === '17' && element('#transfer-frame-color-value').value === '#556677', '版式 B 应独立保留灰框');
+      mode('guidance');
+      propertyTab('appearance');
+      assert(width.value === '12' && element('#transfer-frame-color-value').value === '#123456', '切回版式 A 应恢复灰框设置');
+      input('#transfer-frame-width', '0', 'change');
+      assert(!frames().length, '灰框宽度为 0 时应隐藏');
+      click('#transfer-undo');
+      assert(width.value === '12' && frames().length === 4, '撤销应恢复灰框及控件值');
+      click('#transfer-redo');
+      assert(width.value === '0' && !frames().length, '重做应再次关闭灰框');
+      click('#transfer-undo');
+
+      const downloads = [];
+      const originalDownload = editor.SignStorage.download;
+      editor.SignStorage.download = blob => downloads.push(blob);
+      try {
+        click('#transfer-export-vector');
+        await waitFor(() => downloads.length === 1);
+        const vector = new DOMParser().parseFromString(await downloads[0].text(), 'image/svg+xml');
+        const attributes = rect => rect.getAttributeNames().map(name => [name, rect.getAttribute(name)]);
+        assert(JSON.stringify([...vector.querySelectorAll('.sign-frame')].map(attributes)) ===
+          JSON.stringify(frames().map(attributes)), '导出的 SVG 灰框应与预览一致');
+        click('#transfer-export-image');
+        await waitFor(() => downloads.length === 2);
+        const picture = await createImageBitmap(downloads[1]);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = picture.width;
+          canvas.height = picture.height;
+          const context = canvas.getContext('2d');
+          context.drawImage(picture, 0, 0);
+          const pixel = (x, y) => [...context.getImageData(x, y, 1, 1).data].join(',');
+          assert([[11, 45], [373, 45], [192, 11], [192, 501]].every(([x, y]) => pixel(x, y) === '18,52,86,255') &&
+            [[12, 45], [372, 45], [192, 12], [192, 500]].every(([x, y]) => pixel(x, y) === '255,255,255,255'),
+            '导出的 PNG 灰框应向内恰好覆盖 12 像素');
+        } finally {
+          picture.close();
+        }
+      } finally {
+        editor.SignStorage.download = originalDownload;
+      }
     });
   } finally {
     await navigate(() => { frame.src = 'about:blank'; });

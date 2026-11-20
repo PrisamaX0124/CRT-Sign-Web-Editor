@@ -24,6 +24,7 @@
   const defaultArrowPositions = { upper: 'left', lower: 'right' };
   const minimumWidth = 192;
   const maximumWidth = 6144;
+  const maximumFrameWidth = 512;
   const defaultLines = [
     { identifier: 'first', name: '1' },
     { identifier: 'second', name: '10' },
@@ -83,6 +84,8 @@
     const current = {
       arrangement: choice(value.arrangement, arrangements[mode], defaultArrangements[mode]),
       width: Number.isFinite(value.width) ? Math.round(core.clamp(value.width, minimumWidth, maximumWidth)) : 768,
+      frameWidth: Number.isFinite(value.frameWidth) ? Math.round(core.clamp(value.frameWidth, 0, maximumFrameWidth)) : 0,
+      frameColor: core.normalizeHex(value.frameColor) || core.SIGN_FRAME_COLOR,
       city,
       directions: groupDirections,
       lines: defaultLines.slice(0, mode === 'guidance' ? 2 : 3)
@@ -261,6 +264,11 @@
     if (!isRecord(value)) throw new Error('缺少版式设置：' + name);
     if (!choice(value.arrangement, arrangements[mode], false)) throw new Error(name + '的排列方式有误');
     if (!validWidth(value.width)) throw new Error(name + '的宽度有误');
+    if (Object.hasOwn(value, 'frameWidth') &&
+        (!Number.isInteger(value.frameWidth) || value.frameWidth < 0 || value.frameWidth > maximumFrameWidth)) {
+      throw new Error(name + '的灰框宽度有误');
+    }
+    if (Object.hasOwn(value, 'frameColor') && !core.normalizeHex(value.frameColor)) throw new Error(name + '的灰框颜色有误');
     if (!isBoardPalette(value.city)) throw new Error(name + '的色板有误');
     if (!isRecord(value.directions) || !Object.keys(defaultDirections[mode]).every(group => choice(value.directions[group], directions, false))) {
       throw new Error(name + '的箭头方向有误');
@@ -301,6 +309,6 @@
   global.TransferState = {
     create, board, replaceBoard, settings, changeLine, changeDirection, changeAlignment, changeArrowPosition,
     displayLine, groups, deserialize, deserializeProject, serialize: JSON.stringify,
-    arrangements, directions, alignmentNames, arrowPositionNames, modeNames, minimumWidth, maximumWidth,
+    arrangements, directions, alignmentNames, arrowPositionNames, modeNames, minimumWidth, maximumWidth, maximumFrameWidth,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

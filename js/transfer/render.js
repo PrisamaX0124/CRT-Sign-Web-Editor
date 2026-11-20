@@ -166,7 +166,7 @@
     const threeLines = lineCount === 3;
     const bandHeight = threeLines ? 110 : sharedBands ? 112 : 104;
     const lineGap = threeLines ? 26 : 32;
-    const width = state.board(project).width;
+    const { width, frameWidth, frameColor } = state.board(project);
     const height = Math.round(width * designHeight / designWidth);
     const nodes = [{ tag: 'rect', attributes: { x: 0, y: 0, width: designWidth, height: designHeight, fill: '#FFFFFF' } }];
     const linePatterns = [];
@@ -201,6 +201,19 @@
       nodes.push(makeArrow(group, (designWidth - arrowSize) / 2, 180 - arrowSize / 2, arrowSize));
       const captionHeight = sharedBands ? 144 : 176;
       addLabel(nodes, group, measure, sharedBands ? 704 : 620, fitLabel(group, measure, captionHeight));
+    }
+    if (frameWidth > 0) {
+      // 输出高度会取整，按 SVG 的实际缩放和居中位置换算，确保灰框贴边。
+      const scale = Math.min(width / designWidth, height / designHeight);
+      const left = (designWidth - width / scale) / 2;
+      const top = (designHeight - height / scale) / 2;
+      const transform = 'translate(' + left + ' ' + top + ') scale(' + 1 / scale + ')';
+      const strips = global.SignRender.rowFrameRects(width, 0, height, Math.min(frameWidth, width), true, true);
+      for (const strip of strips) {
+        nodes.push({ tag: 'rect', attributes: {
+          ...strip, transform, class: 'sign-frame', fill: frameColor, 'pointer-events': 'none',
+        } });
+      }
     }
     const usedFonts = { zh400: true, num400: nodes.some(node => node.attributes['font-family'] === core.FONT_NUM) };
     return { width, height, nodes, elements: selectionBounds(nodes), patterns: linePatterns, usedFonts };

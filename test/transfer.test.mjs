@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 
 const context = { atob };
 for (const path of [
-  'js/core.js', 'js/icons.js', 'js/directions.js', 'assets/platform-patterns.js', 'js/platform/patterns.js',
+  'js/core.js', 'js/icons.js', 'js/directions.js', 'js/render.js', 'assets/platform-patterns.js', 'js/platform/patterns.js',
   'js/transfer/state.js', 'js/transfer/render.js', 'js/storage.js',
 ]) {
   const filename = fileURLToPath(new URL('../' + path, import.meta.url));
@@ -24,6 +24,31 @@ const initial = state.create();
 const content = (scene, role) => scene.nodes.filter(node => node.attributes['data-role'] === role);
 const values = nodes => Array.from(nodes, node => node.text);
 const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
+
+test('灰框按版式保存，旧项目默认关闭，宽度和颜色会校验', () => {
+  const legacy = state.create();
+  for (const board of Object.values(legacy.boards)) {
+    delete board.frameWidth;
+    delete board.frameColor;
+  }
+  const restored = state.deserializeProject(state.serialize(legacy));
+  assert.equal(restored.boards.guidance.frameWidth, 0);
+  assert.equal(restored.boards.separate.frameWidth, 0);
+  assert.equal(restored.boards.guidance.frameColor, '#4A4A4A');
+  const guidance = state.settings(restored, { frameWidth: 11.6, frameColor: '#abc' });
+  const project = state.settings(guidance, { mode: 'separate', frameWidth: 600, frameColor: '#123456' });
+  assert.equal(guidance.boards.guidance.frameWidth, 12);
+  assert.equal(project.boards.guidance.frameColor, '#AABBCC');
+  assert.equal(project.boards.separate.frameWidth, 512);
+  assert.equal(project.boards.separate.frameColor, '#123456');
+  assert.equal(state.board(state.settings(project, { frameWidth: -1 })).frameWidth, 0);
+  assert.equal(state.serialize(state.deserializeProject(state.serialize(project))), state.serialize(project));
+  for (const [field, invalid] of [['frameWidth', 513], ['frameColor', 'invalid']]) {
+    const invalidProject = JSON.parse(state.serialize(project));
+    invalidProject.boards.guidance[field] = invalid;
+    assert.throws(() => state.deserializeProject(state.serialize(invalidProject)), /灰框/);
+  }
+});
 
 test('换乘项目文件往返保留两种版式的尺寸、分组、线路和底纹', () => {
   let project = state.settings(initial, { width: 480, arrangement: '1' });
