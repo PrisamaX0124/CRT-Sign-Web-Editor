@@ -4,7 +4,7 @@
   var KEY = 'public-platform-sign-project-v1', undo = [], redo = [], groupKey = null, groupTime = 0;
   var HISTORY_LIMIT = 20;
   var PRESET_KEY = 'public-platform-sign-presets-v1', presets = [], presetSignature = '', library = 'stations';
-  var noticeTimer, listSignature = '', transferSignature = '', layoutMode = '', busy = false;
+  var listSignature = '', transferSignature = '', layoutMode = '', busy = false;
   var previousPanelSelection = '';
   var renderedCurrentId;
   var renderedLayout;
@@ -13,20 +13,17 @@
   var syncLinePattern;
   var names = { route: '全线吊板', station: '本站吊板', vertical: '纵向线路图' };
   function $(id) { return document.getElementById(id); }
-  function notice(message) {
-    $('platform-notice').textContent = message; $('platform-notice').hidden = false;
-    clearTimeout(noticeTimer); noticeTimer = setTimeout(function () { $('platform-notice').hidden = true; }, 4200);
-  }
+  var notice = global.EditorNotifications.show;
   var restoredProject;
   try { var saved = localStorage.getItem(KEY); if (saved) restoredProject = S.deserialize(saved); }
-  catch (err) { notice('未能恢复本地项目：' + err.message); }
+  catch (err) { notice('未能恢复本地项目：' + err.message, 'warning'); }
   var initial = restoredProject || S.create();
   try { presets = P.deserialize(localStorage.getItem(PRESET_KEY) || '[]'); }
-  catch (err) { notice('未能恢复预设：' + err.message); }
+  catch (err) { notice('未能恢复预设：' + err.message, 'error'); }
   var App = global.App = {
     state: initial, selectedId: initial.currentId, selectedKey: null, selectionKeys: [], anchorKey: null, hoverKey: null, measure: Core.createCanvasMeasurer(), scene: null,
     update: function (fn, key, options) {
-      if (App.projects?.busy && !options?.activateProject) return;
+      if (App.projects?.busy && !options?.activateProject) return false;
       var next = fn(App.state);
       if (options?.activateProject) {
         finishStationDrag(true, false); stationLanding?.(); pagePointer = null;
@@ -41,9 +38,9 @@
         renderedCurrentId = renderedLayout = null;
         document.querySelectorAll('.current-station-highlight').forEach(function (item) { item.remove(); });
         ['batch-dialog', 'preset-dialog'].forEach(function (id) { if ($(id).open) $(id).close(); });
-        render(); return;
+        render(); return true;
       }
-      if (JSON.stringify(next) === JSON.stringify(App.state)) return;
+      if (JSON.stringify(next) === JSON.stringify(App.state)) return false;
       var now = Date.now();
       if (!(key && key === groupKey && ((options && options.continuous) || now - groupTime < 800))) {
         undo.push(snapshot()); if (undo.length > HISTORY_LIMIT) undo.shift();
@@ -57,6 +54,7 @@
       }
       if (options && (options.clearSelection || options.replaceProject)) { App.selectionKeys = []; App.selectedKey = App.anchorKey = App.hoverKey = null; }
       render(); autosave.schedule();
+      return true;
     },
     select: function (id, modifiers) {
       if (!App.state.stations.some(function (s) { return s.id === id; })) return;
@@ -99,12 +97,14 @@
     deselect: function () { App.selectMany([]); },
     deleteSelection: function () {
       var ids = App.selectedStationIds(); if (!ids.length) return;
-      if (App.state.stations.length <= 1) { notice('至少保留一个站点'); return; }
+      if (App.state.stations.length <= 1) { notice('至少保留一个站点', 'warning'); return; }
       var all = ids.length === App.state.stations.length;
-      App.update(function (state) { return S.removeStations(state, ids); }, null, { clearSelection: true });
-      if (all) notice('已删除选中站点，并保留本站');
+      if (App.update(function (state) { return S.removeStations(state, ids); }, null, { clearSelection: true })) {
+        notice(all ? '已删除选中站点，并保留本站' : '已删除 ' + ids.length + ' 个站点', 'success');
+      }
     },
-    undo: function () { history(undo, redo); }, redo: function () { history(redo, undo); },
+    undo: function () { history(undo, redo, '已撤销上一步'); },
+    redo: function () { history(redo, undo, '已重做上一步'); },
     download: function (blob, filename) {
       var url = URL.createObjectURL(blob), link = document.createElement('a');
       link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
@@ -134,16 +134,20 @@
     var near = S.neighbors(state), left = state.direction === -1 ? near.next : near.previous, right = state.direction === 1 ? near.next : near.previous;
     return left && left.id === id ? 'station:left' : right && right.id === id ? 'station:right' : 'route:' + id;
   }
-  function history(from, to) {
+  function history(from, to, message) {
     if (!from.length || App.projects?.busy) return;
     to.push(snapshot());
     if (to.length > HISTORY_LIMIT) to.shift();
     var old = from.pop(); App.state = Core.isPalette(old.state.city) ? old.state : S.settings(old.state,{city:'chongqing'}); App.selectedId = old.selectedId; App.selectedKey = old.selectedKey; App.selectionKeys = old.selectionKeys; App.anchorKey = old.anchorKey; groupKey = null;
     render(); autosave.schedule();
+    notice(message, 'information');
   }
   function value(id, v) { if (document.activeElement !== $(id)) $(id).value = v; }
-  function set(patch, key) { App.update(function (state) { return S.settings(state, patch); }, key); }
-  function patchStation(patch, key) { App.update(function (state) { return S.patchStation(state, App.selectedId, patch); }, key); }
+  function set(patch, key) { return App.update(function (state) { return S.settings(state, patch); }, key); }
+  function patchStation(patch, key) { return App.update(function (state) { return S.patchStation(state, App.selectedId, patch); }, key); }
+  function changeStationOrder(change) {
+    if (App.update(change)) notice('已调整站点顺序', 'success');
+  }
   function render() {
     var currentChanged = renderedCurrentId && renderedCurrentId !== App.state.currentId;
     renderedCurrentId = App.state.currentId;
@@ -349,7 +353,7 @@
     suppressStationClick = true;
     setTimeout(function () { suppressStationClick = false; }, 0);
     if (commit) {
-      App.update(function (state) { return S.reorderStation(state, drag.button.dataset.id, drag.gap); });
+      changeStationOrder(function (state) { return S.reorderStation(state, drag.button.dataset.id, drag.gap); });
       App.select(drag.button.dataset.id);
       stationList.getBoundingClientRect();
       stationList.classList.remove('station-order-committing');
@@ -406,7 +410,8 @@
     var card=event.target.closest('.station-item');
     if(card&&event.altKey&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key)) {
       event.preventDefault();var id=card.dataset.id,delta=['ArrowUp','ArrowLeft'].includes(event.key)?-1:1;
-      App.update(function(state){return S.moveStation(state,id,delta);});App.select(id);
+      changeStationOrder(function (state) { return S.moveStation(state, id, delta); });
+      App.select(id);
       card.querySelector('.station-select').focus();
     }
   });
@@ -427,7 +432,7 @@
     var getTransfer = function () { return App.state.stations.find(function (station) { return station.id === stationId; })?.transfers[index]; };
     function updateTransfer(change, field) {
       if (!row.isConnected) return;
-      App.update(function (state) {
+      return App.update(function (state) {
         var station = state.stations.find(function (entry) { return entry.id === stationId; });
         var current = station?.transfers[index];
         if (!current) return state;
@@ -438,8 +443,9 @@
       }, field && stationId + ':transfer:' + index + ':' + field);
     }
     remove.addEventListener('click', function () {
-      updateTransfer(function () { return null; });
+      if (!updateTransfer(function () { return null; })) return;
       (transferRows[Math.min(index, transferRows.length - 1)]?.remove || $('new-transfer-number')).focus();
+      notice('已删除换乘线路', 'success');
     });
     var fields = (textLine ? [['nameZh', '中文线路名', 40], ['nameEn', '英文线路名', 80]] : [['number', '线路号', 8]]).map(function ([key, label, limit]) {
       var field = document.createElement('div'); field.className = 'field';
@@ -451,7 +457,7 @@
         input.inputMode = 'numeric';
         input.addEventListener('change', function () {
           var number = transferNumber(input);
-          if (!number) { input.value = getTransfer()?.number || ''; notice('线路号须为 1–8 位数字'); return; }
+          if (!number) { input.value = getTransfer()?.number || ''; notice('线路号须为 1–8 位数字', 'warning'); return; }
           input.value = number;
           updateTransfer(function (current, city) {
             var color = current.color === numberColor(current.number, city) ? numberColor(number, city) : current.color;
@@ -584,7 +590,7 @@
     var offset = state.adjustments[App.selectedKey] || { x: 0, y: 0 };
     value('element-offset-x', offset.x); value('element-offset-y', offset.y);
     document.querySelectorAll('[data-mode]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)); });
-    $('preview-title').textContent = names[state.mode]; $('preview-dimensions').textContent = size.width + ' × ' + size.height + ' px';
+    $('preview-title').textContent = names[state.mode]; $('preview-dimensions').textContent = size.width + ' × ' + size.height + ' 像素';
     value('line-number', state.line); value('palette-city', state.city); value('travel-direction', state.direction);
     if (syncLinePattern) syncLinePattern(state);
     value('station-code', s.code); value('station-zh', s.zh); value('station-en', s.en);
@@ -596,13 +602,19 @@
     $('undo').disabled = !undo.length; $('redo').disabled = !redo.length;
     if (global.PlatformClipboard) global.PlatformClipboard.sync();
   }
-  document.querySelectorAll('[data-mode]').forEach(function (button) { button.addEventListener('click', function () { set({ mode: button.dataset.mode }); App.deselect(); }); });
+  document.querySelectorAll('[data-mode]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var mode = button.dataset.mode;
+      if (set({ mode: mode })) notice('已切换到' + names[mode], 'information');
+      App.deselect();
+    });
+  });
   $('return-to-settings').addEventListener('click', function () {
     App.deselect();
     $('property-heading').focus({ preventScroll: true });
   });
   // Preserve controls and text drag selections while allowing blank clicks anywhere on the page.
-  var selectionControls = 'button, input, select, textarea, label, a, summary, [contenteditable], [role="button"], .field, .station-item, .platform-section, #platform-element-toolbar, dialog, #platform-notice';
+  var selectionControls = 'button, input, select, textarea, label, a, summary, [contenteditable], [role="button"], .field, .station-item, .platform-section, #platform-element-toolbar, dialog';
   var pagePointer = null, suppressPageClick = false;
   document.addEventListener('pointerdown', function (event) {
     if (event.button !== 0 || event.isPrimary === false) return;
@@ -644,24 +656,32 @@
   });
   $('station-transfers').addEventListener('change', function (event) {
     try { patchStation({ transfers: S.parseTransfers(event.target.value, App.state.city) }); event.target.setCustomValidity(''); }
-    catch (err) { event.target.setCustomValidity(err.message); event.target.reportValidity(); notice(err.message); }
+    catch (err) { event.target.setCustomValidity(err.message); notice(err.message, 'warning'); }
   });
   $('station-transfers').addEventListener('input', function (event) { event.target.setCustomValidity(''); });
   $('add-number-transfer-form').addEventListener('submit', function (event) {
     event.preventDefault();
     var input = $('new-transfer-number'), number = transferNumber(input), station = live();
     if (station.transfers.length >= 6) return;
-    if (!number) { input.setCustomValidity('请输入 1–8 位数字作为线路号'); input.reportValidity(); return; }
-    patchStation({ transfers: station.transfers.concat({ number: number, color: numberColor(number, App.state.city) }) });
+    if (!number) {
+      var message = '请输入 1–8 位数字作为线路号';
+      input.setCustomValidity(message);
+      input.focus();
+      notice(message, 'warning');
+      return;
+    }
+    if (!patchStation({ transfers: station.transfers.concat({ number: number, color: numberColor(number, App.state.city) }) })) return;
     input.value = ''; input.setCustomValidity('');
     (input.disabled ? transferRows.at(-1).fields[0] : input).focus();
+    notice('已添加 ' + number + ' 号线换乘', 'success');
   });
   $('new-transfer-number').addEventListener('input', function (event) { event.target.setCustomValidity(''); });
   $('add-text-transfer').addEventListener('click', function () {
     var station = live();
     if (station.transfers.length >= 6) return;
-    patchStation({ transfers: station.transfers.concat({ type: 'text', nameZh: '文字线路', nameEn: '', color: '#0057B8' }) });
+    if (!patchStation({ transfers: station.transfers.concat({ type: 'text', nameZh: '文字线路', nameEn: '', color: '#0057B8' }) })) return;
     var input = transferRows.at(-1).fields[0]; input.focus(); input.select();
+    notice('已添加文字换乘线路', 'success');
   });
   $('line-number').addEventListener('input', function (event) {
     var state = App.state, n = event.target.value, auto = Core.lineColorFor(n, state.city);
@@ -671,11 +691,17 @@
     set(patch, 'line-number');
   });
   $('palette-city').addEventListener('change', function (event) { changeCity(event.target.value); });
-  $('travel-direction').addEventListener('change', function (event) { set({ direction: Number(event.target.value) }); });
+  $('travel-direction').addEventListener('change', function (event) {
+    if (set({ direction: Number(event.target.value) })) notice('已更改行车方向', 'success');
+  });
   $('show-station-direction').addEventListener('click', function () { set({ showStationDirection: !App.state.showStationDirection }); });
   $('vertical-variant').addEventListener('change', function(event) { App.update(function(state){return S.setVerticalVariant(state,event.target.value);}); });
-  $('swap-vertical-columns').addEventListener('click',function(){App.update(S.swapVerticalColumns);});
-  $('reverse-stations').addEventListener('click',function(){App.update(S.reverseStations);});
+  $('swap-vertical-columns').addEventListener('click', function () {
+    if (App.update(S.swapVerticalColumns)) notice('已交换左右两列', 'success');
+  });
+  $('reverse-stations').addEventListener('click', function () {
+    if (App.update(S.reverseStations)) notice('已倒转站点顺序', 'success');
+  });
   $('font-scale').addEventListener('input', function (event) { set({ fontScale: Number(event.target.value) }, 'font-scale'); });
   [['hanging-length', S.setHangingLength], ['hanging-height', S.setHangingHeight]].forEach(function (setting) {
     var slider = $(setting[0]);
@@ -690,8 +716,11 @@
       if (keys.length) App.update(function (state) { return S.nudgeElements(state, keys, Number(button.dataset.nudgeX), Number(button.dataset.nudgeY)); });
     });
   });
-  ['x', 'y'].forEach(function (axis) { $('element-offset-' + axis).addEventListener('change', function (event) { if (!App.selectedKey) return; var n = Number(event.target.value); if (!Number.isFinite(n) || n < -128 || n > 128) { notice('微调范围为 −128 至 128px'); event.target.value = (App.state.adjustments[App.selectedKey] || {})[axis] || 0; return; } var patch = {}; patch[axis] = n; App.update(function (state) { return S.setElementOffset(state, App.selectedKey, patch); }); }); });
-  function resetElement() { var keys = selectedVisibleKeys(); if (keys.length) App.update(function (state) { return S.resetElements(state, keys); }); }
+  ['x', 'y'].forEach(function (axis) { $('element-offset-' + axis).addEventListener('change', function (event) { if (!App.selectedKey) return; var n = Number(event.target.value); if (!Number.isFinite(n) || n < -128 || n > 128) { notice('微调范围为 −128 至 128 像素', 'warning'); event.target.value = (App.state.adjustments[App.selectedKey] || {})[axis] || 0; return; } var patch = {}; patch[axis] = n; App.update(function (state) { return S.setElementOffset(state, App.selectedKey, patch); }); }); });
+  function resetElement() {
+    var keys = selectedVisibleKeys();
+    if (keys.length && App.update(function (state) { return S.resetElements(state, keys); })) notice('已恢复选中元素的位置', 'success');
+  }
   $('tool-reset').addEventListener('click', resetElement); $('reset-element').addEventListener('click', resetElement);
   [['tool-up', 'station-up'], ['tool-down', 'station-down'], ['tool-delete', 'station-delete']].forEach(function (pair) { $(pair[0]).addEventListener('click', function () { $(pair[1]).click(); }); });
   function setSize(patch) {
@@ -702,15 +731,17 @@
     $('output-' + key).addEventListener('change', function (event) {
       if(App.state.mode==='vertical'&&key==='width'){event.target.value=App.state.sizes.vertical.width;return;}
       var n = Number(event.target.value);
-      if (!Number.isFinite(n) || n < 128 || n > 8192) { event.target.value = App.state.sizes[App.state.mode][key]; notice('尺寸须为 128–8192 px'); return; }
+      if (!Number.isFinite(n) || n < 128 || n > 8192) { event.target.value = App.state.sizes[App.state.mode][key]; notice('尺寸须为 128–8192 像素', 'warning'); return; }
       var patch = {}; patch[key] = Math.round(n); setSize(patch);
     });
   });
   function setCurrentStation(id) {
     if (id === App.state.currentId) return;
     var stationMode = App.state.mode === 'station', hadSelection = !!App.selectedKey;
-    App.update(function (state) { return S.settings(state, { currentId: id }); }, null, { clearSelection: stationMode });
+    if (!App.update(function (state) { return S.settings(state, { currentId: id }); }, null, { clearSelection: stationMode })) return;
     if (stationMode && hadSelection) App.select(id);
+    var station = App.state.stations.find(function (entry) { return entry.id === App.state.currentId; });
+    notice('已将「' + (station.zh || '未命名站点') + '」设为本站', 'success');
   }
   $('set-current').addEventListener('click', function () { setCurrentStation(App.selectedId); });
   $('tool-current').addEventListener('click', function () { setCurrentStation(App.selectedId); });
@@ -720,14 +751,20 @@
     var added = App.state.stations.find(function (s) { return !previous.stations.some(function (old) { return old.id === s.id; }); });
     if (added) {
       App.select(added.id);
+      global.EditorPanels.expand('platform-properties');
       propertyTabs.show('edit');
       $('station-zh').focus();
       $('station-zh').select();
+      notice('已添加站点', 'success');
     }
   });
   $('station-delete').addEventListener('click', App.deleteSelection);
   $('delete-selected-stations').addEventListener('click', App.deleteSelection);
-  [['station-up', -1], ['station-down', 1]].forEach(function (pair) { $(pair[0]).addEventListener('click', function () { App.update(function (state) { return S.moveStation(state, App.selectedId, pair[1]); }); }); });
+  [['station-up', -1], ['station-down', 1]].forEach(function ([identifier, distance]) {
+    $(identifier).addEventListener('click', function () {
+      changeStationOrder(function (state) { return S.moveStation(state, App.selectedId, distance); });
+    });
+  });
   $('batch-stations').addEventListener('click', function () {
     $('batch-text').value = App.state.stations.map(function (s) { return [s.code, s.zh, s.en, S.formatTransfers(s.transfers)].join('|'); }).join('\n');
     $('batch-error').textContent = ''; $('batch-dialog').showModal();
@@ -739,7 +776,7 @@
         var same = stations.find(function (s) { return s.code === old.code; });
         return S.settings(S.replaceStations(state, stations), { currentId: same ? same.id : stations[0].id });
       });
-      App.select(App.state.currentId); $('batch-dialog').close(); notice('已更新 ' + stations.length + ' 个站点');
+      App.select(App.state.currentId); $('batch-dialog').close(); notice('已更新 ' + stations.length + ' 个站点', 'success');
     } catch (err) { $('batch-error').textContent = err.message; }
   });
   function filename(ext, state) { return 'platform-' + state.mode + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.' + ext; }
@@ -760,7 +797,7 @@
   }
   function persistPresets(next) {
     try { localStorage.setItem(PRESET_KEY, P.serialize(next)); }
-    catch (err) { notice('预设保存失败：本地空间不足，请保存项目 JSON'); return false; }
+    catch (err) { notice('预设保存失败：本地空间不足，请保存项目 JSON', 'error'); return false; }
     presets = next; syncPresets(); return true;
   }
   function syncPresets() {
@@ -776,22 +813,25 @@
       var meta = document.createElement('small'), size = preset.state.sizes[preset.state.mode]; meta.textContent = names[preset.state.mode] + ' · ' + size.width + ' × ' + size.height;
       load.append(svg, title, meta); load.addEventListener('click', function () {
         var current = presets.find(function (item) { return item.id === card.dataset.presetId; }); if (!current) return;
-        var state = S.deserialize(S.serialize(current.state)); App.update(function () { return state; }); App.selectedId = state.currentId; App.deselect(); notice('已载入预设：' + current.name);
+        var state = S.deserialize(S.serialize(current.state)); App.update(function () { return state; }); App.selectedId = state.currentId; App.deselect(); notice('已载入预设：' + current.name, 'success');
       });
       var remove = document.createElement('button'); remove.className = 'preset-remove'; remove.dataset.controlIcon = 'delete'; remove.setAttribute('aria-label', '删除预设 ' + preset.name);
-      remove.addEventListener('click', function () { persistPresets(presets.filter(function (item) { return item.id !== card.dataset.presetId; })); });
+      remove.addEventListener('click', function () {
+        var remaining = presets.filter(function (item) { return item.id !== preset.id; });
+        if (remaining.length !== presets.length && persistPresets(remaining)) notice('已删除预设「' + preset.name + '」', 'success');
+      });
       card.append(load, remove); list.appendChild(card);
     });
     list.scrollTop = scroll;
   }
   function showPresetDialog() {
-    if (presets.length >= 30) { notice('最多保存 30 个预设，请先删除不需要的预设'); return; }
+    if (presets.length >= 30) { notice('最多保存 30 个预设，请先删除不需要的预设', 'warning'); return; }
     $('preset-name').value = App.state.lineName + ' · ' + names[App.state.mode]; $('preset-error').textContent = ''; $('preset-dialog').showModal(); $('preset-name').select();
   }
   document.querySelectorAll('[data-library]').forEach(function (button) { button.addEventListener('click', function () { selectLibrary(button.dataset.library); }); });
   $('save-preset').addEventListener('click', showPresetDialog); $('save-preset-shortcut').addEventListener('click', showPresetDialog);
   function savePreset() {
-    try { var preset = P.create(App.state, $('preset-name').value); if (persistPresets(presets.concat([preset]))) { $('preset-dialog').close(); selectLibrary('presets'); notice('预设已保存到本机'); } }
+    try { var preset = P.create(App.state, $('preset-name').value); if (persistPresets(presets.concat([preset]))) { $('preset-dialog').close(); selectLibrary('presets'); notice('预设已保存到本机', 'success'); } }
     catch (err) { $('preset-error').textContent = err.message; }
   }
   $('preset-dialog').querySelector('.dialog-close').addEventListener('click', function () { $('preset-dialog').close(); });
@@ -832,13 +872,14 @@
   async function exportFile(format) {
     if (busy) return;
     var state = App.state, scale = format === 'png' ? Number($('png-scale').value) : 1;
-    busy = true; $('export-png').disabled = $('export-svg').disabled = true; notice('正在生成 ' + format.toUpperCase() + '…');
+    busy = true; $('export-png').disabled = $('export-svg').disabled = true;
+    var dismissProgress = notice('正在生成 ' + format.toUpperCase() + '…');
     try {
       var prepared = await prepareExport(state);
       var blob = format === 'svg' ? new Blob([prepared.source], { type: 'image/svg+xml;charset=utf-8' }) : await pngBlob(prepared.drawing, prepared.size, scale);
-      App.download(blob, filename(format, state)); notice(format.toUpperCase() + ' 已导出 · ' + state.sizes[state.mode].width * scale + ' × ' + state.sizes[state.mode].height * scale + ' px');
-    } catch (err) { notice('导出失败：' + err.message); }
-    finally { busy = false; $('export-png').disabled = $('export-svg').disabled = false; }
+      App.download(blob, filename(format, state)); notice(format.toUpperCase() + ' 已导出 · ' + state.sizes[state.mode].width * scale + ' × ' + state.sizes[state.mode].height * scale + ' 像素', 'success');
+    } catch (err) { notice('导出失败：' + err.message, 'error'); }
+    finally { dismissProgress(); busy = false; $('export-png').disabled = $('export-svg').disabled = false; }
   }
   global.PlatformExport = { buildSVG: buildSVG, drawSVG: drawExportSVG, prepare: prepareExport, pngBlob: pngBlob, exportFile: exportFile };
   $('export-svg').addEventListener('click', function () { exportFile('svg'); }); $('export-png').addEventListener('click', function () { exportFile('png'); });
@@ -867,7 +908,7 @@
     });
   }
   render();
-  App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message); });
+  App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message, 'warning'); });
   global.PlatformBatchDialog.init(App, notice);
   App.projectStorage = global.SignProjectDialog.init(App, {
     library: global.PlatformProjects,

@@ -107,10 +107,11 @@
   }
 
   var activePaletteTab = 'elements';
+  var displayedPresets;
 
   function buildPaletteTabs() {
     var tabs = h('div', { class: 'palette-tabs', role: 'tablist', 'aria-label': '选择区内容' });
-    [['elements', '元素'], ['presets', '预设']].forEach(function (entry) {
+    [['elements', '元素'], ['presets', '项目预设']].forEach(function (entry) {
       var selected = activePaletteTab === entry[0];
       var tab = h('button', {
         class: 'palette-tab' + (selected ? ' active' : ''),
@@ -138,9 +139,8 @@
       'aria-labelledby': 'palette-tab-' + activePaletteTab,
     });
     if (activePaletteTab === 'presets') {
-      var list = h('div', { class: 'palette-presets' });
-      buildPresetCards().forEach(function (card) { list.appendChild(card); });
-      content.appendChild(list);
+      content.appendChild(h('div', { class: 'palette-presets' }, buildPresetCards()));
+      displayedPresets = App.state.presets;
     } else {
       CATEGORIES.forEach(function (category) { content.appendChild(buildPaletteCategory(category)); });
     }
@@ -223,64 +223,62 @@
 
   // ─── 预设分类卡片 ──────────────────────────────────────────
 
-  function renderRowThumb(elements, height) {
-    var x = 0;
-    var slots = elements.map(function (el) {
-      var w = Render.computeElementWidth(el, height, App.measure);
-      var slot = { el: el, x: x, w: w };
-      x += w;
-      return slot;
-    });
-    var svg = document.createElementNS(Core.SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 ' + Math.max(x, 1) + ' ' + height);
-    svg.setAttribute('xmlns', Core.SVG_NS);
-    var bg = document.createElementNS(Core.SVG_NS, 'rect');
-    bg.setAttribute('width', Math.max(x, 1));
-    bg.setAttribute('height', height);
-    bg.setAttribute('fill', '#FFFFFF');
-    svg.appendChild(bg);
-    slots.forEach(function (slot) {
-      var node = Render.renderElement(slot.el, height, App.measure, { clean: true }).node;
-      node.setAttribute('transform', 'translate(' + slot.x + ',0)');
-      svg.appendChild(node);
-    });
-    return svg;
+  function renderPresetPicture(preset) {
+    const board = preset.kind === 'legacy-row' ? { ...App.state, rows: preset.board.rows } : preset.board;
+    const graphic = document.createElementNS(Core.SVG_NS, 'svg');
+    graphic.setAttribute('aria-hidden', 'true');
+    const size = Render.renderSignInto(graphic, board, App.measure, { clean: true });
+    return { graphic, size };
+  }
+
+  function presetKind(preset) {
+    return preset.kind === 'board' ? '整牌' : preset.kind === 'row' ? '单行' : '旧版单行';
+  }
+
+  function openPresetPreview(identifier) {
+    App.previewPreset(identifier);
+    global.EditorPanels?.expand('right-panel');
+    document.getElementById('right-panel-title').focus({ preventScroll: true });
+  }
+
+  async function confirmPresetRemoval(preset) {
+    const activation = App.projects?.activation;
+    const confirmed = await SignUI.confirmDialog('确定要删除预设「' + preset.name + '」吗？', '删除预设', '删除', 'delete');
+    if (confirmed && activation === App.projects?.activation && Presets.remove(preset.id)) {
+      SignUI.toast('已删除预设「' + preset.name + '」', 'success');
+    }
   }
 
   function buildPresetCards() {
     var nodes = [];
     var items = Presets.list();
     if (items.length === 0) {
-      nodes.push(h('div', { class: 'palette-empty', text: '还没有预设。使用行上的「存为预设」保存一行，方便下次使用。' }));
+      nodes.push(h('div', { class: 'palette-empty', text: '本项目还没有预设。可在右侧「项目」中保存整牌，或在牌面上保存单行。' }));
       return nodes;
     }
-    items.forEach(function (p) {
+    items.forEach(function (preset) {
       var del = h('button', {
         class: 'preset-delete', type: 'button', title: '删除预设',
-        'aria-label': '删除预设：' + p.name, 'data-control-icon': 'delete',
+        'aria-label': '删除预设：' + preset.name, 'data-control-icon': 'delete',
       });
       del.addEventListener('click', function (ev) {
         ev.stopPropagation();
-        SignUI.confirmDialog('确定要删除预设「' + p.name + '」吗？', '删除预设', '删除', 'delete').then(function (ok) {
-          if (!ok) return;
-          Presets.remove(p.id);
-          if (App.presetPreviewId === p.id) App.previewPreset(null);
-          SignUI.toast('预设已删除');
-        });
+        confirmPresetRemoval(preset);
       });
+      const canDrag = preset.kind !== 'board';
       var card = h('div', {
         class: 'preset-card', role: 'button', tabindex: '0',
-        'aria-label': '预览预设：' + p.name,
-        draggable: 'true',
-        title: '拖入空行使用；点击预览',
+        'aria-label': '预览预设：' + preset.name,
+        draggable: String(canDrag),
+        title: canDrag ? '点击预览，或拖入空行' : '点击预览整牌',
       }, [
-        h('div', { class: 'preset-thumb' }, [renderRowThumb(p.elements, 48)]),
-        h('div', { class: 'preset-name', text: p.name }),
+        h('div', { class: 'preset-thumb' }, [renderPresetPicture(preset).graphic]),
+        h('div', { class: 'preset-name', text: preset.name + ' · ' + presetKind(preset) }),
         del,
       ]);
-      wireCardDrag(card, { kind: 'preset', id: p.id });
+      if (canDrag) wireCardDrag(card, { kind: 'preset', id: preset.id, project: App.projects?.current?.id });
       card.addEventListener('click', function () {
-        App.previewPreset(p.id);
+        openPresetPreview(preset.id);
       });
       card.addEventListener('keydown', function (ev) {
         if (ev.target !== card || (ev.key !== 'Enter' && ev.key !== ' ')) return;
@@ -292,9 +290,12 @@
     return nodes;
   }
 
-  Presets.onChange(function () {
-    if (App.measure) buildPalette();
-  });
+  function syncPresetPalette() {
+    if (activePaletteTab !== 'presets' || displayedPresets === App.state.presets) return;
+    const list = document.querySelector('#palette-content .palette-presets');
+    if (list) list.replaceChildren(...buildPresetCards());
+    displayedPresets = App.state.presets;
+  }
 
   // ─── 颜色选择器组件 ────────────────────────────────────────
 
@@ -368,6 +369,7 @@
 
   function syncRightPanel() {
     if (!App.state || !App.measure) return;
+    syncPresetPalette();
     if (!propertyTabs) {
       propertyTabs = global.PropertyTabs.create(propertyBody);
       bindImageExport();
@@ -403,9 +405,10 @@
     var content;
     if (mode === 'batch') content = buildBatchPanel();
     else if (mode === 'element') content = buildElementPanel();
-    else if (mode === 'preset') content = buildPresetPreviewPanel();
+    else if (mode === 'preset') content = buildProjectPanel(buildPresetPreviewPanel());
     else content = buildSettingsPanel();
-    propertyBody.replaceChildren(content, buildProjectPanel());
+    if (mode === 'preset') propertyBody.replaceChildren(content);
+    else propertyBody.replaceChildren(content, buildProjectPanel());
     return content;
   }
 
@@ -646,7 +649,32 @@
     return h('div', {}, [dimensions, colors, appearance]);
   }
 
-  function buildProjectPanel() {
+  function buildProjectPanel(preview) {
+    const presets = panelSection('本项目预设', 'project-presets', 'project');
+    const save = SignUI.presetSaveButton(() => Presets.promptSave(), {
+      id: 'guidance-save-project-preset', class: 'btn btn-primary', text: '存整牌为预设',
+    });
+    const presetList = h('div', { id: 'guidance-project-preset-list', class: 'guidance-project-preset-list' });
+    let displayed;
+    function syncPresets() {
+      if (displayed === App.state.presets) return;
+      displayed = App.state.presets;
+      const buttons = Presets.list().map(preset => {
+        const button = h('button', { type: 'button', class: 'btn', title: preset.name, 'data-project-preset': preset.id,
+          'aria-pressed': String(App.presetPreviewId === preset.id) }, [
+          h('span', { text: preset.name }), h('small', { text: presetKind(preset) }),
+        ]);
+        button.addEventListener('click', () => openPresetPreview(preset.id));
+        return button;
+      });
+      if (!buttons.length) buttons.push(h('p', { class: 'hint-text', text: '本项目还没有预设。' }));
+      presetList.replaceChildren(...buttons);
+    }
+    if (preview) presets.appendChild(preview);
+    presets.append(save, presetList);
+    syncPresets();
+    syncFns.push(syncPresets);
+
     var files = panelSection('项目文件', 'project-files', 'project');
     var download = h('button', { class: 'btn', id: 'guidance-export-project', text: '导出项目 JSON' });
     var upload = h('button', { class: 'btn', id: 'guidance-import-project', text: '导入 JSON 为新项目' });
@@ -673,11 +701,11 @@
         if (App.presetPreviewId) App.previewPreset(null);
         else App.select(null);
         propertyTabs.show('edit');
-        SignUI.toast('标识牌已清空');
+        SignUI.toast('标识牌已清空', 'success');
       });
     });
 
-    return h('div', {}, [files, preferences, actions]);
+    return h('div', {}, [presets, files, preferences, actions]);
   }
 
   function bindImageExport() {
@@ -854,7 +882,7 @@
     del.addEventListener('click', function () {
       App.update(function (st) { return State.deleteElement(st, el.id); });
       App.select(null);
-      SignUI.toast('元素已删除');
+      SignUI.toast('元素已删除', 'success');
     });
     root.appendChild(del);
     return root;
@@ -1106,7 +1134,7 @@
       var svg = document.createElementNS(Core.SVG_NS, 'svg');
       svg.setAttribute('viewBox', icon.vb);
       svg.innerHTML = icon.body;
-      var b = h('button', { class: 'icon-pick', title: icon.name }, [
+      var b = h('button', { type: 'button', class: 'icon-pick', title: icon.name, 'aria-label': icon.name }, [
         h('div', { class: 'icon-thumb' }, [svg]),
       ]);
       b.addEventListener('click', function () { patchProps(el.id, { icon: id }); });
@@ -1201,69 +1229,29 @@
   // ─── 预设预览面板 ──────────────────────────────────────────
 
   function buildPresetPreviewPanel() {
-    var p = Presets.get(App.presetPreviewId);
-    if (!p) return h('div', { class: 'hint-text', text: '预设不存在或已删除', 'data-property-tab': 'edit' });
-    var root = h('div', { 'data-property-tab': 'edit' });
-    root.appendChild(h('div', { class: 'section-title', text: p.name }));
-    root.appendChild(h('div', { class: 'field' }, [
-      h('div', { style: 'border:1px solid #edf0f3;border-radius:6px;padding:6px;background:#fff' }, [
-        renderRowThumb(p.elements, 56),
-      ]),
-    ]));
-    var list = h('div', { class: 'field' });
-    p.elements.forEach(function (el, i) {
-      var desc = describeElement(el);
-      list.appendChild(h('div', {
-        class: 'hint-text',
-        text: (i + 1) + '. ' + TYPE_NAMES[el.type] + (desc ? ' — ' + desc : ''),
-      }));
+    const preset = Presets.get(App.presetPreviewId);
+    const fullBoard = preset.kind === 'board';
+    const legacy = preset.kind === 'legacy-row';
+    const { graphic, size } = renderPresetPicture(preset);
+    const description = fullBoard ? '应用后会替换当前牌面的内容和设置，可用撤销恢复。'
+      : legacy ? '使用当前牌面设置，可添加为新行或拖入空行。'
+      : '添加此行会套用预设的牌面宽度、行高、底色和灰框，已有行会保留。';
+    const apply = h('button', { type: 'button', class: 'btn btn-primary ' + (fullBoard ? 'preset-apply-board' : 'preset-apply-new-row'),
+      text: fullBoard ? '应用整牌' : '添加为新行' });
+    apply.addEventListener('click', () => {
+      if (!Presets.apply(preset.id)) return;
+      if (!fullBoard) App.previewPreset(null);
+      SignUI.toast('已应用预设「' + preset.name + '」', 'success');
     });
-    root.appendChild(list);
-    root.appendChild(h('div', { class: 'hint-text', text: '可将此预设拖入空行，或直接添加为新行。' }));
-    var apply = h('button', { class: 'btn btn-primary preset-apply-new-row', text: '＋ 添加为新行' });
-    apply.addEventListener('click', function () {
-      var elements = Presets.materialize(p.id);
-      if (!elements || !elements.length) { SignUI.toast('预设内容为空', 'error'); return; }
-      App.update(function (st) {
-        var next = State.addRow(st);
-        var rowId = next.rows[next.rows.length - 1].id;
-        return elements.reduce(function (sign, el) { return State.addElement(sign, rowId, el); }, next);
-      });
-      App.previewPreset(null);
-      SignUI.toast('已将预设添加为新行', 'success');
-    });
-    root.appendChild(apply);
-    root.appendChild(h('div', { class: 'divider' }));
-    var del = h('button', { class: 'btn', text: '删除此预设', 'data-control-icon': 'delete' });
-    del.addEventListener('click', function () {
-      SignUI.confirmDialog('确定要删除预设「' + p.name + '」吗？', '删除预设', '删除', 'delete').then(function (ok) {
-        if (!ok) return;
-        Presets.remove(p.id);
-        App.previewPreset(null);
-      });
-    });
-    root.appendChild(del);
-    return root;
-  }
-
-  function describeElement(el) {
-    var p = el.props;
-    switch (el.type) {
-      case 'arrow': return p.direction;
-      case 'bilingual-text': return (p.textZh || '') + (p.textEn ? ' / ' + p.textEn : '');
-      case 'small-bilingual-text': return (p.textZh || '') + (p.textEn ? ' / ' + p.textEn : '');
-      case 'big-number': return p.text;
-      case 'number-line': return (p.lines || []).map(function (l) { return l.number; }).join('、') + ' 号线';
-      case 'text-line': return (p.text || '') + (p.textEn ? ' / ' + p.textEn : '');
-      case 'entrance': return '出入口 ' + p.code;
-      case 'exit': return '出口 ' + p.code;
-      case 'space': return '空白 ' + p.widthRatio + '×行高';
-      case 'icon': {
-        var lib = global.SignIcons;
-        return lib ? (lib.get(p.icon) || {}).name || p.icon : p.icon;
-      }
-      default: return '';
-    }
+    const remove = h('button', { type: 'button', class: 'btn', text: '删除预设', 'aria-label': '删除此预设', 'data-control-icon': 'delete' });
+    remove.addEventListener('click', () => confirmPresetRemoval(preset));
+    const details = legacy ? '旧版单行' : size.width + ' × ' + size.height + ' 像素 · ' + presetKind(preset);
+    return h('div', { class: 'guidance-preset-preview' }, [
+      h('h4', { text: preset.name }), h('p', { class: 'hint-text', text: details }),
+      h('div', { class: 'guidance-preset-picture' }, [graphic]),
+      h('p', { class: 'hint-text', text: description }),
+      h('div', { class: 'btn-row' }, [apply, remove]),
+    ]);
   }
 
   global.SignPanel = {
@@ -1272,6 +1260,5 @@
     buildColorPicker: buildColorPicker,
     syncRightPanel: syncRightPanel,
     sampleElement: sampleElement,
-    renderRowThumb: renderRowThumb,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -67,7 +67,8 @@
         const hidden = !available.has(button.dataset.propertyTabButton);
         if (button.hidden !== hidden) button.hidden = hidden;
       }
-      show(context === nextContext && available.has(active) ? active : 'edit', false);
+      const first = available.has('edit') ? 'edit' : available.values().next().value;
+      show(context === nextContext && available.has(active) ? active : first, false);
       context = nextContext;
       if (focused?.hidden) buttons.find(button => button.dataset.propertyTabButton === active).focus({ preventScroll: true });
     }

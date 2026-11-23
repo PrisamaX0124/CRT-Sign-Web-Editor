@@ -30,7 +30,13 @@
     };
   }
 
-  function create({ viewport, stage, paper, graphic, controls, addRow, alignTop = false, onChange }) {
+  function centeredTop(availableHeight, displayHeight, rowButtonHeight) {
+    const spareHeight = Math.max(0, availableHeight - displayHeight);
+    // 优先把牌面对准中央。空间不足时，稍向上移以露出添加行按钮。
+    return Math.min(spareHeight, (spareHeight + rowButtonHeight) / 2);
+  }
+
+  function create({ viewport, stage, paper, graphic, controls, addRow, onChange }) {
     let width = 0;
     let height = 0;
     let scale = 1;
@@ -92,7 +98,7 @@
       const borderHeight = pixels(style, 'borderTopWidth') + pixels(style, 'borderBottomWidth');
       const rowButtonHeight = addRow ? addRow.offsetHeight + pixels(global.getComputedStyle(addRow), 'marginTop') : 0;
       return {
-        paddingLeft, paddingTop, paddingRight, paddingBottom, borderWidth, borderHeight,
+        paddingLeft, paddingTop, paddingRight, paddingBottom, borderWidth, borderHeight, rowButtonHeight,
         horizontalSpace: paddingLeft + paddingRight,
         verticalSpace: paddingTop + paddingBottom + rowButtonHeight,
       };
@@ -125,7 +131,7 @@
       const spareHeight = Math.max(0, availableHeight - displayHeight);
       if (fitting && !locked) {
         left = spareWidth / 2;
-        top = alignTop ? 0 : spareHeight / 2;
+        top = centeredTop(availableHeight, displayHeight, spacing.rowButtonHeight);
       } else if (anchor) {
         const bounds = viewport.getBoundingClientRect();
         const horizontal = positionForAnchor(anchor.x - bounds.left - viewport.clientLeft - spacing.paddingLeft,
@@ -199,7 +205,8 @@
       const fromX = left - viewport.scrollLeft;
       const fromY = top - viewport.scrollTop;
       const toX = Math.max(0, viewport.offsetWidth - spacing.horizontalSpace - spacing.borderWidth - width * nextScale) / 2;
-      const toY = alignTop ? 0 : Math.max(0, viewport.offsetHeight - spacing.verticalSpace - spacing.borderHeight - height * nextScale) / 2;
+      const toY = centeredTop(viewport.offsetHeight - spacing.verticalSpace - spacing.borderHeight,
+        height * nextScale, spacing.rowButtonHeight);
       const start = scale;
       const interpolate = (from, to, progress) => from + (to - from) * progress;
       const clock = new global.Animation(new global.KeyframeEffect(null, [], { ...timing, fill: 'both' }), document.timeline);

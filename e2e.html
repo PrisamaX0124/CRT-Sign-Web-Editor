@@ -277,7 +277,7 @@
     function s07_presetPreviewAndDrop() {
       var w = W(), S = w.SignState, P = w.SignPresets;
       // 重新存一个预设
-      P.save('落牌预设', [S.createElement('arrow', { direction: 'up' }), S.createElement('space', { widthRatio: 0.3 })]);
+      savePresetExample(w, '落牌预设', [S.createElement('arrow', { direction: 'up' }), S.createElement('space', { widthRatio: 0.3 })]);
       w.App.renderAll();
       $('.palette-tab[data-value="presets"]').click();
       // 点击卡片 → 预览面板
@@ -314,7 +314,7 @@
       var row0Before = w.App.state.rows[0].elements.map(function (e) { return e.id; });
       wrap.dispatchEvent(new w.DragEvent('drop', { dataTransfer: dataTransfer2, clientX: b0.left + 100, clientY: b0.top + b0.height / 2, bubbles: true, cancelable: true }));
       ok('S07 非空行释放无效', w.App.state.rows[0].elements.map(function (e) { return e.id; }).join() === row0Before.join());
-      localStorage.removeItem('public-sign-presets');
+      P.remove(P.list()[0].id);
       $('.palette-tab[data-value="elements"]').click();
     }
 
@@ -1353,8 +1353,8 @@
     function s41_paletteTabsAndCompactDirections() {
       var w = W(), S = w.SignState;
       var tabs = $$('.palette-tab');
-      ok('S41 元素与预设有独立选项卡', tabs.length === 2 &&
-        tabs[0].textContent === '元素' && tabs[1].textContent === '预设');
+      ok('S41 元素与项目预设有各自的入口', tabs.length === 2 &&
+        tabs[0].textContent === '元素' && tabs[1].textContent === '项目预设');
       if (tabs.length !== 2) return;
       $('.palette-tab[data-value="elements"]').click();
       ok('S41 桌面分类压缩为三组', $$('.palette-category').length === 3,
@@ -1491,10 +1491,19 @@
       ok('S44 移除深色规则后恢复系统界面', w.getComputedStyle($('#right-panel')).backgroundColor === beforeBg);
     }
 
+    function savePresetExample(editor, name, elements) {
+      var state = editor.SignState;
+      var row = state.createRow(elements);
+      editor.App.update(function (project) {
+        var example = state.savePreset(Object.assign({}, project, { rows: [row] }), name, row.id);
+        return Object.assign({}, project, { presets: example.presets });
+      });
+    }
+
     async function s45_applyPresetInNarrowWindow() {
-      var w = W(), S = w.SignState, P = w.SignPresets;
+      var w = W(), S = w.SignState;
       await resizeEditor(375);
-      P.save('窄窗口预设', [S.createElement('big-number', { text: '15' })]);
+      savePresetExample(w, '窄窗口预设', [S.createElement('big-number', { text: '15' })]);
       $('#palette .palette-tab[data-value="presets"]').click();
       var card = $$('#palette .preset-card').filter(function (n) { return n.textContent.indexOf('窄窗口预设') !== -1; })[0];
       card.click();

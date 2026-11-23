@@ -146,8 +146,8 @@
       var actions = h('div', { class: 'row-actions' });
       var saveBtn = SignUI.presetSaveButton(function (ev) {
         ev.stopPropagation();
-        saveRowAsPreset(i);
-      }, { title: '将此行保存为预设' });
+        SignPresets.promptSave(rl.id);
+      }, { title: '将此行保存到当前项目的预设' });
       var delBtn = h('button', {
         class: 'row-del', text: '删除行', 'data-control-icon': 'delete',
         title: state.rows.length > 1 ? '删除此行' : '至少保留一行',
@@ -377,7 +377,7 @@
         if (!id || !State.findElement(App.state, id)) return;
         if (action.key === 'delete') {
           App.deleteSelection();
-          UI.toast('选中元素已删除');
+          UI.toast('选中元素已删除', 'success');
           return;
         }
         if (action.key === 'move-left' || action.key === 'move-right') {
@@ -1019,23 +1019,13 @@
         return State.addElement(st, target.rowId, target.element || State.createElement(payload.type, payload.props), target.gap);
       });
     } else if (target.kind === 'preset' && payload.id) {
+      if (payload.project && payload.project !== App.projects?.current?.id) return;
       var row = App.state.rows.find(function (item) { return item.id === target.rowId; });
       if (!row || row.elements.length !== 0) {
-        SignUI.toast('预设只能放入空行', 'error');
+        SignUI.toast('预设只能放入空行', 'warning');
         return;
       }
-      var elements = SignPresets.materialize(payload.id);
-      if (!elements || elements.length === 0) {
-        SignUI.toast('预设内容为空', 'error');
-        return;
-      }
-      App.update(function (st) {
-        var rows = st.rows.map(function (r) {
-          return r.id === target.rowId ? Object.assign({}, r, { elements: elements }) : r;
-        });
-        return Object.assign({}, st, { rows: rows });
-      });
-      SignUI.toast('已应用预设', 'success');
+      if (SignPresets.apply(payload.id, target.rowId)) SignUI.toast('已应用预设', 'success');
     }
   }
 
@@ -1046,28 +1036,14 @@
     if (App.state.rows[index].elements.length === 0) {
       // 空行无内容可丢，直接删除免去确认
       App.update(function (st) { return State.deleteRow(st, rowId); });
-      SignUI.toast('已删除空行');
+      SignUI.toast('已删除空行', 'success');
       return;
     }
     SignUI.confirmDialog('确定要删除此行吗？行内 ' + App.state.rows[index].elements.length + ' 个元素将一并删除。', '删除行', '删除', 'delete').then(function (ok) {
       if (!ok) return;
       // 确认回调时行序可能已变，按 id 删而非按下标
       App.update(function (st) { return State.deleteRow(st, rowId); });
-      SignUI.toast('行已删除');
-    });
-  }
-
-  function saveRowAsPreset(index) {
-    var row = App.state.rows[index];
-    if (row.elements.length === 0) {
-      SignUI.toast('空行不能保存为预设', 'error');
-      return;
-    }
-    SignUI.promptDialog('为这一行元素起个名字：', '保存为预设', '', '如：站台方向牌').then(function (name) {
-      if (name === null) return;
-      if (!name) { SignUI.toast('预设名称不能为空', 'error'); return; }
-      SignPresets.save(name, row.elements);
-      SignUI.toast('预设「' + name + '」已保存', 'success');
+      SignUI.toast('行已删除', 'success');
     });
   }
 

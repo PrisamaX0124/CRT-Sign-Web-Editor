@@ -32,6 +32,7 @@
   <script src="js/state.js"></script>
   <script src="js/render.js"></script>
   <script src="js/editor-motion.js"></script>
+  <script src="js/notifications.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/presets.js"></script>
   <script src="js/storage.js"></script>
@@ -691,26 +692,24 @@
 
     // ─── 预设 ─────────────────────────────────────────
 
-    test('预设：保存/列表/物化（新 id）/删除', function () {
-      localStorage.removeItem(SignPresets.KEY);
+    test('项目预设保存、应用后生成独立元素、删除', function () {
       var els = [
         SignState.createElement('arrow'),
         SignState.createElement('bilingual-text', { textZh: '测试', textEn: 'Test' }),
       ];
-      SignPresets.save('测试预设', els);
-      var items = SignPresets.list();
+      var row = SignState.createRow(els);
+      var project = SignState.savePreset(Object.assign(SignState.createSign(), { rows: [row] }), '测试预设', row.id);
+      var items = project.presets;
       assertEqual(items.length, 1);
       assertEqual(items[0].name, '测试预设');
-      assertEqual(items[0].elements.length, 2);
+      assertEqual(items[0].board.rows[0].elements.length, 2);
 
-      var materialized = SignPresets.materialize(items[0].id);
+      var materialized = SignState.applyPreset(project, items[0].id).rows[1].elements;
       assertEqual(materialized.length, 2);
       assert(materialized[0].id !== els[0].id, '物化后 id 全新');
       assertEqual(materialized[1].props.textZh, '测试', 'props 深拷贝保留');
 
-      SignPresets.remove(items[0].id);
-      assertEqual(SignPresets.list().length, 0);
-      localStorage.removeItem(SignPresets.KEY);
+      assertEqual(SignState.removePreset(project, items[0].id).presets.length, 0);
     });
 
     // ─── 颜色选择器组件 ────────────────────────────────

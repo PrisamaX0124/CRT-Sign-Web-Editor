@@ -40,24 +40,8 @@
   }
 
   function wireStaticButtons() {
-    ['left', 'right'].forEach(function (side) {
-      var panel = document.getElementById(side + '-panel');
-      var collapse = document.getElementById(side + '-collapse');
-      var expand = document.getElementById(side + '-expander');
-      collapse.addEventListener('click', function () {
-        panel.classList.add('collapsed');
-        expand.hidden = false;
-        expand.focus({ preventScroll: true });
-        panel.inert = true;
-      });
-      expand.addEventListener('click', function () {
-        panel.classList.remove('collapsed');
-        panel.inert = false;
-        collapse.focus({ preventScroll: true });
-        expand.hidden = true;
-      });
-    });
-
+    document.getElementById('guidance-undo').addEventListener('click', App.undo);
+    document.getElementById('guidance-redo').addEventListener('click', App.redo);
     document.getElementById('close-element-btn').addEventListener('click', function () {
       if (App.presetPreviewId) App.previewPreset(null);
       else App.select(null);
@@ -71,7 +55,6 @@
       graphic: document.getElementById('sign-svg'),
       controls: document.getElementById('guidance-zoom'),
       addRow: document.getElementById('add-row-btn'),
-      alignTop: true,
       onChange: SignInteract.positionElementToolbar,
     });
   }
@@ -95,9 +78,15 @@
         createDefault: SignState.createSign,
         serialize: SignState.serializeSign,
         deserialize: SignState.deserializeSign,
+        projectMigration: {
+          key: 'legacy-guidance-presets-v1',
+          apply: SignPresets.migrateLegacy,
+          onError: () => SignUI.toast('旧版预设暂未迁入，原数据仍在浏览器中', 'warning'),
+        },
         describe: state => ({
           rowCount: state.rows.length,
           elementCount: state.rows.reduce((count, row) => count + row.elements.length, 0),
+          presetCount: state.presets?.length || 0,
         }),
       });
 
@@ -120,14 +109,15 @@
           const size = SignRender.renderSignInto(drawing, state, App.measure, { clean: true });
           return { drawing, size, usedFonts: SignExporters.collectUsedFonts(state) };
         },
-        formatDetails: project => (project.rowCount ?? 0) + ' 行 · ' + (project.elementCount ?? 0) + ' 个元素',
+        formatDetails: project => (project.rowCount ?? 0) + ' 行 · ' + (project.elementCount ?? 0) +
+          ' 个元素 · ' + (project.presetCount ?? 0) + ' 个预设',
       });
       await App.autosave.ready;
       App.measure = SignCore.createCanvasMeasurer();
       SignPanel.buildPalette();
       App.renderAll();
       hideLoading();
-      if (!fontsReady) SignUI.toast('字体未能完全加载，文字尺寸可能不准，建议刷新重试', 'error');
+      if (!fontsReady) SignUI.toast('字体未能完全加载，文字尺寸可能不准，建议刷新重试', 'warning');
       document.fonts.ready.then(function () { App.renderAll(); });
     });
   }

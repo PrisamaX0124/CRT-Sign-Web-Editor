@@ -32,6 +32,7 @@ function paletteHarness(presets = []) {
     }
     addEventListener(name, fn) { this.events[name] = fn; }
     click() { this.events.click?.({ stopPropagation() {} }); }
+    focus() {}
     set innerHTML(value) { this.children = []; }
     querySelectorAll(selector) {
       const match = selector.match(/^\.([\w-]+)(?:\[([\w-]+)="([^"]+)"\])?$/);
@@ -57,10 +58,14 @@ function paletteHarness(presets = []) {
         return node;
       },
     },
-    SignRender: { renderElementStandalone: () => ({ node: new Node('svg') }) },
-    SignPresets: { list: () => presets, onChange: fn => { context.presetChanged = fn; } },
+    SignRender: {
+      renderElementStandalone: () => ({ node: new Node('svg') }),
+      renderSignInto: graphic => { graphic.appendChild(new Node('rect')); },
+    },
+    SignPresets: { list: () => context.App.state.presets },
     App: {
       measure: () => 0,
+      state: { presets },
       previewPreset: id => { context.previews.push(id); },
     },
     previews: [],
@@ -83,23 +88,25 @@ test('选择区把预设分入独立选项卡，方向保留全部12种且分类
   assert.equal(root.querySelectorAll('.palette-empty').length, 1);
 });
 
-test('保存预设后保留当前选项卡，元素与预设卡片都可拖动', () => {
-  const presets = [];
-  const { root, context } = paletteHarness(presets);
+test('元素和单行预设可拖动，整牌预设通过预览应用', () => {
+  const { root } = paletteHarness([
+    { id: 'saved-row', name: '常用方向', kind: 'row', board: {} },
+    { id: 'saved-board', name: '整牌', kind: 'board', board: {} },
+  ]);
   const cards = root.querySelectorAll('.palette-card');
   assert.ok(cards.length > 0 && cards.every(card => card.getAttribute('draggable') === 'true'));
   root.querySelector('.palette-tab[data-value="presets"]').click();
-  presets.push({ id: 'saved-preset', name: '常用方向', elements: [] });
-  context.presetChanged();
   assert.equal(root.querySelector('.palette-tab[data-value="presets"]').getAttribute('aria-selected'), 'true');
-  assert.equal(root.querySelector('.preset-card').getAttribute('draggable'), 'true');
+  const [row, board] = root.querySelectorAll('.preset-card');
+  assert.equal(row.getAttribute('draggable'), 'true');
+  assert.equal(board.getAttribute('draggable'), 'false');
   root.querySelector('.palette-tab[data-value="elements"]').click();
   assert.equal(root.querySelectorAll('.palette-category').length, 3);
   assert.equal(root.querySelectorAll('.preset-card').length, 0);
 });
 
 test('预设卡片可用Enter/Space打开预览，内部删除按钮的按键不会重复打开', () => {
-  const { root, context } = paletteHarness([{ id: 'preset-1', name: '常用方向', elements: [] }]);
+  const { root, context } = paletteHarness([{ id: 'preset-1', name: '常用方向', kind: 'row', board: {} }]);
   root.querySelector('.palette-tab[data-value="presets"]').click();
   const card = root.querySelector('.preset-card');
   assert.equal(card.getAttribute('role'), 'button');

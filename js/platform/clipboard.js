@@ -23,7 +23,7 @@
   }
   function canCut(ids) {
     if (ids.length < App.state.stations.length) return true;
-    notice('剪切时请至少保留一个站点'); return false;
+    notice('剪切时请至少保留一个站点', 'warning'); return false;
   }
   function cut(ids) {
     cutGap = App.state.stations.findIndex(function (s) { return ids.indexOf(s.id) >= 0; });
@@ -36,7 +36,7 @@
       gap = App.state.stations.findIndex(function (s) { return s.id === id; }) + 1;
     } else if (cutGap !== null) gap = cutGap;
     App.update(function (state) { return S.pasteStations(state, data, gap); }, null, { selectNew: true });
-    cutGap = null; notice('已粘贴 ' + data.stations.length + ' 个站点'); return true;
+    cutGap = null; notice('已粘贴 ' + data.stations.length + ' 个站点', 'success'); return true;
   }
   function onCopy(event) {
     if (event.defaultPrevented || blocked(event.target) || !event.clipboardData) return;
@@ -44,7 +44,7 @@
     event.clipboardData.setData('text/plain', text); event.preventDefault();
     localText = text; localOnly = false; copyVersion++; remember(text, event.type === 'cut');
     if (event.type === 'cut') cut(ids); else cutGap = null;
-    notice((event.type === 'cut' ? '已剪切 ' : '已复制 ') + ids.length + ' 个站点');
+    notice((event.type === 'cut' ? '已剪切 ' : '已复制 ') + ids.length + ' 个站点', 'success');
   }
   function onPaste(event) {
     if (event.defaultPrevented || blocked(event.target) || !event.clipboardData) return;
@@ -52,7 +52,7 @@
     if (text.length > 2 * 1024 * 1024) return;
     try { value = JSON.parse(text); } catch (err) { return; }
     if (!value || value.kind !== 'platform-sign-stations') return;
-    event.preventDefault(); try { pasteText(text); } catch (err) { notice(err.message); }
+    event.preventDefault(); try { pasteText(text); } catch (err) { notice(err.message, 'error'); }
   }
   function copyButton(isCut) {
     if (document.querySelector('dialog[open]')) return Promise.resolve(false);
@@ -62,7 +62,7 @@
     catch (err) { writing = Promise.reject(err); }
     pendingWrite = Promise.resolve(writing).then(function () { return true; }, function () { return false; }).then(function (system) { if (version === copyVersion) localOnly = !system; return system; });
     remember(text, isCut); if (isCut) cut(ids); else cutGap = null;
-    return pendingWrite.then(function (system) { if (copyingProject !== projectVersion) return false; notice((isCut ? '已剪切 ' : '已复制 ') + ids.length + ' 个站点' + (system ? '' : '（可在当前页面粘贴）')); return true; });
+    return pendingWrite.then(function (system) { if (copyingProject !== projectVersion) return false; notice((isCut ? '已剪切 ' : '已复制 ') + ids.length + ' 个站点' + (system ? '' : '（可在当前页面粘贴）'), 'success'); return true; });
   }
   async function pasteButton() {
     if (document.querySelector('dialog[open]')) return false;
@@ -71,7 +71,7 @@
     try { if (navigator.clipboard && !localOnly) text = await navigator.clipboard.readText(); }
     catch (err) { /* Keep the local copy when clipboard permission is unavailable. */ }
     if (pastingProject !== projectVersion) return false;
-    try { return pasteText(text); } catch (err) { notice(err.message); return false; }
+    try { return pasteText(text); } catch (err) { notice(err.message, 'error'); return false; }
   }
   function sync() {
     if (!App) return;
@@ -91,7 +91,7 @@
     });
     document.getElementById('platform-clipboard-history').addEventListener('change', function (event) {
       var entry = entries.find(function (item) { return item.id === event.target.value; }); event.target.value = '';
-      if (entry && !document.querySelector('dialog[open]')) { try { pasteText(entry.text); } catch (err) { notice(err.message); } }
+      if (entry && !document.querySelector('dialog[open]')) { try { pasteText(entry.text); } catch (err) { notice(err.message, 'error'); } }
     });
     sync();
   }

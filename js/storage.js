@@ -43,12 +43,13 @@
 
   // ─── 自动保存 ──────────────────────────────────────────────
 
-  function createAutosave({ storageKey, indicator, serializeProject, exportProject, delay = 0, restored = false }) {
+  function createAutosave({ storageKey, indicator, serializeProject, exportProject, notice, delay = 0, restored = false }) {
     var status = indicator.querySelector('[role="status"]');
     var backup = indicator.querySelector('button');
     var saveTimer;
     var pending = false;
     var conflict = false;
+    var saveFailed = false;
     var lastSaved;
     var reload;
     try { lastSaved = global.localStorage.getItem(storageKey); } catch { /* 存储恢复后仍需允许重试。 */ }
@@ -62,7 +63,9 @@
     function showConflict() {
       conflict = true;
       clearTimeout(saveTimer);
-      showStatus('conflict', '项目已在其他窗口修改，自动保存已停止');
+      var message = '项目已在其他窗口修改，自动保存已停止';
+      showStatus('conflict', message);
+      notice?.(message, 'warning');
       backup.hidden = false;
       if (!reload) {
         reload = document.createElement('button');
@@ -94,9 +97,12 @@
       } catch {
         showStatus('failed', '保存失败');
         backup.hidden = false;
+        if (!saveFailed) notice?.('项目保存失败，请先导出备份', 'error');
+        saveFailed = true;
         return;
       }
       showStatus('saved', '已保存');
+      saveFailed = false;
       pending = false;
       backup.hidden = true;
     }

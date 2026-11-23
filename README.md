@@ -33,7 +33,7 @@
 
 编辑内容会自动保存在当前浏览器中。换设备或长期保存时，建议另存项目 JSON；常用排版可以存为预设，方便下次复用。
 
-导向和站台页顶部的「我的项目」可以分别管理多份工程。可用卡片或列表查看项目，点击项目名打开。JSON 导入会另建项目，旧自动存档会迁移并保留原文。项目和预设分别保存。[保存方式与测试清单](docs/platform-projects.md)
+导向和站台页顶部的「我的项目」可以分别管理多份工程。可用卡片或列表查看项目，点击项目名打开。导入项目文件会另建项目，旧自动存档会迁移并保留原文。每份导向项目可保存多套整牌或单行预设，预设随项目备份和复制。[保存方式与测试清单](docs/platform-projects.md)
 
 ## 本地部署
 
@@ -49,7 +49,9 @@
 
 本项目基于 [endcreeper861/JR-Guidance-Sign-Web-Editor](https://github.com/endcreeper861/JR-Guidance-Sign-Web-Editor) 修改，保留原作者历史，代码沿用 [Apache License 2.0](LICENSE)。来源说明见 [NOTICE](NOTICE)。
 
-MiSans 字体（由小米推出，可按 [《MiSans 字体知识产权许可协议》](https://hyperos.mi.com/font-download/MiSans字体知识产权许可协议.pdf) 免费使用及商用）；Frutiger 字体由原仓库提供；服务设施和方向图标来自 [signmaker-main](https://github.com/hcrk9/signmaker/) ，中国铁路图标按提供的路徽整理。字体、图标等第三方素材遵循各自的授权，不因本仓库的代码开源而改变。
+MiSans 字体（由小米推出，可按 [《MiSans 字体知识产权许可协议》](https://hyperos.mi.com/font-download/MiSans字体知识产权许可协议.pdf) 免费使用及商用）；Frutiger 字体由原仓库提供；方向图标和大部分服务设施图标来自 [signmaker-main](https://github.com/hcrk9/signmaker/) ，中国铁路图标按提供的路徽整理。字体、图标等第三方素材遵循各自的授权，不因本仓库的代码开源而改变。
+
+码头、机场、客渡码头和直升机场图标按现行国标表 1 的图样重绘。[GB/T 10001.3—2021 客运货运符号](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=16B9A39C15C3C97305CC4975865DBAE0)
 
 内置底纹改编自 Hachi 的《重庆轨道交通全线路底纹》，按署名—非商业性使用 4.0 国际许可提供。[底纹作者、修改说明与许可](assets/platform-patterns.txt)
 

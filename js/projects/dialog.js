@@ -131,7 +131,9 @@
     }
     function download(value) {
       const saveFile = app.download || global.SignStorage.download;
-      saveFile(new Blob([value.data], { type: 'application/json' }), (value.name || '标识项目').replace(/[<>:"/\\|?*]/g, '_') + '.json');
+      const name = value.name || '标识项目';
+      saveFile(new Blob([value.data], { type: 'application/json' }), name.replace(/[<>:"/\\|?*]/g, '_') + '.json');
+      notice('已导出项目备份「' + name + '」', 'success');
     }
     function askName(title, value, action, { trigger, projectId, success, entersProject } = {}) {
       if (controlsBusy()) return;
@@ -236,7 +238,11 @@
       card.dataset.projectId = value.id;
       if (active) card.setAttribute('aria-current', 'true');
       const name = value.name || '未命名项目';
-      const open = button(name, () => run(async () => { await manager.open(value.id); enterProject(); }), '打开 ' + name);
+      const open = button(name, () => run(async () => {
+        await manager.open(value.id);
+        enterProject();
+        notice('已打开项目「' + manager.current.name + '」', 'success');
+      }), '打开 ' + name);
       open.className = 'project-card-open';
       open.disabled = active;
       open.title = name;
@@ -321,7 +327,7 @@
         }
         if (temporaryChanges) throw new Error('页面中有尚未保存的修改，请先导出 JSON，再刷新页面恢复存储。');
         await manager.initialize(source);
-        if (legacyUnavailable) notice('未能读取旧版自动存档，原数据未改动。本地项目可以继续保存；恢复浏览器存储权限后请刷新页面。');
+        if (legacyUnavailable) notice('未能读取旧版自动存档，原数据未改动。本地项目可以继续保存；恢复浏览器存储权限后请刷新页面。', 'warning');
         if (!channel && global.BroadcastChannel) {
           try {
             channel = new BroadcastChannel(library.databaseName);
@@ -342,10 +348,17 @@
       try { const data = global.localStorage.getItem(library.legacyKey); if (data) download({ name: '原有自动存档', data }); else notice('没有旧版自动存档'); }
       catch (error) { report(error); }
     });
-    control('retry').addEventListener('click', () => { if (manager?.current) flush().catch(report); else starting = start(); });
-    control('retry-dialog').addEventListener('click', () => { if (manager?.current) run(flush); else starting = start().then(refresh); });
+    async function retrySave() {
+      await flush();
+      notice('项目已保存', 'success');
+    }
+    control('retry').addEventListener('click', () => { if (manager?.current) run(retrySave); else starting = start(); });
+    control('retry-dialog').addEventListener('click', () => { if (manager?.current) run(retrySave); else starting = start().then(refresh); });
     control('reload').addEventListener('click', () => {
-      if (global.confirm('重新打开会放弃本页尚未保存的修改。请先导出 JSON 备份。确定重新打开？')) run(() => manager.reload());
+      if (global.confirm('重新打开会放弃本页尚未保存的修改。请先导出 JSON 备份。确定重新打开？')) run(async () => {
+        await manager.reload();
+        notice('已重新打开当前项目', 'success');
+      });
     });
     control('copy-conflict').addEventListener('click', () => askName('把本页修改另存副本', manager.current.name.slice(0, 77) + ' 副本', name => manager.duplicate(manager.current.id, name), {
       trigger: control('copy-conflict'), success: '副本已创建并打开', entersProject: true,
@@ -443,15 +456,17 @@
     });
     control('delete-confirm').addEventListener('click', async () => {
       if (controlsBusy()) return;
-      const card = cards.get(deleteTarget.id)?.card;
+      const { id, name } = deleteTarget;
+      const card = cards.get(id)?.card;
       const neighbor = (card?.nextElementSibling || card?.previousElementSibling)?.dataset.projectId;
       deletingProject = true;
       try {
-        await manager.remove(deleteTarget.id);
+        await manager.remove(id);
         await refresh().catch(report);
         closeDialog(deleteDialog);
         focusInList(neighbor || manager.current?.id);
         playMotion(list, [{ opacity: .76 }, { opacity: 1 }], 'control');
+        notice('已删除项目「' + (name || '未命名项目') + '」', 'success');
       } catch (error) { control('delete-error').textContent = errorMessage(error); }
       finally { deletingProject = false; }
     });

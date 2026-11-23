@@ -32,6 +32,15 @@
     if (App.autosave) App.autosave.schedule();
   }
 
+  function sameSign(first, second) {
+    if (first === second) return true;
+    if (first.presets !== second.presets) return JSON.stringify(first) === JSON.stringify(second);
+    // 编辑牌面时预设数组没有变化，比较时无需重复读取每套快照。
+    const { presets: firstPresets, ...firstBoard } = first;
+    const { presets: secondPresets, ...secondBoard } = second;
+    return JSON.stringify(firstBoard) === JSON.stringify(secondBoard);
+  }
+
   function restoreHistory(from, to) {
     if (App.projects?.busy) return false;
     App.breakHistoryGroup();
@@ -78,13 +87,13 @@
       var before = App.layout && global.SignRender?.anchorExistingPositions
         ? SignRender.anchorExistingPositions(App.state, App.layout) : App.state;
       var next = pureFn(before);
-      if (before !== App.state && JSON.stringify(next) === JSON.stringify(before)) return;
+      if (before !== App.state && sameSign(next, before)) return;
       if (global.SignState && SignState.applyPaddingAuto) {
         // 相邻自动内边距：每次变更后按相邻关系重算自动侧（幂等，随当次更新落盘/撤销）
         next = SignState.applyPaddingAuto(next);
       }
       // 纯函数可能返回等值的新对象；无效移动/重复设置不消耗撤销步骤。
-      if (JSON.stringify(next) === JSON.stringify(App.state)) return;
+      if (sameSign(next, App.state)) return;
       var now = Date.now();
       if (App.state && !(key && key === historyKey && ((options && options.continuous) || now - historyTime < 800))) {
         undoStack.push(snapshot());
@@ -103,6 +112,7 @@
         selection = { elementIds: added, elementId: added[added.length - 1], anchorId: added[0] };
       }
       commitState(next, selection);
+      return true;
     },
 
     undo: function () { return restoreHistory(undoStack, redoStack); },
@@ -112,6 +122,7 @@
     /** 全量重渲染：SVG + 覆盖层 + 右栏同步（不动焦点） */
     renderAll: function () {
       if (!App.state || !App.measure) return;
+      if (App.presetPreviewId && !App.state.presets?.some(preset => preset.id === App.presetPreviewId)) App.presetPreviewId = null;
       var svg = document.getElementById('sign-svg');
       App.layout = SignRender.renderSignInto(svg, App.state, App.measure, {
         selectedElementId: App.selection.elementId,
@@ -119,6 +130,8 @@
       });
       var dimensions = document.getElementById('guidance-preview-dimensions');
       if (dimensions) dimensions.textContent = App.layout.width + ' × ' + App.layout.height + ' 像素';
+      document.getElementById('guidance-undo').disabled = !undoStack.length;
+      document.getElementById('guidance-redo').disabled = !redoStack.length;
       if (global.SignInteract) SignInteract.renderOverlay(App.layout, App.state);
       App.previewZoom?.refresh(App.layout.width, App.layout.height);
       if (global.SignPanel) SignPanel.syncRightPanel();
@@ -389,15 +402,8 @@
     }
   }
 
-  // ─── Toast ─────────────────────────────────────────────────
-
   function toast(message, type) {
-    var el = h('div', { class: 'toast' + (type ? ' ' + type : ''), text: message });
-    document.getElementById('toasts').appendChild(el);
-    setTimeout(function () {
-      el.classList.add('leaving');
-      global.EditorMotion.afterMotion(el, function () { el.remove(); });
-    }, type === 'error' ? 4200 : 2400);
+    return global.EditorNotifications.show(message, type);
   }
 
   // ─── 模态对话框 ────────────────────────────────────────────

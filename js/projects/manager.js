@@ -1,7 +1,7 @@
 (function (global) {
   'use strict';
 
-  function createLibrary({ databaseName, legacyKey, legacyName, createDefault, serialize, deserialize, describe }) {
+  function createLibrary({ databaseName, legacyKey, legacyName, createDefault, serialize, deserialize, describe, projectMigration }) {
     function conflictError(projectId) {
       const error = new Error('项目已在其他窗口修改，请先导出备份，再重新打开，或另存副本。');
       error.name = 'ProjectConflictError';
@@ -103,7 +103,18 @@
             }
             // 原文留在旧存档中，迁移标记与工程必须一起写入，断电后才能安全重试。
             if (legacy) legacy.data = source;
-            const value = await store.initialize(legacy);
+            let value = await store.initialize(legacy);
+            if (projectMigration) {
+              try {
+                value = await store.migrateProject(value.id, projectMigration.key, previous => {
+                  const before = readState(previous);
+                  const after = projectMigration.apply(before);
+                  if (!after) return null;
+                  if (before === after) return previous;
+                  return { ...previous, ...describe(after), data: serialize(after), revision: previous.revision + 1 };
+                });
+              } catch (error) { projectMigration.onError?.(error); }
+            }
             activate(value, readState(value));
             if (damagedLegacy) status('failed', '旧版自动存档损坏，已保留原文，请从「我的项目」下载旧版自动存档备份。');
           }, true);

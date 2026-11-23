@@ -24,6 +24,9 @@
       return S.settings(S.replaceStations(original, stations), { mode: 'vertical', direction: 1, currentId: stations[6].id });
     }
     function $(id) { return d.getElementById(id); }
+    function notificationText() {
+      return d.querySelector('#toasts .toast:last-child:not(.leaving) .toast-message')?.textContent || '';
+    }
     function input(id, value, type) { var el = $(id); if (id === 'station-transfers') $('transfer-bulk').open = true; el.focus(); el.value = value; el.dispatchEvent(new w.Event(type || 'input', { bubbles: true })); }
     function restore() { A.update(function () { return original; }); A.select(original.currentId); }
     await test('Ctrl/Shift 多选：站点列表与牌面一致，全组选框、微调、删除和撤销恢复选择', function () {
@@ -41,7 +44,7 @@
     });
     await test('页面空白取消选择：牌面外、左右栏留白、输入框跨界拖选与控件点击', async function () {
       restore();$('platform-preview-scroll').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));assert(!A.selectedKey&&!$('property-settings').hidden,'牌面外空白应取消选择');
-      A.select(A.state.currentId);d.querySelector('.platform-stations .platform-panel-title').click();assert(!A.selectedKey,'左栏空白也应取消选择');
+      A.select(A.state.currentId);d.querySelector('#platform-content .panel-header').click();assert(!A.selectedKey,'左栏空白也应取消选择');
       A.select(A.state.currentId);$('station-properties').click();assert(A.selectedKey,'属性分组应保留选择');
       $('station-en').dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true,pointerId:71,isPrimary:true,button:0,clientX:100,clientY:100}));
       d.dispatchEvent(new w.PointerEvent('pointerup',{bubbles:true,pointerId:71,clientX:400,clientY:100}));
@@ -566,7 +569,7 @@
         input('png-scale','4','change');$('export-png').click();await waitFor(function(){return downloads.length===1;});
         var image=await w.createImageBitmap(downloads[0].blob);assert(image.width===3072&&image.height===768);image.close();
         assert(S.serialize(A.state)===before,'高清导出不应修改标识牌尺寸或状态');
-        assert($('platform-notice').textContent.includes('3072 × 768'),'导出提示应显示实际 PNG 尺寸');
+        assert(notificationText().includes('3072 × 768'),'导出提示应显示实际 PNG 尺寸');
       } finally { A.download=old;$('png-scale').value=previousScale; }
     });
     await test('真实 PNG 默认导出 2 倍尺寸，SVG 和项目按钮可正常导出', async function () {
@@ -582,7 +585,7 @@
       restore(); var imported = S.settings(original, { mode: 'vertical', line: '5', color: '#00A3E0' });
       async function choose(text) { var data = new w.DataTransfer(); data.items.add(new w.File([text], 'platform-test.json', { type: 'application/json' })); $('project-file').files = data.files; $('project-file').dispatchEvent(new w.Event('change', { bubbles: true })); }
       await choose(S.serialize(imported)); await waitFor(function () { return A.state.mode === 'vertical' && A.state.line === '5'; }); assert(A.state.color === '#00A3E0' && A.state.stations.length === 8);
-      var before = S.serialize(A.state); await choose('{"kind":"wrong","stations":[]}'); await waitFor(function () { return $('platform-notice').textContent.includes('导入失败'); }); assert(S.serialize(A.state) === before);
+      var before = S.serialize(A.state); await choose('{"kind":"wrong","stations":[]}'); await waitFor(function () { return notificationText().includes('导入失败'); }); assert(S.serialize(A.state) === before);
     });
     await test('站台 JSON 导入为新项目，导入后回到整牌设置，历史记录不跨项目', async function () {
       restore();
@@ -611,7 +614,7 @@
         ['站台项目.json', JSON.stringify(damagedPattern), '底纹图片无法读取'],
       ]) {
         submit(name, source);
-        await waitFor(function () { return $('platform-notice').textContent.includes(message); });
+        await waitFor(function () { return notificationText().includes(message); });
         assert(S.serialize(A.state) === imported && !A.selectedKeys().length, '错误文件改动了当前项目或选中项');
       }
       A.undo();
@@ -870,7 +873,7 @@
       var pixels = custom.context.getImageData(118, 105, 120, 10).data;
       assert(new Set(pixels.filter(function (_, index) { return index % 4 === 1; })).size > 3, '透明图片应在原色上显示');
       chooseFile('line-pattern-file', new w.File(['坏文件'], '损坏图片.png', { type: 'image/png' }));
-      await waitFor(function () { return $('platform-notice').textContent.includes('底纹导入失败'); });
+      await waitFor(function () { return notificationText().includes('底纹导入失败'); });
       assert(A.state.linePattern.image === image);
       var canvas = d.createElement('canvas');
       canvas.width = 32; canvas.height = 16;
@@ -939,15 +942,15 @@
       var mark = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="12" height="24" fill="white"/></svg>';
       input('line-pattern-source', 'line-5', 'change');
       chooseFile('line-pattern-file', new w.File([mark], '文字.txt'));
-      await waitFor(function () { return $('platform-notice').textContent.includes('请选择透明图片'); });
+      await waitFor(function () { return notificationText().includes('请选择透明图片'); });
       chooseFile('line-pattern-file', new w.File([new Uint8Array(10 * 1024 * 1024 + 1)], '大图.png'));
-      await waitFor(function () { return $('platform-notice').textContent.includes('10 兆字节'); });
+      await waitFor(function () { return notificationText().includes('10 兆字节'); });
       chooseFile('line-pattern-file', new w.File([mark.replace('width="24"', 'width="9000"')], '过宽.svg'));
-      await waitFor(function () { return $('platform-notice').textContent.includes('8192 像素'); });
+      await waitFor(function () { return notificationText().includes('8192 像素'); });
       assert(A.state.linePattern.source === 'line-5');
       chooseFile('line-pattern-file', new w.File([mark], '底纹.svg'));
       input('line-pattern-source', 'line-6', 'change');
-      await waitFor(function () { return $('platform-notice').textContent.includes('重新选择'); });
+      await waitFor(function () { return notificationText().includes('重新选择'); });
       assert(A.state.linePattern.source === 'line-6' && !A.state.linePattern.image);
       restore();
     });

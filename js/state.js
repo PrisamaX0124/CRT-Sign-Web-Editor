@@ -148,6 +148,7 @@
       frameWidth: 0,                // 灰框宽度（px），从牌面边界向内；0 = 不显示
       frameColor: Core.SIGN_FRAME_COLOR,
       rows: [createRow()],
+      presets: [],
     };
   }
 
@@ -503,6 +504,40 @@
     return Object.assign({}, sign, { rows: [createRow()] });
   }
 
+  function savePreset(sign, name, rowId) {
+    const title = String(name || '').trim().slice(0, 80);
+    const row = rowId ? sign.rows.find(entry => entry.id === rowId) : null;
+    if (!title || (rowId && !row?.elements.length)) return sign;
+    const { presets = [], ...board } = sign;
+    const preset = { id: uuid(), name: title, kind: row ? 'row' : 'board',
+      board: Core.deepClone({ ...board, rows: row ? [row] : board.rows }) };
+    return { ...sign, presets: [...presets, preset] };
+  }
+
+  function removePreset(sign, identifier) {
+    const presets = sign.presets || [];
+    const remaining = presets.filter(preset => preset.id !== identifier);
+    return remaining.length === presets.length ? sign : { ...sign, presets: remaining };
+  }
+
+  function applyPreset(sign, identifier, rowId) {
+    const preset = sign.presets?.find(entry => entry.id === identifier);
+    if (!preset) return sign;
+    const target = rowId && sign.rows.find(row => row.id === rowId);
+    if (rowId && (!target || target.elements.length || preset.kind === 'board')) return sign;
+    const { rows: savedRows, ...settings } = preset.board;
+    const legacyRow = preset.kind === 'legacy-row';
+    const restored = savedRows.map(row => ({
+      id: target ? target.id : uuid(),
+      backgroundColor: legacyRow ? target?.backgroundColor ?? null : row.backgroundColor,
+      elements: row.elements.map(element => ({ ...Core.deepClone(element), id: uuid() })),
+    }));
+    const rows = preset.kind === 'board' ? restored : target
+      ? sign.rows.map(row => row.id === rowId ? restored[0] : row)
+      : sign.rows.concat(restored);
+    return { ...sign, ...(legacyRow ? {} : settings), rows };
+  }
+
   // ─── 序列化 / 反序列化 ─────────────────────────────────────
 
   var SCHEMA_VERSION = 1;
@@ -689,8 +724,31 @@
     }
     if (!isPlainObject(data)) throw new Error('请选择导向标识项目');
     var sign = Object.hasOwn(data, 'sign') ? data.sign : data;
-    if (!isPlainObject(sign) || !Array.isArray(sign.rows)) throw new Error('请选择包含标识牌行的导向标识项目');
     if (Object.hasOwn(data, 'version') && data.version !== SCHEMA_VERSION) throw new Error('导向标识项目只支持版本 1');
+    const board = deserializeBoard(sign);
+    return { ...board, presets: deserializePresets(sign.presets) };
+  }
+
+  function deserializePresets(value) {
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) throw new Error('项目的预设列表有误');
+    const identifiers = new Set();
+    return value.map((preset, index) => {
+      const error = () => new Error('第 ' + (index + 1) + ' 个预设的内容有误');
+      if (!isPlainObject(preset) || typeof preset.name !== 'string' || !preset.name.trim() ||
+          !['board', 'row', 'legacy-row'].includes(preset.kind)) throw error();
+      let board;
+      try { board = deserializeBoard(preset.board); }
+      catch { throw error(); }
+      if (preset.kind !== 'board' && (board.rows.length !== 1 || !board.rows[0].elements.length)) throw error();
+      const id = typeof preset.id === 'string' && preset.id && !identifiers.has(preset.id) ? preset.id : uuid();
+      identifiers.add(id);
+      return { id, name: preset.name.trim().slice(0, 80), kind: preset.kind, board };
+    });
+  }
+
+  function deserializeBoard(sign) {
+    if (!isPlainObject(sign) || !Array.isArray(sign.rows)) throw new Error('请选择包含标识牌行的导向标识项目');
     if (sign.rows.length === 0) throw new Error('标识牌至少需要一行');
 
     var widthMode = sign.widthMode === 'dynamic' ? 'dynamic' : 'fixed';
@@ -774,6 +832,10 @@
     signWidthUnits: signWidthUnits,
     findElement: findElement,
     clearSign: clearSign,
+    savePreset: savePreset,
+    removePreset: removePreset,
+    applyPreset: applyPreset,
+    deserializePresets: deserializePresets,
     applyPaddingAuto: applyPaddingAuto,
     PADDING_AUTO_ADJACENT: PADDING_AUTO_ADJACENT,
     PADDING_AUTO_DEFAULT: PADDING_AUTO_DEFAULT,

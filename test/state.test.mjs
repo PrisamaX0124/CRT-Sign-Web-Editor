@@ -540,7 +540,9 @@ test('读取和应用预设时保留出口背景色和其他元素颜色', () =>
   const filename = fileURLToPath(new URL('../js/presets.js', import.meta.url));
   const browser = { SignCore: Core, SignState: S, localStorage: { getItem: () => stored } };
   runInNewContext(readFileSync(filename, 'utf8'), browser, { filename });
-  const [exit, entrance] = browser.SignPresets.materialize('older-preset');
+  const presets = browser.SignPresets.readLegacy(stored);
+  const applied = S.applyPreset({ ...S.createSign(), presets }, 'older-preset');
+  const [exit, entrance] = applied.rows.at(-1).elements;
   assert.equal(exit.props.backgroundColor, '#F7D917');
   assert.equal(exit.props.code, 'E');
   assert.notEqual(exit.id, 'exit');

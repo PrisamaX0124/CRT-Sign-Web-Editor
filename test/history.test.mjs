@@ -1,19 +1,52 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 function harness() {
-  const c = { window: null, document: {}, Date };
-  c.window = c;
-  ['core', 'state', 'ui'].forEach(name => runInNewContext(
-    readFileSync(new URL('../js/' + name + '.js', import.meta.url), 'utf8'), c));
-  c.App.state = c.SignState.createSign();
-  c.App.renderAll = () => {};
+  const context = { window: null, document: {}, Date };
+  context.window = context;
+  for (const name of ['core', 'state', 'ui']) {
+    const filename = fileURLToPath(new URL('../js/' + name + '.js', import.meta.url));
+    runInNewContext(readFileSync(filename, 'utf8'), context, { filename });
+  }
+  context.App.state = context.SignState.createSign();
+  const renderAll = context.App.renderAll;
+  context.App.renderAll = () => {};
   const saved = [];
-  c.App.autosave = { schedule: () => saved.push(c.App.state) };
-  return { ...c, saved };
+  context.App.autosave = { schedule: () => saved.push(context.App.state) };
+  return { ...context, saved, renderAll };
 }
+
+test('导向预览栏根据撤销和重做记录启用按钮', () => {
+  const { App, SignState, window, document, renderAll } = harness();
+  const undo = {};
+  const redo = {};
+  const controls = { 'guidance-undo': undo, 'guidance-redo': redo };
+  document.getElementById = identifier => controls[identifier];
+  window.SignRender = { renderSignInto: () => ({ width: 768, height: 192 }) };
+  App.measure = () => {};
+  App.renderAll = renderAll;
+  App.renderAll();
+  assert.equal(undo.disabled, true);
+  assert.equal(redo.disabled, true);
+
+  App.update(state => SignState.updateSignSettings(state, { rowHeight: 180 }));
+  assert.equal(undo.disabled, false);
+  assert.equal(redo.disabled, true);
+  App.undo();
+  assert.equal(undo.disabled, true);
+  assert.equal(redo.disabled, false);
+  App.redo();
+  assert.equal(undo.disabled, false);
+  assert.equal(redo.disabled, true);
+
+  App.undo();
+  App.update(state => SignState.updateSignSettings(state, { rowHeight: 200 }));
+  assert.equal(undo.disabled, false);
+  assert.equal(redo.disabled, true);
+});
 
 test('撤销/重做恢复整牌与自动边距，并重新安排保存', () => {
   const { App: A, SignState: S, saved } = harness();

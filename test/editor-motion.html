@@ -82,7 +82,7 @@
       };
 
       await test(layout.name + '：两侧栏贯穿桌面窗口，页眉与预览共用中间一栏', async function () {
-        for (const width of [1396, 1280, 1100]) {
+        for (const width of [1396, 1280, 1200, 1180, 1100]) {
           frame.style.width = width + 'px';
           await repaint(window);
           const left = bounds(layout.left);
@@ -108,16 +108,19 @@
         }
       });
 
-      if (layout.path === 'index.html') {
-        await test('导向标识：分别收起和展开两侧栏，页眉与预览随之改变宽度', async function () {
+      {
+        await test(layout.name + '：分别收起和展开两侧栏，页眉与预览随之改变宽度', async function () {
           frame.style.width = '1396px';
           await repaint(window);
-          for (const side of ['left', 'right']) {
-            const panel = document.getElementById(side + '-panel');
-            const expander = document.getElementById(side + '-expander');
+          for (const selector of [layout.left, layout.right]) {
+            const panel = document.querySelector(selector);
+            const collapse = panel.querySelector('[data-panel-toggle]');
+            const expander = document.querySelector('.expander[aria-controls="' + panel.id + '"]');
+            assert(collapse && expander, '应有一对带有可读名称的收起、展开按钮');
             const openWidth = bounds('.editor-header').width;
-            document.getElementById(side + '-collapse').click();
+            collapse.click();
             assert(panel.inert && document.activeElement === expander, '收起时侧栏应立即停止响应，焦点应移到展开按钮');
+            assert(expander.getAttribute('aria-expanded') === 'false', '展开按钮应说明侧栏已收起');
             await finishAnimations(animations(panel));
             const header = bounds('.editor-header');
             const middle = bounds(layout.middle);
@@ -128,7 +131,36 @@
             expander.click();
             await finishAnimations(animations(panel));
             assert(expander.hidden && !panel.inert && bounds('.editor-header').width === openWidth &&
-              document.activeElement === document.getElementById(side + '-collapse'), '展开后应恢复宽度和键盘焦点');
+              document.activeElement === collapse && collapse.getAttribute('aria-expanded') === 'true', '展开后应恢复宽度和键盘焦点');
+          }
+          if (layout.path === 'platform.html') {
+            await window.App.ready;
+            const properties = document.querySelector(layout.right);
+            properties.querySelector('[data-panel-toggle]').click();
+            document.getElementById('add-station').click();
+            assert(!properties.inert && document.activeElement === document.getElementById('station-zh'),
+              '添加站点后应打开属性面板并聚焦站名');
+          }
+        });
+      }
+
+      if (document.querySelector('.mode-tabs:not([hidden])')) {
+        await test(layout.name + '：窄窗口收起属性栏后，版式按钮和仓库入口仍然各自可用', async function () {
+          frame.style.width = '1100px';
+          await repaint(window);
+          const panel = document.querySelector(layout.right);
+          const expand = document.querySelector('.expander[aria-controls="' + panel.id + '"]');
+          panel.querySelector('[data-panel-toggle]').click();
+          await finishAnimations(animations(panel));
+          try {
+            const modes = bounds('.mode-tabs:not([hidden])');
+            const actions = bounds('.project-header-actions');
+            const header = bounds('.editor-header');
+            assert(actions.right <= header.right && (modes.top >= actions.bottom || modes.right <= actions.left),
+              '仓库入口不应遮住版式按钮');
+          } finally {
+            expand.click();
+            await finishAnimations(animations(panel));
           }
         });
       }
@@ -408,6 +440,11 @@
             const titleBounds = heading.getBoundingClientRect();
             assert(zoom.top >= titleBounds.top && zoom.bottom <= titleBounds.bottom && zoom.right <= titleBounds.right &&
               heading.scrollWidth <= heading.clientWidth + 1, '画布控件应完整放在标题栏');
+            const dimensions = heading.querySelector('.preview-dimensions');
+            assert(/^\d+ × \d+ 像素$/.test(dimensions.textContent), '三个编辑器的牌面尺寸应使用相同的单位');
+            const canvas = visibleCenter.querySelector('.preview-zoom-viewport');
+            const pattern = window.getComputedStyle(canvas).backgroundImage;
+            assert(pattern.includes('radial-gradient'), '画布应有点阵，区分工作区和标识牌');
             assert(status.top >= bounds.top && status.bottom <= bounds.bottom, '保存状态应留在底部栏');
             const help = footer.querySelector('details');
             const trigger = help?.querySelector('summary');
@@ -426,6 +463,46 @@
           await repaint(window);
         }
       });
+
+      await test(editor.name + '：预览栏可撤销和重做，牌面与按钮及时更新', function () {
+        const history = Array.from(document.querySelectorAll('.preview-toolbar .history-actions'))
+          .find(group => group.getClientRects().length);
+        const [undo, redo] = history?.querySelectorAll('button') || [];
+        const previous = app.state;
+        update();
+        assert(undo && redo && !undo.disabled && redo.disabled, '有修改后应能撤销，尚未撤销时应禁用重做');
+        const edited = app.state;
+        undo.click();
+        assert(JSON.stringify(app.state) === JSON.stringify(previous) && !redo.disabled, '撤销应恢复上一步并启用重做');
+        redo.click();
+        assert(JSON.stringify(app.state) === JSON.stringify(edited) && redo.disabled, '重做应恢复修改并同步按钮状态');
+        undo.click();
+      });
+
+      if (editor.path.includes('editor=transfer')) {
+        await test('换乘标识：线路和箭头可从列表点选，列表随牌面选择更新并保留按钮', async function () {
+          const line = document.querySelector('#transfer-groups [data-select-line]');
+          const arrow = document.querySelector('#transfer-groups .transfer-group-arrow');
+          const target = button => document.querySelector('[data-transfer-element="' + button.dataset.selectTransfer + '"]');
+          assert(line && arrow && line.getAttribute('aria-pressed') === 'false' &&
+            arrow.getAttribute('aria-pressed') === 'false', '未选中时列表按钮应处于未按下状态');
+          line.click();
+          assert(line.getAttribute('aria-pressed') === 'true' && target(line).getAttribute('aria-pressed') === 'true',
+            '从列表选线路后两处都应高亮');
+          const properties = document.getElementById('transfer-properties');
+          properties.querySelector('[data-panel-toggle]').click();
+          document.getElementById('transfer-tool-edit').click();
+          assert(!properties.inert && document.activeElement === document.getElementById('transfer-line-name'),
+            '点编辑线路时应打开属性面板并聚焦名称');
+          target(arrow).dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+          assert(line.getAttribute('aria-pressed') === 'false' && arrow.getAttribute('aria-pressed') === 'true',
+            '从牌面选箭头后列表应同步');
+          assert(document.querySelector('#transfer-groups [data-select-line]') === line &&
+            document.querySelector('#transfer-groups .transfer-group-arrow') === arrow, '切换选区时应保留原有按钮');
+          deselect();
+          assert(arrow.getAttribute('aria-pressed') === 'false', '取消选择后应清除列表高亮');
+        });
+      }
 
       if (editor.path === 'index.html' || editor.path === 'platform.html') {
         await test(editor.name + '：剪贴板与缩放同在标题栏，以图标显示并保留可读名称', async function () {

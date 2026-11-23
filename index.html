@@ -5,10 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 导向标识</title>
-  <link rel="stylesheet" href="style.css?v=3f3055915bc4">
-  <link rel="stylesheet" href="platform.css?v=e3421f531c96">
-  <link rel="stylesheet" href="transfer.css?v=5ffa0b585f03">
-  <link rel="stylesheet" href="project-dialog.css?v=053219b75d11">
+  <link rel="stylesheet" href="style.css?v=d3f54b5c058f">
+  <link rel="stylesheet" href="platform.css?v=e573d8b6d9e3">
+  <link rel="stylesheet" href="transfer.css?v=94cae356a9f5">
+  <link rel="stylesheet" href="project-dialog.css?v=fe88f0e1e761">
   <link rel="stylesheet" href="image-upload.css?v=39bea1cc93e6">
 </head>
 <body class="editor-page">
@@ -58,16 +58,16 @@
   <div id="app" class="editor-workspace">
 
     <!-- ══ 左栏：元素选择区 ══ -->
-    <aside id="left-panel" class="side-panel editor-left">
+    <aside id="left-panel" class="editor-left" aria-labelledby="guidance-library-heading">
       <div class="panel-header">
-        <span class="panel-title">元素选择区</span>
-        <button class="icon-btn collapse-btn" id="left-collapse" title="收起元素选择区">⟨</button>
+        <h2 class="panel-title" id="guidance-library-heading">元素库</h2>
+        <button type="button" class="icon-btn collapse-btn" id="left-collapse" data-panel-toggle data-control-icon="panel-left" aria-controls="left-panel" aria-expanded="true" aria-label="收起元素库" title="收起元素库"></button>
       </div>
       <div class="panel-body" id="palette">
         <!-- panel.js 填充：分类元素卡片 + 预设 -->
       </div>
     </aside>
-    <button id="left-expander" class="expander" title="展开元素选择区" hidden>⟩</button>
+    <button type="button" id="left-expander" class="expander" data-panel-toggle data-control-icon="panel-right" aria-controls="left-panel" aria-expanded="false" aria-label="展开元素库" title="展开元素库" hidden></button>
 
     <!-- ══ 中栏：SVG 编辑区 ══ -->
     <main id="center-panel" class="editor-center">
@@ -102,6 +102,10 @@
             </button>
           </div>
           <div class="preview-zoom" id="guidance-zoom" role="group" aria-label="画布位置和缩放"></div>
+          <div class="history-actions" role="group" aria-label="撤销与重做">
+            <button type="button" id="guidance-undo" class="icon-btn" data-control-icon="undo" title="撤销" aria-label="撤销" aria-keyshortcuts="Control+Z Meta+Z" disabled></button>
+            <button type="button" id="guidance-redo" class="icon-btn" data-control-icon="redo" title="重做" aria-label="重做" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" disabled></button>
+          </div>
         </div>
       </div>
       <div id="canvas-scroll" class="preview-zoom-viewport">
@@ -111,7 +115,7 @@
             <div id="sign-overlay">
               <!-- interact.js 填充：行手柄/行按钮/拖放指示器 -->
             </div>
-            <div id="empty-hint" hidden>从左侧拖放元素到此处开始编辑</div>
+            <div id="empty-hint" hidden><span>点击左侧元素，或拖到牌面上</span></div>
           </div>
           <button id="add-row-btn" title="在底部添加新行">＋ 添加行</button>
         </div>
@@ -141,15 +145,15 @@
     </main>
 
     <!-- ══ 右栏：属性 / 导出 ══ -->
-    <button id="right-expander" class="expander expander-right" title="展开属性面板" hidden>⟨</button>
-    <aside id="right-panel" class="side-panel editor-right">
+    <button type="button" id="right-expander" class="expander expander-right" data-panel-toggle data-control-icon="panel-left" aria-controls="right-panel" aria-expanded="false" aria-label="展开属性面板" title="展开属性面板" hidden></button>
+    <aside id="right-panel" class="editor-right" aria-labelledby="right-panel-title">
       <div class="panel-header property-header">
         <div class="property-heading-row">
           <div class="panel-heading">
             <button class="icon-btn" id="close-element-btn" title="返回标识牌设置" aria-label="返回标识牌设置" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <span class="panel-title" id="right-panel-title" tabindex="-1">标识牌设置</span>
           </div>
-          <button class="icon-btn collapse-btn" id="right-collapse" title="收起属性面板">⟩</button>
+          <button type="button" class="icon-btn collapse-btn" id="right-collapse" data-panel-toggle data-control-icon="panel-right" aria-controls="right-panel" aria-expanded="true" aria-label="收起属性面板" title="收起属性面板"></button>
         </div>
         <div class="property-tabs" role="tablist" aria-labelledby="right-panel-title"></div>
       </div>
@@ -170,7 +174,10 @@
 
   <div id="transfer-editor" class="editor-workspace" hidden>
     <aside class="platform-stations editor-left" id="transfer-content" aria-labelledby="transfer-content-heading">
-      <h2 class="platform-panel-title" id="transfer-content-heading">线路与元素</h2>
+      <div class="panel-header">
+        <h2 class="panel-title" id="transfer-content-heading">线路与元素</h2>
+        <button type="button" class="icon-btn collapse-btn" data-panel-toggle data-control-icon="panel-left" aria-controls="transfer-content" aria-expanded="true" aria-label="收起线路与元素" title="收起线路与元素"></button>
+      </div>
       <div class="library-tabs" aria-label="内容与预设">
         <button type="button" data-transfer-library="elements" aria-pressed="true">线路</button>
         <button type="button" data-transfer-library="presets" aria-pressed="false">预设</button>
@@ -187,6 +194,7 @@
       </div>
       <div class="panel-body" id="transfer-preset-list" hidden></div>
     </aside>
+    <button type="button" class="expander" data-panel-toggle data-control-icon="panel-right" aria-controls="transfer-content" aria-expanded="false" aria-label="展开线路与元素" title="展开线路与元素" hidden></button>
     <main class="platform-preview editor-center" id="transfer-preview" aria-label="换乘标识预览">
       <div class="preview-toolbar">
         <div class="preview-heading">
@@ -195,9 +203,9 @@
         </div>
         <div class="preview-toolbar-actions">
           <div class="preview-zoom" id="transfer-zoom" role="group" aria-label="画布位置和缩放"></div>
-          <div class="history-actions">
-            <button type="button" id="transfer-undo" class="icon-btn" title="撤销" aria-label="撤销">↶</button>
-            <button type="button" id="transfer-redo" class="icon-btn" title="重做" aria-label="重做">↷</button>
+          <div class="history-actions" role="group" aria-label="撤销与重做">
+            <button type="button" id="transfer-undo" class="icon-btn" data-control-icon="undo" title="撤销" aria-label="撤销" disabled></button>
+            <button type="button" id="transfer-redo" class="icon-btn" data-control-icon="redo" title="重做" aria-label="重做" disabled></button>
           </div>
         </div>
       </div>
@@ -223,7 +231,6 @@
             <span role="status">本地自动保存</span>
             <button type="button" hidden>备份项目 JSON</button>
           </div>
-          <span id="transfer-status" class="selection-status" role="status"></span>
         </div>
         <div class="editor-footer-controls">
           <details class="footer-shortcuts">
@@ -236,19 +243,23 @@
         </div>
       </footer>
     </main>
+    <button type="button" class="expander expander-right" data-panel-toggle data-control-icon="panel-left" aria-controls="transfer-properties" aria-expanded="false" aria-label="展开属性面板" title="展开属性面板" hidden></button>
     <aside class="platform-properties editor-right" id="transfer-properties" aria-labelledby="transfer-heading">
       <header class="panel-header property-header">
-        <div class="panel-heading">
-          <button type="button" class="icon-btn" id="transfer-return" title="返回标识牌设置" aria-label="返回标识牌设置" hidden>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <h1 class="panel-title" id="transfer-heading" tabindex="-1">标识牌设置</h1>
+        <div class="property-heading-row">
+          <div class="panel-heading">
+            <button type="button" class="icon-btn" id="transfer-return" title="返回标识牌设置" aria-label="返回标识牌设置" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <h1 class="panel-title" id="transfer-heading" tabindex="-1">标识牌设置</h1>
+          </div>
+          <button type="button" class="icon-btn collapse-btn" data-panel-toggle data-control-icon="panel-right" aria-controls="transfer-properties" aria-expanded="true" aria-label="收起属性面板" title="收起属性面板"></button>
         </div>
         <div class="property-tabs" role="tablist" aria-labelledby="transfer-heading"></div>
       </header>
       <div class="panel-body" id="transfer-property-scroll">
         <div id="transfer-settings">
-          <section class="platform-section transfer-section transfer-output-settings" data-property-tab="edit">
+          <section class="panel-section platform-section transfer-output-settings" data-property-tab="edit">
             <h2 class="section-title">颜色与尺寸</h2>
             <div class="field">
               <label for="transfer-palette">城市配色</label>
@@ -261,7 +272,7 @@
               </div>
             </div>
           </section>
-          <section class="platform-section transfer-section" data-property-tab="appearance">
+          <section class="panel-section platform-section" data-property-tab="appearance">
             <h2 class="section-title">牌面灰框</h2>
             <div class="field">
               <label for="transfer-frame-width">灰框宽度（px）</label>
@@ -275,7 +286,7 @@
           </section>
         </div>
         <div id="transfer-line-properties" hidden>
-          <section class="platform-section transfer-section" data-property-tab="edit">
+          <section class="panel-section platform-section" data-property-tab="edit">
             <h2 class="section-title">线路信息</h2>
             <div class="field">
               <label for="transfer-line-name">线路编号或名称</label>
@@ -294,21 +305,21 @@
               <div id="transfer-line-color-picker"></div>
             </div>
           </section>
-          <section class="platform-section transfer-section" id="line-pattern-section" data-property-tab="appearance"></section>
+          <section class="panel-section platform-section" id="line-pattern-section" data-property-tab="appearance"></section>
         </div>
         <div id="transfer-arrow-properties" hidden>
-          <section class="platform-section transfer-section" data-property-tab="edit">
+          <section class="panel-section platform-section" data-property-tab="edit">
             <h2 class="section-title" id="transfer-direction-heading">箭头方向</h2>
             <div class="palette-grid direction-grid" id="transfer-directions" role="group" aria-labelledby="transfer-direction-heading"></div>
           </section>
         </div>
         <div id="transfer-label-properties" hidden>
-          <section class="platform-section transfer-section" data-property-tab="edit">
+          <section class="panel-section platform-section" data-property-tab="edit">
             <h2 class="section-title">文字中的线路</h2>
             <div id="transfer-label-lines"></div>
           </section>
         </div>
-        <section class="platform-section transfer-section" id="transfer-group-placement" data-property-tab="edit" hidden>
+        <section class="panel-section platform-section" id="transfer-group-placement" data-property-tab="edit" hidden>
           <div id="transfer-group-alignment"><h2 class="section-title">本组对齐</h2></div>
           <div id="transfer-group-arrow-position"><h2 class="section-title">箭头位置</h2></div>
         </section>
@@ -332,30 +343,31 @@
   </div>
 
   <!-- 通知与对话框 -->
-  <div id="toasts" aria-live="polite"></div>
   <div id="modal-root"></div>
 
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
   <script src="js/palette-manager.js?v=800486182d2f"></script>
-  <script src="js/icons.js?v=public-8e9eb9f48086"></script>
+  <script src="js/icons.js?v=0c0f6c71e993"></script>
   <script src="js/directions.js?v=ef2c097f48e6"></script>
-  <script src="js/state.js?v=35104c24617e"></script>
+  <script src="js/state.js?v=ee19120432ee"></script>
   <script src="js/render.js?v=016de8532237"></script>
   <script src="js/editor-motion.js?v=eb549798c2c0"></script>
-  <script src="js/property-tabs.js?v=9090db99e9cc"></script>
-  <script src="js/preview-zoom.js?v=88de2a46de57"></script>
+  <script src="js/notifications.js?v=dcfdadac9cd7"></script>
+  <script src="js/editor-panels.js?v=514d00f899e7"></script>
+  <script src="js/property-tabs.js?v=558ddbc0ccc4"></script>
+  <script src="js/preview-zoom.js?v=c102513c96dc"></script>
   <script src="js/element-alignment.js?v=fb06e19d0663"></script>
-  <script src="js/ui.js?v=605d71bcf4d2"></script>
-  <script src="js/clipboard.js?v=ada1bd0c3e21"></script>
-  <script src="js/presets.js?v=0150088dc5b0"></script>
-  <script src="js/storage.js?v=ccb7b10efe85"></script>
+  <script src="js/ui.js?v=d9e35f4bb675"></script>
+  <script src="js/clipboard.js?v=95288cb30cbd"></script>
+  <script src="js/presets.js?v=ec5e4cb55f16"></script>
+  <script src="js/storage.js?v=a49e4195dcc9"></script>
   <script src="js/exporters.js?v=f439220b937f"></script>
   <script src="js/image-upload.js?v=cf47dc54578d"></script>
-  <script src="js/image-upload-dialog.js?v=0b576d5e35d7"></script>
+  <script src="js/image-upload-dialog.js?v=259f5ac8c61a"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
-  <script src="js/panel.js?v=1fa8a6acdf2f"></script>
-  <script src="js/interact.js?v=9a8147c28e38"></script>
+  <script src="js/panel.js?v=89c1f73ce0f7"></script>
+  <script src="js/interact.js?v=1f4513fd7bdd"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = 'CRT标识编辑器 - 换乘标识';
@@ -369,15 +381,15 @@
     }
   </script>
   <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
-  <script src="js/projects/manager.js?v=cc1fd786bbb3"></script>
-  <script src="js/projects/store.js?v=e86ebcfcd560"></script>
+  <script src="js/projects/manager.js?v=1323bd712719"></script>
+  <script src="js/projects/store.js?v=d18b9caa3970"></script>
   <script src="js/projects/thumbnails.js?v=35633448b66b"></script>
-  <script src="js/projects/dialog.js?v=a0dd69de95c9"></script>
-  <script src="js/main.js?v=db55a444b33b"></script>
+  <script src="js/projects/dialog.js?v=f8d4bc726807"></script>
+  <script src="js/main.js?v=54646798e656"></script>
   <script src="assets/platform-patterns.js?v=03d881cc86be"></script>
-  <script src="js/platform/patterns.js?v=cc2c94583c53"></script>
+  <script src="js/platform/patterns.js?v=e91af76b6258"></script>
   <script src="js/transfer/state.js?v=f008ffd0d04d"></script>
   <script src="js/transfer/render.js?v=a19331062c53"></script>
-  <script src="js/transfer/main.js?v=db9687ad3188"></script>
+  <script src="js/transfer/main.js?v=776d47db6d46"></script>
 </body>
 </html>

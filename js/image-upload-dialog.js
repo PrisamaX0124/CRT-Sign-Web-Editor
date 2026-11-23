@@ -156,11 +156,14 @@
         try {
           await navigator.clipboard.writeText(address.value);
           if (!dialog.open || !row.isConnected) return;
-          status.textContent = '已复制原图地址。';
+          global.EditorNotifications.show('已复制原图地址。', 'success');
         } catch {
           if (!dialog.open || !row.isConnected) return;
           status.textContent = manual ? '请选中地址手动复制。' : '上传成功，请点「复制」。';
-          if (manual) address.focus();
+          if (manual) {
+            address.focus();
+            global.EditorNotifications.show('请选中地址手动复制。', 'warning');
+          }
         }
       }
       copy.addEventListener('click', () => copyAddress(true));

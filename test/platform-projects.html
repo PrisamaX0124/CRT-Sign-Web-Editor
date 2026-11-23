@@ -10,9 +10,10 @@
   const legacyKey = 'public-platform-sign-project-v1', previousLegacy = localStorage.getItem(legacyKey);
   let editor, app, databaseNumber = 0;
   const assert = (condition, message = '断言失败') => { if (!condition) throw new Error(message); };
-  async function waitFor(check) { const end = Date.now() + 10000; while (!check()) { assert(Date.now() < end, '等待超时'); await new Promise(resolve => setTimeout(resolve, 20)); } }
+  async function waitFor(check, message = '等待超时') { const end = Date.now() + 10000; while (!check()) { assert(Date.now() < end, message); await new Promise(resolve => setTimeout(resolve, 20)); } }
   async function open() {
     await new Promise(resolve => { frame.onload = resolve; frame.src = '../platform.html'; });
+    await waitFor(() => frame.contentWindow.App?.ready, '站台标识编辑器未启动');
     editor = frame.contentWindow; await editor.App.ready; app = editor.App;
     assert(app.projects?.current, editor.document.getElementById('platform-save').textContent);
   }
@@ -113,6 +114,23 @@
       assert(!control('dialog').open, '副本打开后仍停留在项目列表');
       const duplicate = app.projects.current.id;
       control('open').click();
+      const openPrevious = '[aria-label="打开 测试线路乙"]:enabled';
+      await waitFor(() => control('list').querySelector(openPrevious), '项目列表没有刷新待打开的项目');
+      const originalDownload = app.download;
+      let backupFilename;
+      app.download = (blob, filename) => { backupFilename = filename; };
+      try {
+        control('list').querySelector('[aria-label="备份 测试线路乙"]').click();
+        await waitFor(() => backupFilename === '测试线路乙.json', '没有下载项目备份');
+        assert(editor.document.querySelector('#toasts .toast:last-child .toast-message')?.textContent === '已导出项目备份「测试线路乙」',
+          '备份其他项目后应显示项目名称');
+      } finally { app.download = originalDownload; }
+      control('list').querySelector(openPrevious).click();
+      await waitFor(() => !control('dialog').open && app.projects.current.id === first, '没有打开上一个项目');
+      assert(editor.document.querySelector('#toasts .toast:last-child .toast-message')?.textContent === '已打开项目「测试线路乙」',
+        '打开已有项目后应显示项目名称');
+      await app.projects.open(duplicate);
+      control('open').click();
       control('search').value = '测试副本'; control('search').dispatchEvent(new editor.Event('input'));
       await waitFor(() => control('list').children.length === 1);
       const actions = control('list').querySelector('details');
@@ -127,6 +145,8 @@
       control('list').querySelector('[aria-label="删除 测试副本"]').click(); control('delete-confirm').click();
       await waitFor(() => !control('delete-dialog').open);
       assert(!(await app.projects.read(duplicate)));
+      assert(editor.document.querySelector('#toasts .toast:last-child .toast-message')?.textContent === '已删除项目「测试副本」',
+        '删除项目后应显示成功通知');
       control('dialog').dispatchEvent(new editor.Event('cancel', { cancelable: true }));
       control('dialog').close(); await new Promise(resolve => setTimeout(resolve, 0));
       await waitFor(() => editor.document.activeElement === control('open'));
@@ -216,7 +236,7 @@
       assert((await app.projects.list()).length === count + 1 && app.state.lineName === '导入线路');
       const imported = app.projects.current.id;
       control('open').click(); select('{');
-      await waitFor(() => editor.document.getElementById('platform-notice').textContent.includes('导入失败'));
+      await waitFor(() => editor.document.querySelector('#toasts .toast:last-child .toast-message')?.textContent.includes('导入失败'));
       assert(app.projects.current.id === imported && control('dialog').open && control('error').textContent.includes('导入失败'));
       control('close').click();
     });

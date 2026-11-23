@@ -45,6 +45,9 @@
     assert(control, '找不到控件 ' + selector);
     return control;
   }
+  function notificationText() {
+    return page.querySelector('#toasts .toast:last-child:not(.leaving) .toast-message')?.textContent || '';
+  }
   function propertyTab(name) { click('#transfer-properties [data-property-tab-button="' + name + '"]'); }
   function input(selector, value, type = 'input') {
     const control = element(selector);
@@ -330,13 +333,13 @@
       assert(element('#line-pattern-import').textContent === '更换底纹', '已有底纹时应显示更换底纹');
       assert(element('#transfer-sign').querySelectorAll('pattern image[href^="data:image/png"]').length === 1, '图片铺到了其他色带');
       chooseFile('损坏.png', '无法打开的图片', 'image/png');
-      await waitFor(() => element('#transfer-status').textContent.includes('导入失败'));
+      await waitFor(() => notificationText().includes('导入失败'));
       assert(element('#line-pattern-source').value === 'custom', '上传失败改变了原底纹');
       click('#line-pattern-clear');
       assert(element('#line-pattern-custom').disabled && drawing('line-pattern').length === 2, '移除图片影响了其他底纹');
       chooseFile('另一张.svg', artwork, 'image/svg+xml');
       line('second');
-      await waitFor(() => element('#transfer-status').textContent.includes('已更改'));
+      await waitFor(() => notificationText().includes('已更改'));
       assert(element('#line-pattern-source').value === 'line-6', '切换线路后上传图片覆盖了新选择');
     });
 
@@ -867,7 +870,7 @@
         click('#transfer-import-project');
         assert(opened && file.hidden && file.accept.includes('.json'), '未使用隐藏的 JSON 文件选择控件');
         chooseFile(download.name, source, 'application/json', '#transfer-project-file');
-        await waitFor(() => element('#transfer-status').textContent === '项目已导入');
+        await waitFor(() => notificationText() === '项目已导入');
         assert(editor.TransferState.serialize(editor.App.state) === source, '两种版式的内容没有全部恢复');
         assert(isVisible('#transfer-settings') && !isVisible('#transfer-line-properties'), '导入后应回到整牌设置');
         assert(element('#transfer-preview-title').textContent === '版式 B' && drawing('line-band').length === 3, '预览没有更新到导入的版式');
@@ -903,7 +906,7 @@
         ['项目.json', ' '.repeat(2 * 1024 * 1024 + 1), '不能超过 2 MB'],
       ]) {
         chooseFile(name, content, 'application/json', '#transfer-project-file');
-        await waitFor(() => element('#transfer-status').textContent.includes(message));
+        await waitFor(() => notificationText().includes(message));
         assert(editor.TransferState.serialize(editor.App.state) === source, '导入失败后项目发生变化');
         assert(element('#transfer-undo').disabled === undoDisabled, '导入失败后撤销记录发生变化');
       }
@@ -916,7 +919,7 @@
         image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
       };
       chooseFile('损坏底纹.json', editor.TransferState.serialize(project), 'application/json', '#transfer-project-file');
-      await waitFor(() => element('#transfer-status').textContent.includes('底纹图片无法读取'));
+      await waitFor(() => notificationText().includes('底纹图片无法读取'));
       assert(editor.TransferState.serialize(editor.App.state) === current, '损坏底纹覆盖了当前项目');
     });
     await test('连续选择两个项目文件时，较早开始的读取不能覆盖后选的项目', async () => {
@@ -987,6 +990,7 @@
       click('#transfer-preset-list [aria-label="删除预设 换乘测试预设"]');
       click('.modal [data-act="ok"]');
       await waitFor(() => !page.querySelector('#transfer-preset-list [aria-label="载入预设 换乘测试预设"]'));
+      assert(notificationText() === '已删除预设「换乘测试预设」', '删除预设后应显示成功通知');
     });
     await test('灰框设置支持两个版式、撤销重做、关闭及 SVG 和 PNG 导出', async () => {
       mode('separate');

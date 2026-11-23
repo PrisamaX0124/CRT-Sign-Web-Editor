@@ -135,6 +135,24 @@
             });
           },
           hasMigration() { return transaction(false, (projects, settings, result) => { settings.get('legacy-v1').onsuccess = event => result(Boolean(event.target.result)); }); },
+          migrateProject(id, key, update) {
+            return transaction(true, (projects, settings, result, abort, details) => {
+              listen(settings.get(key), migration => {
+                listen(projects.get(id), previous => {
+                  if (!previous) throw conflictError(id);
+                  const next = migration ? null : update(previous);
+                  if (next) {
+                    if (next !== previous) {
+                      projects.put(next);
+                      details.put(metadata(next));
+                    }
+                    settings.put({ key, value: id });
+                  }
+                  result(next || previous);
+                }, abort);
+              }, abort);
+            });
+          },
           list() { return transaction(false, (projects, settings, result, abort, details) => { details.getAll().onsuccess = event => result(event.target.result); }); },
           read(id) { return transaction(false, (projects, settings, result) => { projects.get(id).onsuccess = event => result(event.target.result); }); },
           write(value, revision, select = false) {

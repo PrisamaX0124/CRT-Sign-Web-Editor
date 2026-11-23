@@ -42,7 +42,7 @@
   const projectFile = element('transfer-project-file');
   const presetList = element('transfer-preset-list');
   const libraryButtons = workspace.querySelectorAll('[data-transfer-library]');
-  const status = element('transfer-status');
+  const notice = global.EditorNotifications.show;
   const panels = {
     line: element('transfer-line-properties'),
     arrow: element('transfer-arrow-properties'),
@@ -67,19 +67,12 @@
   let selected;
   let previousPanelSelection;
 
-  function notice(message) {
-    if (status.textContent !== message) {
-      status.textContent = message;
-      global.EditorMotion.reveal(status);
-    }
-  }
-
   function loadProject() {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) return state.deserialize(saved);
     } catch {
-      notice('未能恢复本地项目，已打开默认标识牌');
+      notice('未能恢复本地项目，已打开默认标识牌', 'warning');
     }
   }
 
@@ -89,7 +82,7 @@
       if (!Array.isArray(records)) throw new Error();
       return records.filter(record => typeof record?.id === 'string' && typeof record.name === 'string' && typeof record.project === 'string');
     } catch {
-      notice('无法读取本机换乘预设');
+      notice('无法读取本机换乘预设', 'error');
       return null;
     }
   }
@@ -99,7 +92,7 @@
       localStorage.setItem(presetKey, JSON.stringify(records));
       return true;
     } catch {
-      notice('无法保存换乘预设，请检查浏览器存储空间');
+      notice('无法保存换乘预设，请检查浏览器存储空间', 'error');
       return false;
     }
   }
@@ -120,18 +113,19 @@
       }
       load.append(createElement('strong', { text: record.name }));
       load.addEventListener('click', () => {
-        if (!project) { notice('无法载入此换乘预设'); return; }
+        if (!project) { notice('无法载入此换乘预设', 'error'); return; }
         App.update(() => project, null, { replaceProject: true });
         propertyTabs.show('edit');
-        notice('已载入预设「' + record.name + '」');
+        notice('已载入预设「' + record.name + '」', 'success');
       });
       const remove = createElement('button', { type: 'button', class: 'preset-remove', 'data-control-icon': 'delete', 'aria-label': '删除预设 ' + record.name });
       remove.addEventListener('click', async () => {
         if (!await global.SignUI.confirmDialog('确定要删除预设「' + record.name + '」吗？', '删除预设', '删除', 'delete')) return;
         const records = readPresets();
-        if (records && writePresets(records.filter(item => item.id !== record.id))) {
+        if (records?.some(item => item.id === record.id) && writePresets(records.filter(item => item.id !== record.id))) {
           renderPresets();
           workspace.querySelector('[data-transfer-library="presets"]').focus();
+          notice('已删除预设「' + record.name + '」', 'success');
         }
       });
       return createElement('div', { class: 'platform-preset' }, [load, remove]);
@@ -157,7 +151,7 @@
     const records = readPresets();
     if (records && writePresets(records.concat({ id: global.SignCore.uuid(), name: name.slice(0, 80), project }))) {
       selectLibrary('presets');
-      notice('预设「' + name.slice(0, 80) + '」已保存');
+      notice('预设「' + name.slice(0, 80) + '」已保存', 'success');
     }
   }
 
@@ -168,7 +162,7 @@
     update(change, group, options) {
       const next = change(App.state);
       const saved = state.serialize(next);
-      if (saved === state.serialize(App.state)) return;
+      if (saved === state.serialize(App.state)) return false;
       if (options?.replaceProject) {
         pushChange(history.undo, projectSnapshot());
         history.redo.length = 0;
@@ -188,6 +182,7 @@
         propertyScroll.scrollTop = 0;
       }
       commit(next, saved);
+      return true;
     },
   };
 
@@ -196,6 +191,7 @@
     indicator: element('transfer-save'),
     serializeProject: () => state.serialize(App.state),
     exportProject,
+    notice,
     restored: Boolean(restoredProject),
   });
   const previewZoom = global.PreviewZoom.create({
@@ -243,7 +239,9 @@
     const host = element(identifier);
     const control = global.SignUI.alignmentControl(alignmentOptions, () => selectedEditableGroup()?.alignment, alignment => {
       const group = selectedEditableGroup();
-      if (group) App.update(project => state.changeAlignment(project, group.identifier, alignment));
+      if (group && App.update(project => state.changeAlignment(project, group.identifier, alignment))) {
+        notice('本组已设为' + state.alignmentNames[alignment], 'success');
+      }
     }, '本组对齐', 'transfer-group');
     host.append(control.node);
     return { host, control };
@@ -256,7 +254,9 @@
     );
     select.addEventListener('change', () => {
       const group = selectedEditableGroup();
-      if (group) App.update(project => state.changeArrowPosition(project, group.identifier, select.value));
+      if (group && App.update(project => state.changeArrowPosition(project, group.identifier, select.value))) {
+        notice('已将本组箭头移到' + (select.value === 'left' ? '左侧' : '右侧'), 'success');
+      }
     });
     host.append(select);
     return { host, select };
@@ -285,10 +285,11 @@
       const project = state.settings(App.state, { mode: entry.mode });
       commit(state.replaceBoard(project, entry.board), undefined, switchesBoard ? null : selected?.key);
     }
+    notice(fromName === 'undo' ? '已撤销上一步' : '已重做上一步', 'information');
   }
 
   function changeSettings(changes) {
-    App.update(current => state.settings(current, changes));
+    return App.update(current => state.settings(current, changes));
   }
 
   function findLine(project, identifier) {
@@ -301,13 +302,13 @@
 
   function changeLine(changes, group) {
     const line = selectedLine();
-    if (line) App.update(current => state.changeLine(current, line.identifier, changes), group);
+    return line && App.update(current => state.changeLine(current, line.identifier, changes), group);
   }
 
   function changePattern(changes, group) {
     const line = selectedLine();
     if (!line) return;
-    App.update(current => {
+    return App.update(current => {
       const previous = findLine(current, line.identifier);
       return state.changeLine(current, line.identifier, { linePattern: { ...previous.linePattern, ...changes } });
     }, group);
@@ -458,6 +459,9 @@
     }
     for (const target of vector.querySelectorAll('[data-transfer-element]')) {
       target.setAttribute('aria-pressed', String(target.dataset.transferElement === selected?.key));
+    }
+    for (const button of groupList.querySelectorAll('[data-select-transfer]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.selectTransfer === selected?.key));
     }
     const group = selectedEditableGroup();
     groupPlacement.hidden = !group;
@@ -646,7 +650,7 @@
     const project = App.state;
     const scale = Number(pngScale.value);
     exportImage.disabled = exportVector.disabled = true;
-    notice('正在导出…');
+    const dismissProgress = notice('正在导出…');
     try {
       const { layout, source } = await prepareExport(project);
       const file = format === 'svg'
@@ -654,22 +658,27 @@
         : await global.SignExporters.rasterizePNG(source, layout, scale);
       const storage = global.SignStorage;
       storage.download(file, descriptions[project.mode] + '-' + storage.timestamp() + '.' + format);
-      notice('已导出 ' + format.toUpperCase());
+      notice('已导出 ' + format.toUpperCase(), 'success');
     } catch (error) {
-      notice('导出失败。' + error.message);
+      notice('导出失败。' + error.message, 'error');
     } finally {
+      dismissProgress();
       exportImage.disabled = exportVector.disabled = false;
     }
   }
 
   function setDirection(direction) {
-    if (selected?.kind === 'arrow') App.update(project => state.changeDirection(project, selected.identifier, direction));
+    if (selected?.kind === 'arrow' && App.update(project => state.changeDirection(project, selected.identifier, direction))) {
+      notice('已将箭头改为' + state.directions[direction], 'success');
+    }
   }
 
   for (const button of modeButtons) {
     const mode = button.dataset.transferMode;
     button.textContent = state.modeNames[mode];
-    button.addEventListener('click', () => changeSettings({ mode }));
+    button.addEventListener('click', () => {
+      if (changeSettings({ mode })) notice('已切换到' + state.modeNames[mode], 'information');
+    });
   }
   workspace.addEventListener('click', event => {
     const target = event.target.closest('[data-transfer-element], [data-select-transfer]');
@@ -678,7 +687,9 @@
   });
   arrangementPicker.addEventListener('click', event => {
     const button = event.target.closest('[data-transfer-arrangement]');
-    if (button) changeSettings({ arrangement: button.dataset.transferArrangement });
+    if (button && changeSettings({ arrangement: button.dataset.transferArrangement })) {
+      notice('已切换线路分组（' + button.textContent + '）', 'success');
+    }
   });
   directionPicker.addEventListener('click', event => {
     const button = event.target.closest('[data-transfer-direction]');
@@ -695,6 +706,7 @@
   });
   backButton.addEventListener('click', () => { select(); heading.focus(); });
   element('transfer-tool-edit').addEventListener('click', () => {
+    global.EditorPanels.expand('transfer-properties');
     propertyTabs.show('edit');
     const target = selected.kind === 'line' ? lineName : selected.kind === 'arrow'
       ? directionPicker.querySelector('[aria-pressed="true"]') : labelLines.firstElementChild;
@@ -703,7 +715,8 @@
   element('transfer-tool-pattern').addEventListener('click', () => {
     const line = selectedLine();
     if (!line) return;
-    changePattern({ enabled: !line.linePattern.enabled });
+    const enabled = !line.linePattern.enabled;
+    if (changePattern({ enabled })) notice(enabled ? '已启用线路底纹' : '已关闭线路底纹', 'success');
     if (!line.linePattern.enabled) propertyTabs.show('appearance');
   });
   for (const button of turnButtons) {
@@ -716,7 +729,10 @@
   }
   lineName.addEventListener('input', () => changeLine({ name: lineName.value }, 'line-name'));
   lineEnglishName.addEventListener('input', () => changeLine({ englishName: lineEnglishName.value }, 'line-english-name'));
-  lineLargeName.addEventListener('click', () => changeLine({ largeName: !selectedLine()?.largeName }));
+  lineLargeName.addEventListener('click', () => {
+    const largeName = !selectedLine()?.largeName;
+    if (changeLine({ largeName })) notice(largeName ? '已放大线路名' : '已恢复线路名字号', 'success');
+  });
   propertyScroll.addEventListener('focusout', () => { previousGroup = undefined; });
   palette.addEventListener('change', () => changeSettings({ city: palette.value }));
   width.min = state.minimumWidth;
@@ -762,5 +778,5 @@
   ]).then(() => {
     App.measure = global.SignCore.createCanvasMeasurer();
     render();
-  }).catch(() => notice('字体加载失败，预览使用备用字体'));
+  }).catch(() => notice('字体加载失败，预览使用备用字体', 'warning'));
 })(window);

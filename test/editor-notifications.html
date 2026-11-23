@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>短通知与交通图标测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1120px; height: 760px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>短通知与交通图标测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try {
+      await run();
+      item.className = 'pass';
+      item.textContent = name;
+    } catch (error) {
+      item.className = 'fail';
+      item.textContent = name + '。' + error.message;
+    }
+    results.appendChild(item);
+  }
+  function load(address) {
+    return new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = address;
+    });
+  }
+  function repaint(editor) {
+    return new Promise(resolve => editor.requestAnimationFrame(() => editor.requestAnimationFrame(resolve)));
+  }
+  async function settle(element) {
+    await Promise.allSettled(element.getAnimations().map(animation => animation.finished));
+  }
+
+  for (const [name, address, action, message] of [
+    ['导向标识', '../index.html', '#palette .palette-card[aria-label="添加图标"]', '已添加「图标」'],
+    ['换乘标识', '../index.html?editor=transfer', '#transfer-export-project', '已导出'],
+    ['站台标识', '../platform.html', '#save-project', '已导出'],
+  ]) {
+    await load(address);
+    const editor = frame.contentWindow;
+    const page = editor.document;
+    await editor.App.ready;
+    const notifications = () => Array.from(page.querySelectorAll('#toasts .toast'));
+    const latest = () => notifications().at(-1);
+    function checkLatest(message, kind = 'success') {
+      assert(latest()?.dataset.kind === kind && latest().querySelector('.toast-message').textContent.includes(message),
+        '未显示通知「' + message + '」');
+    }
+
+    await test(name + '的实际操作在底部中央显示成功通知', async () => {
+      page.querySelector(action).click();
+      await repaint(editor);
+      const toast = latest();
+      assert(toast?.dataset.kind === 'success' && toast.textContent.includes(message), '真实操作没有显示成功通知');
+      await settle(toast);
+      for (const width of [1120, 530]) {
+        frame.style.width = width + 'px';
+        await repaint(editor);
+        const box = toast.getBoundingClientRect();
+        assert(Math.abs((box.left + box.right) / 2 - editor.innerWidth / 2) < 2, '通知没有对准窗口中央');
+        assert(Math.abs(editor.innerHeight - box.bottom - 52) < 2, '通知应离窗口底边 52 像素');
+      }
+      frame.style.width = '1120px';
+    });
+
+    await test(name + '的四类短通知有不同底色、名称和进出动效', async () => {
+      const colors = new Set();
+      const reduced = editor.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      for (const [kind, label] of [['information', '提示'], ['success', '成功'], ['warning', '注意'], ['error', '失败']]) {
+        const dismiss = editor.EditorNotifications.show('测试短通知', kind);
+        const toast = latest();
+        assert(toast.dataset.kind === kind && toast.querySelector('.toast-label').textContent === label, '通知类型名称不符');
+        colors.add(editor.getComputedStyle(toast).backgroundColor);
+        const entry = toast.getAnimations()[0];
+        assert(reduced ? !entry : entry?.effect.getKeyframes().some(frame => frame.scale && frame.scale !== '1'), '弹出动效与系统设置不符');
+        await settle(toast);
+        dismiss();
+        const exit = toast.isConnected && toast.getAnimations()[0];
+        assert(reduced ? !exit : exit?.effect.getKeyframes().some(frame => Number(frame.scale) > 1), '退出动效与系统设置不符');
+        await settle(toast);
+        assert(!toast.isConnected, '退出后仍保留旧消息');
+      }
+      assert(colors.size === 4, '四类通知应使用四种底色');
+    });
+
+    if (name === '导向标识') {
+      await test('图标选项每行四个，新增交通图标紧跟列车且可以应用到牌面', async () => {
+        const app = editor.App;
+        app.select(app.elementOrder().at(-1));
+        const grid = page.querySelector('#right-panel-body .icon-grid');
+        const buttons = Array.from(grid.querySelectorAll('button'));
+        assert(editor.getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length === 4, '图标每行应有四个');
+        const train = buttons.findIndex(button => button.title === '列车');
+        const additions = buttons.slice(train + 1, train + 5);
+        assert(additions.map(button => button.title).join('、') === '码头、机场、客渡码头、直升机场', '新图标应紧跟列车');
+        for (const button of additions) {
+          button.click();
+          assert(button.getAttribute('aria-pressed') === 'true' && grid.isConnected, '选择后应更新牌面并保留网格');
+          const selected = editor.SignState.findElement(app.state, app.selection.elementId).element;
+          const path = button.querySelector('svg path').getAttribute('d');
+          assert(editor.SignIcons.get(selected.props.icon).name === button.title, '选中的图标应存入当前元素');
+          assert(page.querySelector('#sign-svg .element.selected path[fill-rule="evenodd"]')?.getAttribute('d') === path, '牌面应绘制相同的矢量轮廓');
+          const project = editor.SignState.deserializeSign(editor.SignState.serializeSign(app.state));
+          assert(editor.SignState.findElement(project, selected.id).element.props.icon === selected.props.icon, '保存并打开后应保留图标');
+          const exported = editor.SignExporters.buildExportSVGString(app.state, app.measure, {});
+          assert(exported.includes(path), '导出图片应包含相同的镂空图形');
+        }
+      });
+    }
+
+    if (name === '换乘标识') {
+      await test('换乘编辑反馈随实际操作出现，重复点选和连续输入不弹通知', () => {
+        const click = selector => page.querySelector(selector).click();
+        click('[data-transfer-mode="separate"]');
+        checkLatest('已切换到版式 B', 'information');
+        click('[data-transfer-arrangement="1+2"]');
+        checkLatest('已切换线路分组');
+        const arrangementNotice = latest();
+        click('[data-transfer-arrangement="1+2"]');
+        assert(latest() === arrangementNotice, '重复点当前分组产生了通知');
+        click('#transfer-groups [data-select-transfer^="arrow:"]');
+        click('[data-transfer-direction="down"]');
+        checkLatest('已将箭头改为向下');
+        click('#transfer-undo');
+        checkLatest('已撤销上一步', 'information');
+        click('#transfer-redo');
+        checkLatest('已重做上一步', 'information');
+        click('#transfer-groups [data-select-line]');
+        const previous = latest();
+        const input = page.getElementById('transfer-line-name');
+        for (const value of ['测', '测试', '测试线路']) {
+          input.value = value;
+          input.dispatchEvent(new editor.Event('input', { bubbles: true }));
+        }
+        assert(latest() === previous, '连续输入时产生了通知');
+      });
+    }
+
+    if (name === '站台标识') {
+      await test('站台添加站点、设为本站、增删换乘和删除站点会显示通知', () => {
+        const click = selector => page.querySelector(selector).click();
+        click('#add-station');
+        checkLatest('已添加站点');
+        click('#set-current');
+        checkLatest('设为本站');
+        click('#add-text-transfer');
+        checkLatest('已添加文字换乘线路');
+        click('.transfer-remove');
+        checkLatest('已删除换乘线路');
+        click('#station-delete');
+        checkLatest('已删除 1 个站点');
+        click('#undo');
+        checkLatest('已撤销上一步', 'information');
+        click('#redo');
+        checkLatest('已重做上一步', 'information');
+      });
+      await test('原生对话框打开时短通知仍在底部中央，也不会移动输入焦点', async () => {
+        const dialog = page.createElement('dialog');
+        const input = page.createElement('input');
+        dialog.append(input);
+        page.body.append(dialog);
+        dialog.showModal();
+        const dismiss = editor.EditorNotifications.show('已复制原图地址。', 'success');
+        try {
+          const toast = latest();
+          await settle(toast);
+          assert(toast.parentElement.matches(':popover-open') && toast.getBoundingClientRect().bottom > dialog.getBoundingClientRect().bottom,
+            '短通知应在对话框前显示在窗底');
+          assert(page.activeElement === input, '短通知不应夺走输入焦点');
+        } finally {
+          dismiss();
+          dialog.close();
+          dialog.remove();
+        }
+      });
+    }
+  }
+
+  const passed = results.querySelectorAll('.pass').length;
+  const failed = results.querySelectorAll('.fail').length;
+  document.getElementById('summary').textContent = passed + ' 通过 / ' + failed + ' 失败';
+  document.title = (failed ? '✖ ' : '✔ ') + '短通知与交通图标测试';
+})().catch(error => {
+  document.getElementById('summary').textContent = error.message;
+  document.title = '✖ 短通知与交通图标测试';
+});
+</script>

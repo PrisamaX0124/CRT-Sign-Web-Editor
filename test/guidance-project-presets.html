@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>导向项目预设测试</title>
+<style>body{font:14px system-ui}iframe{display:block;width:1280px;height:850px}.fail{color:#bd2222}</style>
+<h1>导向项目预设测试</h1>
+<p id="summary">运行中…</p><ol id="results"></ol>
+<iframe title="导向标识编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.querySelector('iframe');
+  const results = document.getElementById('results');
+  const storageKey = 'public-sign-presets';
+  const previous = localStorage.getItem(storageKey);
+  const legacy = JSON.stringify([{ id: 'legacy-arrow', name: '旧方向牌', elements: [{ id: 'old-arrow', type: 'arrow', props: { direction: 'right' } }] }]);
+  let editor, app, original;
+  const find = selector => editor.document.querySelector(selector);
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+
+  async function waitFor(check) {
+    const deadline = Date.now() + 10000;
+    while (!check()) {
+      assert(Date.now() < deadline, '等待编辑器更新超时');
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+  async function open(target = frame) {
+    target.src = '../index.html';
+    await waitFor(() => target.contentWindow.location.pathname.endsWith('/index.html') && target.contentWindow.App?.ready);
+    await target.contentWindow.App.ready;
+    return target.contentWindow;
+  }
+  async function test(name, action) {
+    const item = document.createElement('li');
+    try { await action(); item.className = 'pass'; item.textContent = name; }
+    catch (error) { item.className = 'fail'; item.textContent = name + '。' + error.message; console.error(error); }
+    results.append(item);
+  }
+  async function saveThroughDialog(button, name) {
+    button.click();
+    find('.modal-mask .modal-input').value = name;
+    find('.modal-mask [data-act="ok"]').click();
+    await waitFor(() => app.state.presets.some(preset => preset.name === name));
+    return app.state.presets.find(preset => preset.name === name);
+  }
+
+  try {
+    localStorage.setItem(storageKey, legacy);
+    await test('两个窗口同时启动，旧预设只迁入一份项目，浏览器原文仍在', async () => {
+      const second = document.createElement('iframe');
+      second.title = '第二个窗口';
+      document.body.append(second);
+      try {
+        const [first, other] = await Promise.all([open(), open(second)]);
+        editor = first;
+        app = editor.App;
+        original = app.projects.current.id;
+        assert(other.App.projects.current.id === original, '首次打开的项目不同');
+        for (const view of [editor, other]) {
+          const items = view.App.state.presets;
+          assert(items.length === 1 && items[0].name === '旧方向牌' && items[0].kind === 'legacy-row', '旧预设缺失或重复');
+        }
+        assert(JSON.parse((await app.projects.read(original)).data).sign.presets.length === 1, '迁移结果未写入项目');
+        assert(localStorage.getItem(storageKey) === legacy, '旧预设原文被改动');
+      } finally { second.remove(); }
+    });
+
+    let boardPreset;
+    await test('右侧项目签保存整牌，左侧快捷入口同步，应用整牌可撤销和重做', async () => {
+      const state = editor.SignState;
+      app.update(sign => {
+        const first = sign.rows[0].id;
+        const styled = state.updateSignSettings(sign, { width: 960, rowHeight: 168, backgroundColor: '#234567', frameWidth: 11, frameColor: '#456789' });
+        const row = state.updateRowSettings(styled, first, { backgroundColor: '#ABCDEF' });
+        return state.addRow(state.addElement(row, first, state.createElement('big-number', { text: '23' })));
+      });
+      find('[data-property-tab-button="project"]').click();
+      boardPreset = await saveThroughDialog(find('#guidance-save-project-preset'), '两行牌示例');
+      const shortcut = find('#palette-tab-presets');
+      shortcut.click();
+      const rowPreset = await saveThroughDialog(find('.row-band .row-actions button'), '带底色的一行');
+      assert(rowPreset.kind === 'row' && rowPreset.board.rows[0].backgroundColor === '#ABCDEF' && rowPreset.board.frameWidth === 11, '行预设没有保存牌面设置');
+      assert(editor.document.querySelectorAll('#palette .preset-card').length === 3 &&
+        shortcut === find('#palette-tab-presets') && shortcut.getAttribute('aria-selected') === 'true', '左侧快捷入口没有保留或更新项目预设');
+      app.update(sign => state.updateSignSettings(state.clearSign(sign), { width: 600, rowHeight: 144, frameWidth: 0, backgroundColor: '#FFFFFF' }));
+      const before = state.serializeSign(app.state);
+      find('[data-project-preset="' + boardPreset.id + '"]').click();
+      assert(find('[data-property-tab-button="project"]').getAttribute('aria-selected') === 'true', '预览应位于项目签');
+      assert(find('.guidance-preset-picture .sign-frame')?.getAttribute('fill') === '#456789', '预览没有使用保存的灰框色');
+      assert(find('.preset-apply-board').getBoundingClientRect().height <= 42, '应用按钮文字不应换行');
+      find('.preset-apply-board').click();
+      assert(app.state.width === 960 && app.state.rowHeight === 168 && app.state.backgroundColor === '#234567' &&
+        app.state.frameWidth === 11 && app.state.rows.length === 2 && app.state.rows[0].backgroundColor === '#ABCDEF', '应用时没有还原整牌');
+      assert(app.projects.current.id === original && app.state.presets.length === 3, '应用预设改变了项目或预设列表');
+      assert(app.undo() && state.serializeSign(app.state) === before, '一次撤销没有还原原牌面');
+      assert(app.redo() && app.state.width === 960, '重做没有恢复整牌');
+    });
+
+    await test('新项目预设独立，复制、导出后导入仍保留预设和样式', async () => {
+      await app.projects.create('空项目');
+      assert(app.state.presets.length === 0 && !find('#palette .preset-card'), '新项目继承了其他项目的预设');
+      await app.projects.open(original);
+      assert(app.state.presets.length === 3, '切回原项目没有恢复预设');
+      await app.projects.duplicate(original, '项目副本');
+      assert(app.state.presets.length === 3 && app.state.presets.some(preset => preset.id === boardPreset.id), '复制项目没有带上预设');
+      const download = editor.SignStorage.download;
+      let backup;
+      editor.SignStorage.download = blob => { backup = blob; };
+      try { app.exportProject(); }
+      finally { editor.SignStorage.download = download; }
+      const input = find('#guidance-project-file');
+      const file = new editor.DataTransfer();
+      file.items.add(new editor.File([await backup.text()], '预设备份.json'));
+      input.files = file.files;
+      input.dispatchEvent(new editor.Event('change', { bubbles: true }));
+      await waitFor(() => app.projects.current.name === '预设备份');
+      assert(app.state.presets.find(preset => preset.id === boardPreset.id)?.board.frameColor === '#456789', '导入备份时丢失了预设的灰框');
+      editor.SignPresets.remove(boardPreset.id);
+      await app.projects.open(original);
+      assert(app.state.presets.some(preset => preset.id === boardPreset.id), '删除副本预设影响了原项目');
+    });
+  } finally {
+    if (previous === null) localStorage.removeItem(storageKey); else localStorage.setItem(storageKey, previous);
+    const passed = results.querySelectorAll('.pass').length;
+    const failed = results.querySelectorAll('.fail').length;
+    document.getElementById('summary').textContent = passed + ' 通过 / ' + failed + ' 失败';
+    document.title = (failed ? '✖ ' : '✔ ') + '导向项目预设测试';
+  }
+})();
+</script>

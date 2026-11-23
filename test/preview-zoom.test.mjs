@@ -74,7 +74,7 @@ test('缩小后在可用空白内挪动画布，碰到边缘时以可到达的�
   assert.equal(positionForAnchor(10, 1, 800, 500).scroll, 300);
 });
 
-function createPreview({ alignTop = false, observeResize = true } = {}) {
+function createPreview({ withRowButton = false, observeResize = true, withMotion = false } = {}) {
   const viewport = Object.assign(new EventTarget(), {
     clientWidth: 600, offsetWidth: 600, clientHeight: 450, offsetHeight: 450,
     clientLeft: 0, clientTop: 0, scrollLeft: 0, scrollTop: 0,
@@ -107,7 +107,19 @@ function createPreview({ alignTop = false, observeResize = true } = {}) {
   };
   let resize;
   browser.getComputedStyle = element => element === viewport ? {} : { marginTop: '20px' };
-  browser.EditorMotion = { timing: () => ({ duration: 0 }) };
+  browser.EditorMotion = { timing: () => ({ duration: withMotion ? 100 : 0 }) };
+  const frames = new Map();
+  let nextFrame = 0;
+  let progress = 0;
+  browser.KeyframeEffect = class { getComputedTiming() { return { progress }; } };
+  browser.Animation = class {
+    constructor(effect) { this.effect = effect; }
+    play() {}
+    cancel() {}
+  };
+  browser.document = { timeline: {} };
+  browser.requestAnimationFrame = callback => { frames.set(++nextFrame, callback); return nextFrame; };
+  browser.cancelAnimationFrame = identifier => frames.delete(identifier);
   browser.ResizeObserver = observeResize ? class {
     constructor(callback) { resize = callback; }
     observe(element) { assert.equal(element, viewport); }
@@ -117,8 +129,8 @@ function createPreview({ alignTop = false, observeResize = true } = {}) {
   browser.clearTimeout = clearTimeout;
   let changes = 0;
   const zoom = browser.PreviewZoom.create({
-    viewport, stage, paper, graphic, alignTop, controls: { querySelector: selector => selector === 'button' ? position : zoomMenu },
-    addRow: alignTop ? { offsetHeight: 30 } : undefined,
+    viewport, stage, paper, graphic, controls: { querySelector: selector => selector === 'button' ? position : zoomMenu },
+    addRow: withRowButton ? { offsetHeight: 30 } : undefined,
     onChange: () => { changes++; },
   });
   return {
@@ -134,6 +146,12 @@ function createPreview({ alignTop = false, observeResize = true } = {}) {
     choose(value) {
       zoomMenu.value = String(value);
       zoomMenu.dispatchEvent(new Event('change'));
+    },
+    advanceMotion(value) {
+      progress = value;
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach(callback => callback());
     },
     pointer(type, clientX, clientY, button = 0) {
       const event = Object.assign(new Event(type, { cancelable: true }), { pointerId: 1, clientX, clientY, button });
@@ -155,8 +173,38 @@ function createPreview({ alignTop = false, observeResize = true } = {}) {
   };
 }
 
+test('牌面居中，较高时为添加行按钮留空间', () => {
+  const preview = createPreview({ withRowButton: true });
+  preview.zoom.refresh(200, 100);
+  assert.equal(preview.paper.style.marginTop, '175px');
+  preview.zoom.refresh(200, 380);
+  assert.equal(preview.paper.style.marginTop, '20px');
+  preview.zoom.refresh(200, 600);
+  assert.equal(preview.paper.style.marginTop, '0px');
+  assert.equal(preview.paper.style.height, '400px');
+});
+
+test('放大后重新适应时，缩放动画也把牌面带回中央', () => {
+  const preview = createPreview({ withRowButton: true, withMotion: true });
+  preview.zoom.refresh(200, 100);
+  preview.choose(200);
+  assert.equal(preview.viewport.dataset.zoomTransition, 'true');
+  preview.advanceMotion(0.5);
+  assert.equal(preview.paper.style.width, '300px');
+  preview.advanceMotion(1);
+  assert.equal(preview.paper.style.width, '400px');
+  preview.choose('fit');
+  preview.advanceMotion(0.5);
+  assert.equal(preview.paper.style.width, '300px');
+  assert.equal(preview.paper.style.marginTop, '150px');
+  preview.advanceMotion(1);
+  assert.equal(preview.viewport.dataset.zoomTransition, undefined);
+  assert.equal(preview.fitting(), true);
+  assert.equal(preview.paper.style.marginTop, '175px');
+});
+
 test('比例尺统一更新图形、外层和读数，窗口变化只重算适应模式', () => {
-  const preview = createPreview({ alignTop: true });
+  const preview = createPreview({ withRowButton: true });
   preview.zoom.refresh(800, 800);
   assert.equal(preview.percent(), '50%');
   assert.equal(preview.stage.style.minWidth, preview.paper.style.width);

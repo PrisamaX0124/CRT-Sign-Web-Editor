@@ -51,7 +51,7 @@
     copyVersion++;
     var ids = App.selectedIds();
     if (ev.type === 'cut') cut(ids); else cutTarget = null;
-    UI.toast((ev.type === 'cut' ? '已剪切 ' : '已复制 ') + ids.length + ' 个元素');
+    UI.toast((ev.type === 'cut' ? '已剪切 ' : '已复制 ') + ids.length + ' 个元素', 'success');
   }
 
   function onPaste(ev) {
@@ -82,7 +82,7 @@
     if (isCut) cut(ids); else cutTarget = null;
     return pendingWrite.then(function (system) {
       if (copyingProject !== projectVersion) return false;
-      UI.toast((isCut ? '已剪切 ' : '已复制 ') + ids.length + ' 个元素' + (system ? '' : '（可在当前页面粘贴）'));
+      UI.toast((isCut ? '已剪切 ' : '已复制 ') + ids.length + ' 个元素' + (system ? '' : '（可在当前页面粘贴）'), 'success');
       return true;
     });
   }

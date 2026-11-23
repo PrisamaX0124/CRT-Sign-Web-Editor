@@ -292,7 +292,7 @@
         global.SignStorage.download(archive, filename);
         task = null;
         closeDialog();
-        notice('已开始下载 ' + filename);
+        notice('已开始下载 ' + filename, 'success');
       } catch (error) {
         if (!controller.signal.aborted) status.textContent = '打包失败。' + error.message;
       } finally {

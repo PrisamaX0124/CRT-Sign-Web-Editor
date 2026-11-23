@@ -234,7 +234,12 @@
     var toggle = field('enabled');
     toggle.addEventListener('click', function () {
       var target = controls.read();
-      if (target) update({ enabled: !target.linePattern.enabled });
+      if (!target) return;
+      var enabled = !target.linePattern.enabled;
+      update({ enabled: enabled });
+      if (controls.read()?.linePattern.enabled === enabled) {
+        controls.notice(enabled ? '已启用线路底纹' : '已关闭线路底纹', 'success');
+      }
     });
     source.addEventListener('change', function () { update({ source: source.value }); });
     [['size', defaultSize], ['opacity', defaultOpacity]].forEach(function (setting) {
@@ -269,13 +274,13 @@
         var image = await readImage(file);
         if (latestUpload !== file) return;
         if (controls.read() !== startingState) {
-          controls.notice('标识牌已更改，请重新选择底纹图片');
+          controls.notice('标识牌已更改，请重新选择底纹图片', 'warning');
           return;
         }
         update({ enabled: true, source: 'custom', image: image });
-        controls.notice('已应用自定义底纹');
+        controls.notice('已应用自定义底纹', 'success');
       } catch (error) {
-        if (latestUpload === file) controls.notice('底纹导入失败：' + error.message);
+        if (latestUpload === file) controls.notice('底纹导入失败：' + error.message, 'error');
       }
     });
     return function sync(line) {

@@ -23,6 +23,7 @@ function createEditor({ delay = 500, restored, initialReadFails = false } = {}) 
   const writes = [];
   const stored = new Map();
   const exports = [];
+  const notices = [];
   let project = '初始内容';
   let timerNumber = 0;
   const browser = {
@@ -47,9 +48,10 @@ function createEditor({ delay = 500, restored, initialReadFails = false } = {}) 
     storageKey, indicator, delay: delay || undefined, restored,
     serializeProject: () => JSON.stringify(project),
     exportProject: () => exports.push(project),
+    notice: (message, kind) => notices.push([message, kind]),
   });
   return {
-    browser, document, windowEvents, status, backup, timers, writes, exports, stored, indicator,
+    browser, document, windowEvents, status, backup, timers, writes, exports, stored, indicator, notices,
     edit(value) {
       project = value;
       autosave.schedule(delay ? undefined : JSON.stringify(value));
@@ -91,6 +93,26 @@ test('同类型项目被其他页面修改后，取消待保存内容并保留�
   editor.windowEvents.dispatchEvent(new Event('pagehide'));
   assert.deepEqual(editor.writes, []);
   assert.equal(editor.stored.get(storageKey), '其他页面的内容');
+  assert.equal(editor.notices.length, 1);
+  assert.match(editor.notices[0][0], /其他窗口/);
+  assert.equal(editor.notices[0][1], 'warning');
+});
+
+test('连续保存失败只提示一次，恢复后再次失败可以重新提示', () => {
+  const editor = createEditor({ delay: 0 });
+  const write = editor.browser.localStorage.setItem;
+  function fail() { throw new Error('空间不足'); }
+  editor.browser.localStorage.setItem = fail;
+  editor.edit('第一次失败');
+  editor.edit('仍然失败');
+  assert.deepEqual(editor.notices.map(([, kind]) => kind), ['error']);
+  editor.browser.localStorage.setItem = write;
+  editor.edit('保存恢复');
+  assert.equal(editor.status.textContent, '已保存');
+  assert.equal(editor.notices.length, 1);
+  editor.browser.localStorage.setItem = fail;
+  editor.edit('恢复后再次失败');
+  assert.deepEqual(editor.notices.map(([, kind]) => kind), ['error', 'error']);
 });
 
 test('其他页面删除存档或清空存储后，本页不会重新写回旧项目', () => {

@@ -2,9 +2,6 @@
 .project-header-actions > .editor-repository { flex: none; }
 .project-entry.btn { width: auto; min-height: 42px; margin: 0; padding-inline: 12px; white-space: nowrap; }
 .project-entry[hidden] { display: none; }
-@media (max-width: 1150px) {
-  .project-header-actions { grid-area: 1 / 2; }
-}
 .preview-toolbar:has(.project-preview-title) { flex-wrap: wrap; }
 .preview-toolbar:has(.project-preview-title) .preview-toolbar-actions { margin-inline-start: auto; }
 .preview-heading:has(.project-preview-title) { flex: 1 1 200px; flex-wrap: nowrap; }

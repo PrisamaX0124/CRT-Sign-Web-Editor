@@ -165,6 +165,25 @@
         assert(bounds.top >= controls.getBoundingClientRect().bottom - 1, '浮动工具栏挡住了标题栏');
         return bounds.width;
       }
+      if (settings.name === '导向标识') {
+        await test('导向默认牌面居中，放大后选适应画布可以回到中央', async () => {
+          function checkCentered() {
+            const sign = graphic.getBoundingClientRect();
+            const middle = center();
+            near((sign.left + sign.right) / 2, middle.clientX, '牌面没有水平居中');
+            near((sign.top + sign.bottom) / 2, middle.clientY, '牌面没有垂直居中');
+            const addRow = document.getElementById('add-row-btn').getBoundingClientRect();
+            assert(addRow.top >= sign.bottom && addRow.bottom <= viewport.getBoundingClientRect().bottom, '添加行按钮应在牌面下方可见');
+          }
+          assert(fit(), '默认应适应画布');
+          checkCentered();
+          await chooseZoom(100);
+          await chooseZoom('fit');
+          checkCentered();
+          document.getElementById('add-row-btn').click();
+          checkCentered();
+        });
+      }
       settings.prepare(editor);
 
       await test(settings.name + '首次打开独立适应画布，下拉菜单中的固定档位对应准确尺寸', async () => {
