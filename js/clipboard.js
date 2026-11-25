@@ -9,7 +9,7 @@
     return !!(target && target.closest && target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])'));
   }
 
-  function blocked(target) { return App.projects?.busy || editing(target) || !!document.querySelector('.modal-mask, dialog.project-dialog[open]'); }
+  function blocked(target) { return App.projects?.busy || editing(target) || !!document.querySelector('.modal-mask, dialog:modal'); }
 
   function selectionText() {
     var ids = App.selectedIds();

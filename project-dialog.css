@@ -39,7 +39,7 @@
 .project-preview-title > span { flex: none; }
 .project-preview-title > :nth-child(2) { color: var(--text-dim); font-weight: 400; }
 #guidance-save, #platform-save { flex-wrap: wrap; }
-.project-dialog {
+:is(.project-dialog, .editor-settings-dialog) {
   width: min(860px, calc(100vw - 36px));
   max-height: calc(100dvh - 48px);
   margin: auto;
@@ -52,11 +52,12 @@
   box-shadow: 0 16px 56px #0004;
 }
 .project-dialog-small { width: min(420px, calc(100vw - 36px)); }
-.project-dialog::backdrop { background: #0007; }
-.project-dialog:not([open]), .project-dialog:not([open])::backdrop { pointer-events: none; }
+:is(.project-dialog, .editor-settings-dialog)::backdrop { background: #0007; }
+:is(.project-dialog, .editor-settings-dialog):not([open]),
+:is(.project-dialog, .editor-settings-dialog):not([open])::backdrop { pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) {
   @supports (transition-behavior: allow-discrete) {
-    .project-dialog {
+    :is(.project-dialog, .editor-settings-dialog) {
       opacity: 0;
       translate: 0 4px;
       transition-property: opacity, translate, display, overlay;
@@ -64,25 +65,25 @@
       transition-timing-function: var(--motion-exit);
       transition-behavior: allow-discrete;
     }
-    .project-dialog[open] {
+    :is(.project-dialog, .editor-settings-dialog)[open] {
       opacity: 1;
       translate: none;
       transition-duration: var(--motion-reveal-duration);
       transition-timing-function: var(--motion-enter);
     }
-    .project-dialog::backdrop {
+    :is(.project-dialog, .editor-settings-dialog)::backdrop {
       opacity: 0;
       transition: opacity var(--motion-dismiss-duration) var(--motion-exit),
         display var(--motion-dismiss-duration) allow-discrete, overlay var(--motion-dismiss-duration) allow-discrete;
     }
-    .project-dialog[open]::backdrop {
+    :is(.project-dialog, .editor-settings-dialog)[open]::backdrop {
       opacity: 1;
       transition-duration: var(--motion-reveal-duration);
       transition-timing-function: var(--motion-enter);
     }
     @starting-style {
-      .project-dialog[open] { opacity: 0; translate: 0 4px; }
-      .project-dialog[open]::backdrop { opacity: 0; }
+      :is(.project-dialog, .editor-settings-dialog)[open] { opacity: 0; translate: 0 4px; }
+      :is(.project-dialog, .editor-settings-dialog)[open]::backdrop { opacity: 0; }
     }
   }
 }

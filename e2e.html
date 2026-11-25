@@ -978,15 +978,15 @@
       ok('S31 返回后按钮隐藏（display:none）', closeBtn.offsetParent === null &&
         w.getComputedStyle(closeBtn).display === 'none');
       w.App.select(null);
-      // ─ 窄标识牌显示不放大（缩放 ≤ 100%）
       w.App.update(function (st) {
         st = S.updateSignSettings(st, { width: 400 });
         st = S.clearSign(st);
         return S.addElement(st, st.rows[0].id, S.createElement('space', { widthRatio: 0.5 }));
       });
       var svg = $('#sign-svg');
-      var dispW = parseFloat(svg.style.width) || svg.getBoundingClientRect().width;
-      ok('S31 窄标识牌显示宽度不超过自然宽度（400）', dispW <= 400.5, 'w=' + svg.style.width);
+      var bounds = svg.getBoundingClientRect(), viewport = $('#canvas-scroll').getBoundingClientRect();
+      ok('S31 窄标识牌可适应到 100% 以上，仍完整显示', bounds.width > 400 && bounds.left >= viewport.left &&
+        bounds.right <= viewport.right && bounds.top >= viewport.top && bounds.bottom <= viewport.bottom, 'w=' + svg.style.width);
       // 恢复较宽的牌，显示宽度 = 画布可用宽
       w.App.update(function (st) { return S.updateSignSettings(st, { width: 2048 }); });
       var dispW2 = parseFloat(svg.style.width) || 0;
@@ -1469,26 +1469,21 @@
     // 把系统暗色规则临时作为普通规则应用，验证全部编辑器表面及牌面隔离。
     function s44_systemDarkModeIsolation() {
       var w = W(), d = frame.contentDocument;
-      var darkRules = [];
-      Array.prototype.forEach.call(d.styleSheets, function (sheet) {
-        Array.prototype.forEach.call(sheet.cssRules, function (rule) {
-          if (rule.media && rule.media.mediaText === '(prefers-color-scheme: dark)') darkRules.push(rule);
-        });
-      });
-      ok('S44 编辑器响应系统深色模式', darkRules.length > 0);
-      if (!darkRules.length) return;
+      var preferences = w.EditorPreferences;
+      var previous = preferences.read();
+      ok('S44 编辑器按系统设置选择主题', d.documentElement.dataset.editorTheme ===
+        (w.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
       var beforeSign = $('#sign-svg').outerHTML;
       var beforeData = JSON.stringify(w.App.state);
       var beforeExport = w.SignExporters.buildExportSVGString(w.App.state, w.App.measure, {});
       var beforeBg = w.getComputedStyle($('#right-panel')).backgroundColor;
-      var style = d.createElement('style');
-      style.textContent = darkRules.map(function (r) { return Array.prototype.map.call(r.cssRules, function (c) { return c.cssText; }).join('\n'); }).join('\n');
-      d.head.appendChild(style);
-      ok('S44 深色规则将面板改为炭灰', w.getComputedStyle($('#right-panel')).backgroundColor === 'rgb(34, 34, 34)');
-      ok('S44 输入框采用深灰表面', w.getComputedStyle($('#right-panel-body input[type="number"]')).backgroundColor === 'rgb(41, 41, 41)');
-      ok('S44 牌面渲染与导出内容不改变', $('#sign-svg').outerHTML === beforeSign && JSON.stringify(w.App.state) === beforeData && w.SignExporters.buildExportSVGString(w.App.state, w.App.measure, {}) === beforeExport && w.getComputedStyle($('#sign-svg')).filter === 'none');
-      style.remove();
-      ok('S44 移除深色规则后恢复系统界面', w.getComputedStyle($('#right-panel')).backgroundColor === beforeBg);
+      try {
+        preferences.save({ ...previous, theme: 'dark' });
+        ok('S44 深色主题将面板改为炭灰', w.getComputedStyle($('#right-panel')).backgroundColor === 'rgb(34, 34, 34)');
+        ok('S44 输入框采用深灰表面', w.getComputedStyle($('#right-panel-body input[type="number"]')).backgroundColor === 'rgb(41, 41, 41)');
+        ok('S44 牌面渲染与导出内容不改变', $('#sign-svg').outerHTML === beforeSign && JSON.stringify(w.App.state) === beforeData && w.SignExporters.buildExportSVGString(w.App.state, w.App.measure, {}) === beforeExport && w.getComputedStyle($('#sign-svg')).filter === 'none');
+      } finally { preferences.save(previous); }
+      ok('S44 恢复跟随系统后采用原主题', w.getComputedStyle($('#right-panel')).backgroundColor === beforeBg);
     }
 
     function savePresetExample(editor, name, elements) {

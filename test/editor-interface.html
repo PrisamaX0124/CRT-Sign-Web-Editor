@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>编辑器设置与入门教程测试</title>
+<style>
+  body { font: 14px system-ui; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>编辑器设置与入门教程测试</h1>
+<p id="summary" role="status">正在运行</p>
+<ol id="results"></ol>
+<script>
+(async function () {
+  const editors = [
+    ['guidance', '导向标识', '../index.html', '#add-row-btn'],
+    ['transfer', '换乘标识', '../index.html?editor=transfer', '[data-transfer-mode="separate"]'],
+    ['platform', '站台标识', '../platform.html', '#add-station'],
+  ];
+  const opened = [];
+  const storageKeys = ['public-editor-preferences', ...editors.map(([editor]) => 'public-editor-tutorial-' + editor)];
+  const originalStorage = storageKeys.map(key => [key, localStorage.getItem(key)]);
+  const find = (tab, selector) => tab.document.querySelector(selector);
+  let passed = 0;
+  let failed = 0;
+
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+
+  async function waitFor(check, message) {
+    const deadline = performance.now() + 15000;
+    while (performance.now() < deadline) {
+      const value = check();
+      if (value) return value;
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+    throw new Error(message);
+  }
+
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try {
+      await run();
+      item.className = 'pass';
+      item.textContent = name;
+      passed++;
+    } catch (error) {
+      item.className = 'fail';
+      item.textContent = name + '。' + error.message;
+      failed++;
+    }
+    document.getElementById('results').append(item);
+  }
+
+  function open(path) {
+    const tab = window.open(path, '_blank');
+    assert(tab, '测试需打开独立的浏览器标签页');
+    opened.push(tab);
+    return tab;
+  }
+
+  function activeCanvas(tab) {
+    return [...tab.document.querySelectorAll('.preview-zoom-viewport')].find(element => element.getClientRects().length);
+  }
+
+  async function checkInterface(tab, editor) {
+    await waitFor(() => tab.document.readyState === 'complete' && tab.document.body.dataset.editor === editor && tab.App?.ready, '编辑器未加载');
+    await tab.App.ready;
+  }
+
+  try {
+    storageKeys.forEach(key => localStorage.removeItem(key));
+    for (const [editor, name, path, editControl] of editors) {
+      await test(name + '首次弹出各自的欢迎页，四个气泡可返回并完成', async function () {
+        const tab = open(path);
+        await checkInterface(tab, editor);
+        const welcome = await waitFor(() => find(tab, '.tutorial-welcome:modal'), '首次打开未显示教程');
+        assert(welcome.querySelector('h2').textContent === name + '入门', '欢迎页对应了其他编辑器');
+        assert(welcome.querySelector('img').naturalWidth > 200, '标识牌示例未显示');
+        const launch = find(tab, '[data-open-tutorial]');
+        const settings = find(tab, '[data-editor-settings]');
+        assert(settings instanceof tab.HTMLButtonElement && settings.getAttribute('aria-haspopup') === 'dialog', '设置入口应打开当前编辑器内的弹窗');
+
+        welcome.querySelector('[data-tutorial-start]').click();
+        const bubble = find(tab, '.tutorial-bubble:popover-open');
+        const next = bubble.querySelector('[data-tutorial-next]');
+        const back = bubble.querySelector('[data-tutorial-back]');
+        const headings = [];
+        for (let step = 1; step <= 4; step++) {
+          const target = find(tab, '[data-tutorial-target]');
+          const heading = bubble.querySelector('h2');
+          const bounds = bubble.getBoundingClientRect();
+          assert(target && target.getBoundingClientRect().width > 0 && tab.document.querySelectorAll('[data-tutorial-target]').length === 1, '当前步骤应标出一个可见控件');
+          assert(bubble.textContent.includes('第 ' + step + ' 步，共 4 步') && tab.document.activeElement === heading, '步骤或键盘焦点错误');
+          assert(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= tab.innerWidth && bounds.bottom <= tab.innerHeight, '气泡超出窗口');
+          if (step === 1) assert(back.hidden, '第一步应隐藏上一步');
+          if (step === 2) {
+            back.click();
+            assert(bubble.querySelector('h2').textContent === headings[0], '上一步没有回到原说明');
+            next.click();
+          }
+          headings.push(heading.textContent);
+          next.click();
+        }
+        assert(new Set(headings).size === 4 && !find(tab, '.tutorial-bubble:popover-open') && !find(tab, '[data-tutorial-target]'), '完成后应收起气泡和标记');
+        assert(tab.document.activeElement === launch, '结束后应把键盘焦点还给教程按钮');
+
+        settings.click();
+        const settingsDialog = find(tab, '#editor-settings:modal');
+        const close = settingsDialog?.querySelector('.dialog-close[data-control-icon="close"]');
+        assert(close && tab.document.activeElement === close, '设置应复用弹窗右上角的关闭按钮');
+        close.click();
+        await waitFor(() => !settingsDialog.open && tab.document.activeElement === settings, '关闭后应回到打开设置的按钮');
+
+        const sidebar = [...tab.document.querySelectorAll('.editor-right')].find(panel => panel.getClientRects().length);
+        const propertyHeader = sidebar.querySelector('.property-header');
+        const propertyBody = sidebar.querySelector('.panel-body');
+        const tabs = propertyHeader.querySelector('.property-tabs');
+        const dark = tab.document.documentElement.dataset.editorTheme === 'dark';
+        assert(tab.getComputedStyle(tabs).borderRadius === '9px' && tab.getComputedStyle(propertyHeader).borderBottomWidth === '1px' &&
+          tab.getComputedStyle(propertyBody).backgroundColor === (dark ? 'rgb(29, 29, 29)' : 'rgb(250, 250, 250)'), '右栏应使用原有标签、边线和底色');
+
+        const before = tab.App.state;
+        find(tab, editControl).click();
+        assert(tab.App.state !== before, '教程结束后应能继续编辑');
+        launch.click();
+        assert(welcome.open, '应能随时重看教程');
+        welcome.querySelector('[data-tutorial-skip]').click();
+        tab.location.reload();
+        await waitFor(() => tab.document !== welcome.ownerDocument, '编辑器没有重新加载');
+        await checkInterface(tab, editor);
+        assert(!find(tab, '.tutorial-welcome[open]'), '打开过的教程再次启动时不应自动弹出');
+      });
+    }
+
+    await test('设置弹窗的主题、背景和动态效果实时同步到已打开的三个编辑器', async function () {
+      const settings = opened[1];
+      find(settings, '[data-editor-settings]').click();
+      assert(find(settings, '#editor-settings:modal'), '设置弹窗未打开');
+      const switchControl = find(settings, '[name="motion"]');
+      const states = opened.slice(0, 3).map(tab => tab.App.state);
+      const graphics = opened.slice(0, 3).map(tab => activeCanvas(tab).querySelector('svg').outerHTML);
+      find(settings, '[name="theme"][value="dark"]').click();
+      find(settings, '[name="canvas"][value="grid"]').click();
+      const inactiveSwitch = settings.getComputedStyle(switchControl).backgroundColor;
+      switchControl.click();
+      assert(switchControl.checked && settings.getComputedStyle(switchControl).backgroundColor !== inactiveSwitch, '开关开启后应有明显的状态变化');
+      await waitFor(() => opened.slice(0, 3).every(tab => tab.document.documentElement.dataset.editorMotion === 'reduced'), '已打开的编辑器未同步设置');
+      opened.slice(0, 3).forEach((tab, index) => {
+        const root = tab.document.documentElement;
+        const canvas = activeCanvas(tab);
+        const theme = tab.getComputedStyle(root).colorScheme;
+        assert(theme === 'dark' && tab.getComputedStyle(canvas).backgroundImage.includes('linear-gradient'), '深色主题或方格没有生效');
+        assert(tab.getComputedStyle(root).getPropertyValue('--motion-panel-duration').trim() === '0ms', '减少动态效果没有生效');
+        assert(tab.App.state === states[index] && canvas.querySelector('svg').outerHTML === graphics[index], '界面设置改动了项目或牌面');
+      });
+
+      find(settings, '[name="theme"][value="light"]').click();
+      find(settings, '[name="canvas"][value="plain"]').click();
+      await waitFor(() => opened.slice(0, 3).every(tab => tab.document.documentElement.dataset.canvasBackground === 'plain'), '纯色背景未同步');
+      assert(opened.slice(0, 3).every(tab => {
+        const canvas = activeCanvas(tab);
+        return tab.getComputedStyle(tab.document.documentElement).colorScheme === 'light' && tab.getComputedStyle(canvas).backgroundImage === 'none';
+      }), '浅色主题或纯色背景未生效');
+
+      const previous = settings.document;
+      settings.location.reload();
+      await waitFor(() => settings.document !== previous && find(settings, '[name="canvas"][value="plain"]')?.checked, '刷新后未恢复设置');
+      await checkInterface(settings, 'transfer');
+      find(settings, '[data-editor-settings]').click();
+      find(settings, '#settings-reset').click();
+      await waitFor(() => opened.slice(0, 3).every(tab => tab.document.documentElement.dataset.canvasBackground === 'dots'), '恢复默认设置后未同步');
+      assert(find(settings, '[name="theme"][value="system"]').checked && !find(settings, '[name="motion"]').checked, '恢复默认设置有遗漏');
+    });
+
+    await test('开关两端为半圆、拨钮为正圆，滑条恢复原生样式且可聚焦和步进', async function () {
+      const platform = opened[2];
+      const range = find(platform, '#hanging-length');
+      assert(range && platform.getComputedStyle(range).appearance !== 'none', '滑条应使用原生样式');
+      range.focus();
+      assert(platform.document.activeElement === range, '滑条应可用键盘聚焦');
+      const initial = range.valueAsNumber;
+      range.stepUp();
+      range.dispatchEvent(new platform.Event('input', { bubbles: true }));
+      assert(range.valueAsNumber > initial, '滑条应保留原生步进');
+
+      const panelSwitch = find(platform, '#line-pattern-enabled > span');
+      const trigger = find(platform, '[data-editor-settings]');
+      trigger.click();
+      try {
+        const settingsSwitch = find(platform, '#editor-settings [name="motion"]');
+        const panelStyle = platform.getComputedStyle(panelSwitch);
+        const settingsStyle = platform.getComputedStyle(settingsSwitch);
+        for (const property of ['width', 'height', 'borderRadius', 'borderWidth']) {
+          assert(panelStyle[property] === settingsStyle[property], '弹窗和属性区开关样式应一致');
+        }
+        for (const track of [panelStyle, settingsStyle]) {
+          const radius = parseFloat(track.height) / 2 + 'px';
+          assert(track.borderRadius === radius, '开关两端应是半圆');
+          assert(!track.cornerShape || ['round', 'superellipse(1)'].includes(track.cornerShape), '开关两端应使用圆弧');
+        }
+        for (const thumb of [platform.getComputedStyle(panelSwitch, '::after'), platform.getComputedStyle(settingsSwitch, '::before')]) {
+          assert(thumb.width === thumb.height && thumb.borderRadius === '50%', '属性区和设置里的开关拨钮都应是正圆');
+          assert(!thumb.cornerShape || ['round', 'superellipse(1)'].includes(thumb.cornerShape), '开关拨钮应使用圆弧');
+        }
+      } finally { find(platform, '#editor-settings .dialog-close').click(); }
+    });
+
+    await test('浅色和深色主题都能看清「新建色板」，点击后回到空白色板', async function () {
+      const platform = opened[2];
+      const preferences = platform.EditorPreferences;
+      const saved = preferences.read();
+      const confirm = platform.confirm;
+      const picker = find(platform, '#property-settings .color-picker');
+      const toggle = picker.querySelector('.cp-current');
+      platform.confirm = () => true;
+      try {
+        for (const theme of ['light', 'dark']) {
+          preferences.save({ ...saved, theme, motion: 'reduced' });
+          if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+          picker.querySelector('.cp-manage').click();
+          const dialog = find(platform, '.pm-dialog:modal');
+          assert(dialog, '应从色板选择器打开自定义调色板');
+          const create = dialog.querySelector('.pm-sidebar-actions .btn-primary');
+          const mainButton = platform.getComputedStyle(find(platform, '#export-png'));
+          const primaryButtons = [...dialog.querySelectorAll('.btn-primary')];
+          assert(create.textContent.includes('新建色板') && primaryButtons.every(button => {
+            const style = platform.getComputedStyle(button);
+            return style.color !== style.backgroundColor && style.backgroundColor === mainButton.backgroundColor && style.color === mainButton.color;
+          }), '新建色板和保存并使用应采用当前主题的主按钮前景和底色');
+          dialog.querySelector('.pm-sidebar-actions .btn:not(.btn-primary)').click();
+          const name = dialog.querySelector('#pm-name');
+          assert(name.value.includes('副本'), '应先复制一套现有色板');
+          create.click();
+          assert(name.value === '' && platform.document.activeElement === name, '新建后应清空名称并聚焦输入框');
+          dialog.close();
+        }
+      } finally {
+        find(platform, '.pm-dialog[open]')?.close();
+        platform.confirm = confirm;
+        preferences.save(saved);
+      }
+    });
+
+    await test('关闭首次提示后仍能重看，气泡内按退出键保留工作区选择', async function () {
+      const settings = opened[1];
+      find(settings, '[name="showTutorial"]').click();
+      localStorage.removeItem('public-editor-tutorial-guidance');
+      const tab = open('../index.html');
+      await checkInterface(tab, 'guidance');
+      assert(!find(tab, '.tutorial-welcome[open]'), '关闭首次教程后仍自动弹出');
+      find(tab, '.palette-card').click();
+      const added = tab.App.state.rows.at(-1).elements.at(-1);
+      tab.App.select(added.id);
+      const before = tab.App.selection.elementId;
+      assert(before, '未能选中刚添加的元素');
+      find(tab, '[data-editor-settings]').click();
+      find(tab, '#editor-settings-heading').click();
+      find(tab, '#editor-settings .dialog-close').click();
+      assert(tab.App.selection.elementId === before, '在设置弹窗内操作应保留牌面选区');
+      find(tab, '#left-collapse').click();
+      const launch = find(tab, '[data-open-tutorial]');
+      launch.click();
+      find(tab, '[data-tutorial-start]').click();
+      assert(!find(tab, '#left-panel').inert, '教程应展开当前步骤需要的侧栏');
+      tab.document.activeElement.dispatchEvent(new tab.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      assert(!find(tab, '.tutorial-bubble:popover-open') && tab.App.selection.elementId === before && tab.document.activeElement === launch, '退出气泡时应保留选择并恢复焦点');
+    });
+  } finally {
+    opened.forEach(tab => tab.close());
+    originalStorage.forEach(([key, value]) => value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value));
+    const title = passed + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = title;
+    document.title = (failed ? '✖ ' : '✔ ') + title + ' 编辑器设置与入门教程测试';
+  }
+})();
+</script>

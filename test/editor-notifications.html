@@ -97,7 +97,7 @@
     });
 
     if (name === '导向标识') {
-      await test('图标选项每行四个，新增交通图标紧跟列车且可以应用到牌面', async () => {
+      await test('四种交通图标和中国铁路路徽在图标栏、牌面和导出均使用圆角空心框', async () => {
         const app = editor.App;
         app.select(app.elementOrder().at(-1));
         const grid = page.querySelector('#right-panel-body .icon-grid');
@@ -106,17 +106,31 @@
         const train = buttons.findIndex(button => button.title === '列车');
         const additions = buttons.slice(train + 1, train + 5);
         assert(additions.map(button => button.title).join('、') === '码头、机场、客渡码头、直升机场', '新图标应紧跟列车');
-        for (const button of additions) {
+        const railway = buttons.find(button => button.title === '中国铁路');
+        for (const button of [...additions, railway]) {
           button.click();
           assert(button.getAttribute('aria-pressed') === 'true' && grid.isConnected, '选择后应更新牌面并保留网格');
           const selected = editor.SignState.findElement(app.state, app.selection.elementId).element;
-          const path = button.querySelector('svg path').getAttribute('d');
           assert(editor.SignIcons.get(selected.props.icon).name === button.title, '选中的图标应存入当前元素');
-          assert(page.querySelector('#sign-svg .element.selected path[fill-rule="evenodd"]')?.getAttribute('d') === path, '牌面应绘制相同的矢量轮廓');
+          const paths = [...button.querySelectorAll('svg path')].map(path => path.getAttribute('d'));
+          assert(paths.length === 2, '图标应分开绘制边框和图案');
+          app.update(project => editor.SignState.updateElementProps(project, selected.id, { color: '#135C93' }));
+          const graphic = page.querySelector('#sign-svg .element.selected svg');
+          const [frame, artwork] = graphic.querySelectorAll('path');
+          const size = graphic.viewBox.baseVal.width;
+          const point = (left, top) => new editor.DOMPoint(left * size, top * size);
+          assert(frame.isPointInFill(point(.015, .5)) && frame.isPointInFill(point(.5, .015)) &&
+            !frame.isPointInFill(point(.045, .5)) && !frame.isPointInFill(point(.005, .005)), '边框应在四周围成带圆角的空心轮廓');
+          const box = graphic.getBoundingClientRect();
+          const ink = artwork.getBoundingClientRect();
+          const clearance = Math.min(ink.left - box.left, box.right - ink.right, ink.top - box.top, box.bottom - ink.bottom);
+          assert(clearance >= box.width * .06, '图案和边框之间应留出间距。' + button.title);
+          assert([frame, artwork].every((path, index) => path.getAttribute('d') === paths[index] && path.getAttribute('fill') === '#135C93'),
+            '牌面应绘制与图标栏相同的轮廓，边框和图案应一起换色');
           const project = editor.SignState.deserializeSign(editor.SignState.serializeSign(app.state));
           assert(editor.SignState.findElement(project, selected.id).element.props.icon === selected.props.icon, '保存并打开后应保留图标');
           const exported = editor.SignExporters.buildExportSVGString(app.state, app.measure, {});
-          assert(exported.includes(path), '导出图片应包含相同的镂空图形');
+          assert(paths.every(path => exported.includes(path)) && exported.includes('fill="#135C93"'), '导出图片应包含同色的边框和图案');
         }
       });
     }

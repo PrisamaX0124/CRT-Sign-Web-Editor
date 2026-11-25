@@ -162,7 +162,7 @@
         const area = viewport.getBoundingClientRect();
         assert(!toolbar.hidden && bounds.width > 0 && bounds.left >= area.left - 1 && bounds.right <= area.right + 1 &&
           bounds.top >= area.top - 1 && bounds.bottom <= area.bottom + 1, '浮动工具栏超出预览区');
-        assert(bounds.top >= controls.getBoundingClientRect().bottom - 1, '浮动工具栏挡住了标题栏');
+        assert(bounds.bottom <= controls.getBoundingClientRect().top + 1, '浮动工具栏挡住了底部缩放控件');
         return bounds.width;
       }
       if (settings.name === '导向标识') {
@@ -203,7 +203,7 @@
         near(scale(), 0.75, '下拉菜单没有更新实际尺寸', 0.002);
       });
 
-      await test(settings.name + 'Shift 滚轮按鼠标位置缩放，普通滚轮和预览区外不被拦截', async () => {
+      await test(settings.name + '普通滚轮以鼠标为中心平滑缩放，Shift 滚轮平滑横移', async () => {
         checkControls();
         await chooseZoom(150);
         viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
@@ -212,24 +212,36 @@
         const before = graphic.getBoundingClientRect();
         const horizontal = (pointer.clientX - before.left) / before.width;
         const vertical = (pointer.clientY - before.top) / before.height;
-        assert(wheel(viewport, { shiftKey: true, deltaY: -75 }), '未处理 Shift 滚轮');
+        assert(wheel(viewport, { deltaY: -75 }), '未处理普通滚轮');
+        const reduced = editor.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        assert(!!viewport.dataset.zoomTransition === !reduced, '滚轮应遵循减少动态效果设置');
+        await waitFor(() => !viewport.dataset.zoomTransition);
         const after = graphic.getBoundingClientRect();
         near(after.left + after.width * horizontal, pointer.clientX, '横向锚点偏移');
         near(after.top + after.height * vertical, pointer.clientY, '纵向锚点偏移');
         assert(shown() > 150 && zoomMenu.selectedOptions[0].disabled, '滚轮应显示实际比例，保持固定档位不变');
         const enlarged = scale();
-        assert(wheel(viewport, { shiftKey: true, deltaX: 3, deltaMode: 1 }) && scale() < enlarged, '只提供横向滚动量时不能缩小');
-        const current = scale();
-        assert(!wheel(viewport, { deltaY: 80 }) && !wheel(controls, { deltaY: -80, shiftKey: true }) && scale() === current,
-          '普通滚轮或预览区外的滚轮改变了缩放');
+        const left = viewport.scrollLeft;
+        const top = viewport.scrollTop;
+        assert(wheel(viewport, { shiftKey: true, deltaY: 30 }), '未处理横移手势');
+        assert(!!viewport.dataset.zoomTransition === !reduced, '横移应遵循减少动态效果设置');
+        await waitFor(() => !viewport.dataset.zoomTransition);
+        assert(viewport.scrollLeft > left && viewport.scrollTop === top && scale() === enlarged, 'Shift 滚轮应只移动横向位置');
+        assert(wheel(viewport, { deltaX: -15, deltaY: 0 }), '未处理触控板的横向滚动');
+        await waitFor(() => !viewport.dataset.zoomTransition);
+        assert(viewport.scrollLeft < left + 30 && scale() === enlarged, '触控板横移改变了比例或方向错误');
+        assert(!wheel(viewport, { deltaY: 80, ctrlKey: true }) && !wheel(controls, { deltaY: -80 }) && scale() === enlarged,
+          '浏览器快捷键或预览区外的滚轮被拦截');
       });
 
-      await test(settings.name + '缩放停在 25% 和 400%，放大后能向两边滚动', () => {
+      await test(settings.name + '连续滚动累积缩放，停在 25% 和 400%，放大后能看到牌面边缘', async () => {
         checkControls();
-        for (let count = 0; count < 20; count++) wheel(viewport, { shiftKey: true, deltaY: 120 });
+        for (let count = 0; count < 20; count++) wheel(viewport, { deltaY: 120 });
+        await waitFor(() => !viewport.dataset.zoomTransition);
         assert(shown() === 25 && zoomMenu.value === '25', '缩小超过 25%');
         near(scale(), 0.25, '最小比例与实际尺寸不同', 0.002);
-        for (let count = 0; count < 20; count++) wheel(viewport, { shiftKey: true, deltaY: -120 });
+        for (let count = 0; count < 20; count++) wheel(viewport, { deltaY: -120 });
+        await waitFor(() => !viewport.dataset.zoomTransition);
         assert(shown() === 400 && zoomMenu.value === '400', '放大超过 400%');
         near(scale(), 4, '最大比例与实际尺寸不同', 0.002);
         viewport.scrollLeft = viewport.scrollWidth;
@@ -245,6 +257,10 @@
         await chooseZoom('fit');
         const full = scale();
         try {
+          frame.style.width = '2200px';
+          frame.style.height = '1600px';
+          await frameReady();
+          assert(fit() && scale() > 1 && scale() > full, '大窗口未按面积放大到 100% 以上');
           frame.style.width = '1120px';
           frame.style.height = '620px';
           await frameReady();
@@ -261,6 +277,25 @@
           await chooseZoom('fit');
           await frameReady();
         }
+      });
+
+      await test(settings.name + '双击牌面外的空白处可恢复适应，牌面和底部控件各自保留原操作', async () => {
+        await chooseZoom(25);
+        const point = viewport.getBoundingClientRect();
+        const blank = { clientX: point.left + 4, clientY: point.top + 4 };
+        const doubleClick = (target, position) => target.dispatchEvent(new editor.MouseEvent('dblclick', { bubbles: true, cancelable: true, ...position }));
+        const board = graphic.getBoundingClientRect();
+        doubleClick(graphic, { clientX: board.left + board.width / 2, clientY: board.top + board.height / 2 });
+        doubleClick(zoomMenu, blank);
+        assert(shown() === 25 && !viewport.dataset.zoomTransition, '双击牌面或其他控件不应改变比例');
+        const lock = controls.querySelector('.preview-position-lock');
+        lock.click();
+        doubleClick(viewport, blank);
+        assert(shown() === 25 && !viewport.dataset.zoomTransition, '锁定时不能重新适应');
+        lock.click();
+        doubleClick(viewport, blank);
+        await waitFor(() => !viewport.dataset.zoomTransition);
+        assert(fit() && shown() !== 25 && viewport.scrollLeft === 0 && viewport.scrollTop === 0, '双击空白处后应重新适应并居中');
       });
 
       await test(settings.name + '使用同一个锁图标，开锁可拖动，闭锁固定位置和比例', async () => {

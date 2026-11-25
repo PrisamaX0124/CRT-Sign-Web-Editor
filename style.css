@@ -10,8 +10,8 @@
 dialog.pm-dialog { width: min(860px, calc(100vw - 32px)); height: min(660px, calc(100dvh - 48px)); max-width: none; max-height: none; margin: auto; padding: 0; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--panel-bg); box-shadow: 0 24px 80px #0004; overflow: hidden; }
 .pm-dialog[open] { display: flex; flex-direction: column; }
 .pm-dialog::backdrop { background: #0008; backdrop-filter: blur(3px); }
-.pm-dialog .btn { width: auto; margin: 0; padding: 9px 12px; white-space: nowrap; font-size: 12px; line-height: 1.4; background: var(--action-surface, var(--control-bg)); color: var(--action-text, var(--text)); }
-.pm-dialog .btn-primary { color: var(--accent-text); }
+.pm-dialog .btn { width: auto; margin: 0; padding: 9px 12px; white-space: nowrap; font-size: 12px; line-height: 1.4; }
+.pm-dialog .btn:not(.btn-primary) { background: var(--action-surface, var(--control-bg)); color: var(--action-text, var(--text)); }
 .pm-sidebar-actions .btn { width: 100%; }
 .pm-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; padding: 22px 24px 18px; border-bottom: 1px solid var(--border); }
 .pm-heading h2 { font-size: 20px; line-height: 1.4; }
@@ -150,9 +150,12 @@ input, select {
   gap: 12px;
   padding: 8px 16px;
 }
-.editor-navigation {
+.editor-heading-actions {
   grid-area: 1 / 1;
   justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .editor-switch {
   display: flex;
@@ -284,6 +287,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--accent); }
   .editor-repository { grid-column: 2; padding-inline: 9px; }
   .editor-header .project-header-actions { grid-area: 1 / 2; }
   .editor-header .mode-tabs { grid-area: 2 / 1 / 3 / -1; }
+}
+@container (max-width: 920px) {
+  .editor-header-content:has(.project-entry:not([hidden])) .mode-tabs { grid-area: 2 / 1 / 3 / -1; }
 }
 
 /* ─── 三栏布局 ─── */
@@ -1772,47 +1778,42 @@ button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-v
   outline: 2px solid var(--selection); outline-offset: 2px;
 }
 
-/* 仅编辑器表面跟随系统主题；SVG 牌面及预览保持项目原色。 */
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #171717;
-    --panel-bg: #222222;
-    --control-bg: #292929;
-    --surface-soft: #282828;
-    --canvas-background: #191a1c;
-    --canvas-dot: #3b3d42;
-    --property-background: #1d1d1d;
-    --paper-shadow: 0 0 0 1px rgb(255 255 255 / 16%), 0 10px 32px rgb(0 0 0 / 30%);
-    --tab-surface: #1d1d1d;
-    --tab-selected: #303030;
-    --ok: #8dbda3;
-    --border: #424242;
-    --text: #f1f1f1;
-    --text-dim: #b5b5b5;
-    --accent: #ededed;
-    --accent-text: #202020;
-    --accent-hover: #ffffff;
-    --accent-soft: #363636;
-    --selection: #aebfda;
-    --selection-soft: #aebfda14;
-    --danger: #ee9292;
-    --delete-red: #ff8388;
-    --delete-background: #352629;
-    --delete-hover-background: #4a2b31;
-    --delete-text: #ffb7bc;
-    --delete-border: #6a454a;
-  }
-  .palette-card, .preset-card { background: var(--surface-soft); }
-  .modal { background: var(--panel-bg); }
-  #add-row-btn, #add-row-btn:hover,
-  .row-band .row-handle { background: var(--control-bg); }
-  .le-add { border-color: var(--border); }
-  .icon-pick { background: var(--control-bg); }
-  .icon-pick.active { background: var(--accent-soft); }
-  ::-webkit-scrollbar-thumb { background: #555555; }
-  ::-webkit-scrollbar-thumb:hover { background: #737373; }
+:root[data-editor-theme="dark"] {
+  color-scheme: dark;
+  --bg: #171717;
+  --panel-bg: #222222;
+  --control-bg: #292929;
+  --surface-soft: #282828;
+  --canvas-background: #191a1c;
+  --canvas-dot: #3b3d42;
+  --property-background: #1d1d1d;
+  --paper-shadow: 0 0 0 1px rgb(255 255 255 / 16%), 0 10px 32px rgb(0 0 0 / 30%);
+  --tab-surface: #1d1d1d;
+  --tab-selected: #303030;
+  --ok: #8dbda3;
+  --border: #424242;
+  --text: #f1f1f1;
+  --text-dim: #b5b5b5;
+  --accent: #ededed;
+  --accent-text: #202020;
+  --accent-hover: #ffffff;
+  --accent-soft: #363636;
+  --selection: #aebfda;
+  --selection-soft: #aebfda14;
+  --danger: #ee9292;
+  --delete-red: #ff8388;
+  --delete-background: #352629;
+  --delete-hover-background: #4a2b31;
+  --delete-text: #ffb7bc;
+  --delete-border: #6a454a;
 }
+[data-editor-theme="dark"] :is(.palette-card, .preset-card) { background: var(--surface-soft); }
+[data-editor-theme="dark"] .modal { background: var(--panel-bg); }
+[data-editor-theme="dark"] :is(#add-row-btn, #add-row-btn:hover, .row-band .row-handle, .icon-pick) { background: var(--control-bg); }
+[data-editor-theme="dark"] .le-add { border-color: var(--border); }
+[data-editor-theme="dark"] .icon-pick.active { background: var(--accent-soft); }
+[data-editor-theme="dark"] ::-webkit-scrollbar-thumb { background: #555555; }
+[data-editor-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #737373; }
 
 :where([data-control-icon]):not([hidden]) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 [data-control-icon]::before {

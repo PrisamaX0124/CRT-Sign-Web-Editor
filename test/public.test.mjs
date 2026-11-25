@@ -141,7 +141,7 @@ test('station codes after 11 retain the reference glyphs and railway icon is sel
   const scene=R.metrics(S.settings(state,{mode:'vertical'}),measure);
   const codes=scene.nodes.filter(n=>n.attrs['data-role']==='vertical-station-code');assert.equal(codes.length,2);assert(codes.every(n=>n.tag==='path'));
   vm.runInContext(readFileSync(new URL('../js/icons.js',import.meta.url),'utf8'),context);
-  const icon=context.SignIcons.ALL.china_railway;assert.equal(icon.name,'中国铁路');assert.match(icon.body,/stroke-width="1pt"/);assert(!icon.body.includes('<image'));
+  const icon=context.SignIcons.ALL.china_railway;assert.equal(icon.name,'中国铁路');assert.doesNotMatch(icon.body, /<image|href=|url\(/);
 });
 test('non-transfer current-stop color boundaries are direction-matched outer-circle tangents',()=>{
   for(const direction of [-1,1]) {

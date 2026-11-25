@@ -5,13 +5,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 导向标识</title>
-  <link rel="stylesheet" href="style.css?v=d3f54b5c058f">
-  <link rel="stylesheet" href="platform.css?v=e573d8b6d9e3">
+  <script src="js/editor-preferences.js?v=1"></script>
+  <link rel="stylesheet" href="style.css?v=restored-color-picker">
+  <link rel="stylesheet" href="platform.css?v=restored-editor">
   <link rel="stylesheet" href="transfer.css?v=94cae356a9f5">
-  <link rel="stylesheet" href="project-dialog.css?v=fe88f0e1e761">
+  <link rel="stylesheet" href="project-dialog.css?v=20261125">
   <link rel="stylesheet" href="image-upload.css?v=39bea1cc93e6">
+  <link rel="stylesheet" href="editor-interface.css?v=restored-editor">
 </head>
-<body class="editor-page">
+<body class="editor-page" data-editor="guidance">
 
   <!-- 字体加载指示 -->
   <div id="loading-overlay" hidden>
@@ -21,28 +23,38 @@
 
   <header class="editor-header">
     <div class="editor-header-content">
-      <nav class="editor-navigation" aria-label="切换编辑器">
-        <button type="button" class="editor-switch" aria-expanded="false" aria-controls="editor-choices">
-          <span>导向标识编辑器</span>
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="editor-choices" id="editor-choices" hidden>
-          <a href="index.html" aria-current="page">
-            <span>导向标识</span>
-            <img src="assets/editor-previews/guidance.png?v=5ad1811fd030" width="384" height="152" alt="">
-          </a>
-          <a href="index.html?editor=transfer">
-            <span>换乘标识</span>
-            <img src="assets/editor-previews/transfer.png?v=fb719a33cf0f" width="384" height="152" alt="">
-          </a>
-          <a href="platform.html">
-            <span>站台标识</span>
-            <img src="assets/editor-previews/platform.png" width="384" height="152" alt="">
-          </a>
-        </div>
-      </nav>
-      <div class="project-header-actions">
+      <div class="editor-heading-actions">
+        <nav class="editor-navigation" aria-label="切换编辑器">
+          <button type="button" class="editor-switch" aria-expanded="false" aria-controls="editor-choices">
+            <span>导向标识编辑器</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="editor-choices" id="editor-choices" hidden>
+            <a href="index.html" aria-current="page">
+              <span>导向标识</span>
+              <img src="assets/editor-previews/guidance.png?v=5ad1811fd030" width="384" height="152" alt="">
+            </a>
+            <a href="index.html?editor=transfer">
+              <span>换乘标识</span>
+              <img src="assets/editor-previews/transfer.png?v=fb719a33cf0f" width="384" height="152" alt="">
+            </a>
+            <a href="platform.html">
+              <span>站台标识</span>
+              <img src="assets/editor-previews/platform.png" width="384" height="152" alt="">
+            </a>
+          </div>
+        </nav>
         <button type="button" class="btn project-entry" id="guidance-project-open" data-control-icon="property-project" aria-haspopup="dialog" aria-controls="guidance-project-dialog">我的项目</button>
+      </div>
+      <div class="project-header-actions">
+        <div class="editor-help-actions">
+          <button type="button" class="editor-header-action" data-open-tutorial aria-haspopup="dialog" aria-label="使用教程" title="使用教程">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.3a2.7 2.7 0 0 1 5.3.6c0 1.9-2.7 2-2.7 3.8m0 2.7h.01"/></svg><span>教程</span>
+          </button>
+          <button type="button" class="editor-header-action" data-editor-settings aria-label="设置" aria-haspopup="dialog" aria-controls="editor-settings" title="设置">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.5"/><circle cx="15" cy="17" r="2.5"/></svg><span>设置</span>
+          </button>
+        </div>
         <a class="editor-repository" href="https://github.com/PrisamaX0124/CRT-Sign-Web-Editor" target="_blank" rel="noopener" aria-label="在新标签页打开 GitHub 仓库" title="GitHub 仓库">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>
           <span class="repository-arrow" aria-hidden="true">&gt;</span>
@@ -101,7 +113,6 @@
               吸附对齐
             </button>
           </div>
-          <div class="preview-zoom" id="guidance-zoom" role="group" aria-label="画布位置和缩放"></div>
           <div class="history-actions" role="group" aria-label="撤销与重做">
             <button type="button" id="guidance-undo" class="icon-btn" data-control-icon="undo" title="撤销" aria-label="撤销" aria-keyshortcuts="Control+Z Meta+Z" disabled></button>
             <button type="button" id="guidance-redo" class="icon-btn" data-control-icon="redo" title="重做" aria-label="重做" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" disabled></button>
@@ -137,9 +148,12 @@
               <span class="shortcut-hint"><kbd>Ctrl / ⌘</kbd><span class="shortcut-description">单击加选</span></span>
               <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">单击范围选择</span></span>
               <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
-              <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">滚轮缩放</span></span>
+              <span class="shortcut-hint"><kbd>滚轮</kbd><span class="shortcut-description">放大或缩小</span></span>
+              <span class="shortcut-hint"><kbd>Shift + 滚轮</kbd><span class="shortcut-description">横向移动</span></span>
+              <span class="shortcut-hint"><kbd>双击空白处</kbd><span class="shortcut-description">适应画布</span></span>
             </div>
           </details>
+          <div class="preview-zoom" id="guidance-zoom" role="group" aria-label="画布位置和缩放"></div>
         </div>
       </footer>
     </main>
@@ -202,7 +216,6 @@
           <span id="transfer-dimensions" class="preview-dimensions"></span>
         </div>
         <div class="preview-toolbar-actions">
-          <div class="preview-zoom" id="transfer-zoom" role="group" aria-label="画布位置和缩放"></div>
           <div class="history-actions" role="group" aria-label="撤销与重做">
             <button type="button" id="transfer-undo" class="icon-btn" data-control-icon="undo" title="撤销" aria-label="撤销" disabled></button>
             <button type="button" id="transfer-redo" class="icon-btn" data-control-icon="redo" title="重做" aria-label="重做" disabled></button>
@@ -237,9 +250,12 @@
             <summary>快捷键</summary>
             <div class="shortcut-hints" aria-label="选择快捷键">
               <span class="shortcut-hint"><kbd>Esc</kbd><span class="shortcut-description">取消选择</span></span>
-              <span class="shortcut-hint"><kbd>Shift</kbd><span class="shortcut-description">滚轮缩放</span></span>
+              <span class="shortcut-hint"><kbd>滚轮</kbd><span class="shortcut-description">放大或缩小</span></span>
+              <span class="shortcut-hint"><kbd>Shift + 滚轮</kbd><span class="shortcut-description">横向移动</span></span>
+              <span class="shortcut-hint"><kbd>双击空白处</kbd><span class="shortcut-description">适应画布</span></span>
             </div>
           </details>
+          <div class="preview-zoom" id="transfer-zoom" role="group" aria-label="画布位置和缩放"></div>
         </div>
       </footer>
     </main>
@@ -348,7 +364,7 @@
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
   <script src="js/palettes.js?v=public-617b4fb22e1e"></script>
   <script src="js/palette-manager.js?v=800486182d2f"></script>
-  <script src="js/icons.js?v=0c0f6c71e993"></script>
+  <script src="js/icons.js?v=96331fe9cb65"></script>
   <script src="js/directions.js?v=ef2c097f48e6"></script>
   <script src="js/state.js?v=ee19120432ee"></script>
   <script src="js/render.js?v=016de8532237"></script>
@@ -356,10 +372,10 @@
   <script src="js/notifications.js?v=dcfdadac9cd7"></script>
   <script src="js/editor-panels.js?v=514d00f899e7"></script>
   <script src="js/property-tabs.js?v=558ddbc0ccc4"></script>
-  <script src="js/preview-zoom.js?v=c102513c96dc"></script>
+  <script src="js/preview-zoom.js?v=double-click-fit"></script>
   <script src="js/element-alignment.js?v=fb06e19d0663"></script>
   <script src="js/ui.js?v=d9e35f4bb675"></script>
-  <script src="js/clipboard.js?v=95288cb30cbd"></script>
+  <script src="js/clipboard.js?v=editor-refresh"></script>
   <script src="js/presets.js?v=ec5e4cb55f16"></script>
   <script src="js/storage.js?v=a49e4195dcc9"></script>
   <script src="js/exporters.js?v=f439220b937f"></script>
@@ -367,11 +383,12 @@
   <script src="js/image-upload-dialog.js?v=259f5ac8c61a"></script>
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
   <script src="js/panel.js?v=89c1f73ce0f7"></script>
-  <script src="js/interact.js?v=1f4513fd7bdd"></script>
+  <script src="js/interact.js?v=20261125"></script>
   <script>
     if (new URLSearchParams(location.search).get('editor') === 'transfer') {
       document.title = 'CRT标识编辑器 - 换乘标识';
       document.body.classList.add('platform-page');
+      document.body.dataset.editor = 'transfer';
       document.getElementById('app').hidden = true;
       document.getElementById('guidance-project-open').hidden = true;
       document.getElementById('transfer-editor').hidden = false;
@@ -391,5 +408,7 @@
   <script src="js/transfer/state.js?v=f008ffd0d04d"></script>
   <script src="js/transfer/render.js?v=a19331062c53"></script>
   <script src="js/transfer/main.js?v=776d47db6d46"></script>
+  <script src="js/editor-settings.js?v=3"></script>
+  <script src="js/editor-tutorial.js?v=2"></script>
 </body>
 </html>

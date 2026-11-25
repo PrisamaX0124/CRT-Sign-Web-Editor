@@ -604,7 +604,7 @@
     if (suppressClick) { suppressClick = false; return; }
     var target = ev.target;
     if (!target || !target.closest || ev.defaultPrevented) return;
-    if (document.querySelector('.modal-mask, dialog.project-dialog[open]')) return;
+    if (document.querySelector('.modal-mask, dialog:modal')) return;
     var g = target.closest('g.element');
     if (g && svg.contains(g)) {
       App.select(g.getAttribute('data-element-id'), { toggle: ev.ctrlKey || ev.metaKey, range: ev.shiftKey });
@@ -626,7 +626,7 @@
 
   function onKeyDown(ev) {
     if (ev.defaultPrevented || ev.isComposing) return;
-    if (App.projects?.busy || document.querySelector('dialog.project-dialog[open]')) return;
+    if (App.projects?.busy || document.querySelector('dialog:modal')) return;
     if (ev.key === 'Escape' && rowDrag) { ev.preventDefault(); finishRowDrag(false); return; }
     // 焦点在输入控件内时不拦截（文本编辑优先）
     var t = ev.target;

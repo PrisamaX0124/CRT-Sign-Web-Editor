@@ -95,6 +95,7 @@
             header.bottom === middle.top && header.left === middle.left && header.right === middle.right,
             width + ' 像素宽时，页眉应与预览左右齐平并紧贴上方');
           const navigation = bounds('.editor-navigation');
+          const heading = bounds('.editor-heading-actions');
           const repository = bounds('.editor-repository');
           assert(navigation.left >= header.left && navigation.right <= repository.left && repository.right <= header.right,
             width + ' 像素宽时，编辑器入口和仓库链接应完整放在中间一栏');
@@ -102,9 +103,18 @@
           if (modes) {
             const choices = modes.getBoundingClientRect();
             assert(Math.abs(choices.left + choices.right - header.left - header.right) <= 1, '版式选择应在页眉居中');
-            assert(choices.top >= navigation.bottom || (choices.left >= navigation.right && choices.right <= repository.left),
+            assert(choices.top >= heading.bottom || (choices.left >= heading.right && choices.right <= repository.left),
               '版式选择不应遮住其他入口');
+            assert(window.getComputedStyle(modes).borderTopWidth === '1px', '版式选择应放在同一组有边线的控件中');
           }
+          const project = document.querySelector('.project-entry');
+          if (!project.hidden) {
+            const button = project.getBoundingClientRect();
+            assert(project.previousElementSibling.matches('.editor-navigation') && button.left >= navigation.right &&
+              button.left - navigation.right <= 12 && button.bottom <= heading.bottom, '我的项目应紧接在标题右侧');
+          }
+          const panelHeader = document.querySelector(layout.left + ' .panel-header');
+          assert(window.getComputedStyle(panelHeader).backgroundColor === 'rgba(0, 0, 0, 0)', '左栏标题应沿用栏内底色');
         }
       });
 
@@ -141,6 +151,19 @@
             assert(!properties.inert && document.activeElement === document.getElementById('station-zh'),
               '添加站点后应打开属性面板并聚焦站名');
           }
+        });
+      }
+
+      if (layout.path === 'platform.html') {
+        await test('站台左栏普通站点用透明边线，本站保留定位标记', async function () {
+          await window.App.ready;
+          if (document.querySelectorAll('.station-item').length < 2) document.getElementById('add-station').click();
+          const current = document.querySelector('.station-current:disabled')?.closest('.station-item');
+          const other = [...document.querySelectorAll('.station-item')].find(item => item !== current && !item.querySelector('[aria-pressed="true"]'));
+          if (!other) window.App.deselect();
+          const row = other || [...document.querySelectorAll('.station-item')].find(item => item !== current);
+          assert(current && row && window.getComputedStyle(row).borderTopColor === 'rgba(0, 0, 0, 0)', '普通站点的边框不应切碎列表');
+          assert(window.getComputedStyle(current).backgroundColor !== window.getComputedStyle(row).backgroundColor, '本站应保留底色和定位按钮');
         });
       }
 
@@ -418,15 +441,15 @@
         }
       });
 
-      await test(editor.name + '：缩放和拖动锁定放在预览标题栏，底部只显示状态和快捷键入口', async function () {
+      await test(editor.name + '：状态和快捷键放在底栏，缩放和锁定位于右下角', async function () {
         const visibleCenter = Array.from(document.querySelectorAll('.editor-center')).find(center => center.getClientRects().length);
         const footer = visibleCenter.querySelector('.editor-footer');
         const heading = visibleCenter.querySelector('.preview-toolbar');
-        const controls = heading?.querySelector('.preview-zoom');
+        const controls = footer.querySelector('.preview-zoom');
         const saveStatus = footer.querySelector('.project-save');
-        assert(controls?.querySelector('select') && !controls.querySelector('input[type="range"]'), '标题栏应使用缩放下拉菜单');
-        const position = controls.querySelector('button');
-        assert(controls.querySelectorAll('button').length === 1 && !position.textContent.trim() &&
+        assert(controls?.querySelector('select') && controls.querySelectorAll('[data-zoom-step]').length === 2, '底栏应有缩放菜单和两个调节按钮');
+        const position = controls.querySelector('.preview-position-lock');
+        assert(!position.textContent.trim() &&
           position.querySelector('svg[aria-hidden="true"]')?.getBoundingClientRect().width > 0 && position.getAttribute('aria-label'),
           '拖动和锁定应由一个带可读名称的图标按钮切换');
         try {
@@ -437,9 +460,8 @@
             const zoom = controls.getBoundingClientRect();
             const status = saveStatus.getBoundingClientRect();
             assert(bounds.height <= 42 && footer.scrollWidth <= footer.clientWidth + 1, '底部栏应保持一行高度并且没有横向溢出');
-            const titleBounds = heading.getBoundingClientRect();
-            assert(zoom.top >= titleBounds.top && zoom.bottom <= titleBounds.bottom && zoom.right <= titleBounds.right &&
-              heading.scrollWidth <= heading.clientWidth + 1, '画布控件应完整放在标题栏');
+            assert(zoom.top >= bounds.top && zoom.bottom <= bounds.bottom && zoom.right <= bounds.right && bounds.right - zoom.right < 20 &&
+              !heading.querySelector('.preview-zoom') && heading.scrollWidth <= heading.clientWidth + 1, '画布控件应完整放在右下角');
             const dimensions = heading.querySelector('.preview-dimensions');
             assert(/^\d+ × \d+ 像素$/.test(dimensions.textContent), '三个编辑器的牌面尺寸应使用相同的单位');
             const canvas = visibleCenter.querySelector('.preview-zoom-viewport');
@@ -505,7 +527,7 @@
       }
 
       if (editor.path === 'index.html' || editor.path === 'platform.html') {
-        await test(editor.name + '：剪贴板与缩放同在标题栏，以图标显示并保留可读名称', async function () {
+        await test(editor.name + '：剪贴板留在标题栏，以图标显示并保留可读名称', async function () {
           const dock = document.querySelector('#edit-actions, #platform-edit-actions');
           const copy = dock.querySelector('[data-edit-action="copy"]');
           const cut = dock.querySelector('[data-edit-action="cut"]');
@@ -518,8 +540,8 @@
             const bounds = dock.getBoundingClientRect();
             const heading = dock.closest('.preview-toolbar');
             assert(heading && !dock.closest('.editor-footer'), '剪贴板应移到标题栏');
-            const zoom = heading.querySelector('.preview-zoom').getBoundingClientRect();
-            assert(bounds.right <= zoom.left && bounds.top < zoom.bottom && bounds.bottom > zoom.top, '剪贴板与缩放应同排');
+            const history = heading.querySelector('.history-actions').getBoundingClientRect();
+            assert(bounds.right <= history.left && bounds.top < history.bottom && bounds.bottom > history.top, '剪贴板与撤销应同排');
             assert(dock.scrollWidth <= dock.clientWidth, '未打开提示时，工具栏宽度应只包括操作按钮');
             for (const button of dock.querySelectorAll('button[data-edit-action]')) {
               assert(button.getAttribute('aria-label') && window.getComputedStyle(button, '::before').maskImage !== 'none' && !button.querySelector('svg'),
@@ -659,7 +681,7 @@
         deselect();
       });
 
-      await test(editor.name + '的右栏色板每行八个色块，快速开合后保持可用', async function () {
+      await test(editor.name + '的右栏色板每行八个圆形色块，快速开合后保持可用', async function () {
         deselect();
         if (editor.path.includes('transfer')) select();
         const button = document.querySelector(editor.palette);
@@ -674,6 +696,17 @@
         button.click();
         await finishAnimations(animations(options));
         assert(!options.hidden && options.getBoundingClientRect().height > 30 && options.querySelector('.cp-swatch'), '再次展开后应完整显示色块');
+        const color = options.querySelector('.cp-swatch');
+        const colorStyle = window.getComputedStyle(color);
+        const colorBounds = color.getBoundingClientRect();
+        assert(Math.abs(colorBounds.width - colorBounds.height) < 1 && colorStyle.borderRadius === '50%' &&
+          (!colorStyle.cornerShape || ['round', 'superellipse(1)'].includes(colorStyle.cornerShape)),
+          '城市色板应使用正圆色块');
+        const picker = button.closest('.color-picker');
+        assert(window.getComputedStyle(button).borderRadius === '7px' &&
+          window.getComputedStyle(picker.querySelector('.current-color')).borderRadius === '4px' &&
+          window.getComputedStyle(options.querySelector('.custom-color')).borderRadius === '6px' &&
+          window.getComputedStyle(picker.querySelector('.hex-input')).borderRadius === '6px', '颜色按钮、色样、自选颜色和输入框应使用原有圆角');
         const swatches = Array.from(options.querySelectorAll('.cp-swatch'), swatch => swatch.getBoundingClientRect());
         assert(swatches.length > 8 && swatches.slice(0, 8).every(swatch => swatch.top === swatches[0].top) &&
           swatches[8].top > swatches[0].top, '右侧栏每排应有八个色块');

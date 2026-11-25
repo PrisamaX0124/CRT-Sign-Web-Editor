@@ -11,15 +11,21 @@
   }
 
   function fitScale(width, height, availableWidth, availableHeight) {
-    return Math.min(Math.max(availableWidth, 1) / width, Math.max(availableHeight, 1) / height, 1);
+    return Math.min(Math.max(availableWidth, 1) / width, Math.max(availableHeight, 1) / height);
+  }
+
+  function wheelDistance(distance, mode, pageSize) {
+    return distance * (mode === 1 ? 32 : mode === 2 ? pageSize : 1);
   }
 
   function scaleFromWheel(scale, event, pageHeight) {
-    // 同一个滚轮动作可能以像素、行或页报告，按住 Shift 时也可能转成横向滚动量。
-    const mode = event.deltaMode;
-    const distance = (event.deltaY || event.deltaX) * (mode === 1 ? 32 : mode === 2 ? pageHeight : 1);
-    return clamp(scale * wheelStep ** (-clamp(distance, -200, 200) / 100), minimumScale, maximumScale);
+    const distance = wheelDistance(event.deltaY || event.deltaX, event.deltaMode, pageHeight);
+    // 适应比例可能超出手动档位。第一次滚动也应从眼前的比例开始。
+    return clamp(scale * wheelStep ** (-clamp(distance, -200, 200) / 100),
+      Math.min(minimumScale, scale), Math.max(maximumScale, scale));
   }
+
+  function interpolate(from, to, progress) { return from + (to - from) * progress; }
 
   function positionForAnchor(pointer, fraction, displaySize, availableSize) {
     const offset = pointer - fraction * displaySize;
@@ -52,20 +58,24 @@
     const shackleOutline = 'M8 12V7a4 4 0 0 1 8 0v';
 
     controls.innerHTML = `
-      <button type="button" aria-label="锁定画布位置" aria-pressed="false">
+      <button type="button" class="preview-position-lock" aria-label="锁定画布位置" aria-pressed="false">
         <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <rect x="5" y="12" width="14" height="9" rx="2"/>
           <path d="${shackleOutline}1"/>
           <line x1="12" y1="16" x2="12" y2="17"/>
         </svg>
       </button>
-      <select aria-label="画布缩放比例">
+      <button type="button" data-zoom-step="smaller" aria-label="缩小画布" title="缩小画布">−</button>
+      <select aria-label="画布缩放比例" title="选择缩放比例。双击牌面外的空白处可重新适应画布">
         <option value="fit">适应画布</option>
         <option value="current" disabled hidden></option>
         ${zoomStops.map(percent => '<option value="' + percent + '">' + percent + '%</option>').join('')}
       </select>
+      <button type="button" data-zoom-step="larger" aria-label="放大画布" title="放大画布">+</button>
     `;
-    const lock = controls.querySelector('button');
+    const lock = controls.querySelector('.preview-position-lock');
+    const smaller = controls.querySelector('[data-zoom-step="smaller"]');
+    const larger = controls.querySelector('[data-zoom-step="larger"]');
     const shackle = lock.querySelector('path');
     const zoomMenu = controls.querySelector('select');
     const fittingOption = zoomMenu.querySelector('[value="fit"]');
@@ -77,11 +87,15 @@
 
     function updateControls() {
       const percent = scale < minimumScale ? Number((scale * 100).toPrecision(3)) : Math.round(scale * 100);
-      fittingOption.textContent = fitting ? '适应画布（' + percent + '%）' : '适应画布';
+      const showingFit = fitting || zoom?.value === 'fit';
+      fittingOption.textContent = showingFit ? '适应画布（' + percent + '%）' : '适应画布';
       currentOption.textContent = percent + '%';
       const exactStop = zoomStops.includes(percent) && Math.abs(scale - percent / 100) < 1e-8;
-      zoomMenu.value = zoom?.value ?? (fitting ? 'fit' : exactStop ? String(percent) : 'current');
+      zoomMenu.value = showingFit ? 'fit' : exactStop ? String(percent) : 'current';
       zoomMenu.disabled = locked;
+      const chosenScale = zoom?.targetScale ?? scale;
+      smaller.disabled = locked || chosenScale <= minimumScale;
+      larger.disabled = locked || chosenScale >= maximumScale;
       lock.setAttribute('aria-pressed', String(locked));
       shackle.setAttribute('d', shackleOutline + (locked ? '5' : '1'));
       lock.title = locked ? '已锁定位置和比例。点击解锁' : '已解锁。拖动画布空白处，或按住滚轮拖动。点击锁定';
@@ -156,6 +170,7 @@
       if (!(nextWidth > 0 && nextHeight > 0)) return;
       if (zoom) {
         if (nextWidth === width && nextHeight === height) return;
+        fitting = zoom.value === 'fit';
         stopZoom();
       }
       if (locked && nextWidth === width && nextHeight === height) {
@@ -184,20 +199,30 @@
       updateControls();
     }
 
-    function chooseZoom(value) {
-      stopDrag();
+    function animateView(update, destination) {
       stopZoom();
+      const timing = global.EditorMotion.timing(controls);
+      if (!timing.duration || !global.KeyframeEffect || !global.Animation) { update(1); return; }
+      const clock = new global.Animation(new global.KeyframeEffect(null, [], { ...timing, fill: 'both' }), document.timeline);
+      zoom = { ...destination, clock };
+      viewport.dataset.zoomTransition = 'true';
+      clock.play();
+      updateControls();
+      function move() {
+        const progress = clock.effect.getComputedTiming().progress ?? 0;
+        if (progress >= 1) stopZoom();
+        update(progress);
+        if (zoom?.clock === clock) zoom.frame = global.requestAnimationFrame(move);
+      }
+      zoom.frame = global.requestAnimationFrame(move);
+    }
+
+    function chooseZoom(value, pointer) {
+      stopDrag();
       const fit = value === 'fit';
       const nextScale = fit ? fittedScale(viewportSpacing()) : Number(value) / 100;
-      const anchor = anchorAt();
-      const timing = global.EditorMotion.timing(controls);
-      const finish = () => {
-        stopZoom();
-        fitting = fit;
-        apply(nextScale, fit ? null : anchor, fit);
-      };
-      if (!timing.duration || !global.KeyframeEffect || !global.Animation || (!fit && nextScale === scale)) { finish(); return; }
-
+      if (!fit && !fitting && nextScale === scale && !zoom) return;
+      const anchor = anchorAt(pointer);
       const spacing = viewportSpacing();
       const bounds = viewport.getBoundingClientRect();
       const originX = bounds.left + viewport.clientLeft + spacing.paddingLeft;
@@ -208,32 +233,53 @@
       const toY = centeredTop(viewport.offsetHeight - spacing.verticalSpace - spacing.borderHeight,
         height * nextScale, spacing.rowButtonHeight);
       const start = scale;
-      const interpolate = (from, to, progress) => from + (to - from) * progress;
-      const clock = new global.Animation(new global.KeyframeEffect(null, [], { ...timing, fill: 'both' }), document.timeline);
-      zoom = { clock, value };
-      viewport.dataset.zoomTransition = 'true';
       fitting = false;
-      clock.play();
-      updateControls();
-      function move() {
-        const progress = clock.effect.getComputedTiming().progress ?? 0;
-        if (progress >= 1) { finish(); return; }
+      animateView(progress => {
+        if (progress >= 1 && fit) {
+          fitting = true;
+          apply(nextScale, null, true);
+          return;
+        }
         const position = fit ? {
           x: originX + interpolate(fromX, toX, progress), y: originY + interpolate(fromY, toY, progress),
           horizontalFraction: 0, verticalFraction: 0,
         } : anchor;
         apply(interpolate(start, nextScale, progress), position);
-        zoom.frame = global.requestAnimationFrame(move);
-      }
-      zoom.frame = global.requestAnimationFrame(move);
+      }, { value, targetScale: nextScale });
+    }
+
+    function scrollHorizontally(distance) {
+      const availableWidth = viewport.clientWidth - viewportSpacing().horizontalSpace;
+      const displayWidth = width * scale;
+      const start = left - viewport.scrollLeft;
+      const destination = positionForAnchor((zoom?.horizontalTarget ?? start) - distance, 0, displayWidth, availableWidth);
+      const finish = destination.margin - destination.scroll;
+      if (finish === (zoom?.horizontalTarget ?? start)) return;
+      stopDrag();
+      fitting = false;
+      updateControls();
+      animateView(progress => {
+        const position = positionForAnchor(interpolate(start, finish, progress), 0, displayWidth, availableWidth);
+        left = position.margin;
+        placePaper();
+        viewport.scrollLeft = position.scroll;
+        onChange();
+      }, { horizontalTarget: finish });
+    }
+
+    function chooseAdjacent(direction) {
+      const percent = (zoom?.targetScale ?? scale) * 100;
+      const next = direction > 0 ? zoomStops.find(stop => stop > percent + 1e-8)
+        : zoomStops.findLast(stop => stop < percent - 1e-8);
+      if (next && width && !locked) chooseZoom(next);
     }
 
     function startDrag(event) {
-      stopZoom();
       if (locked || drag || !width || event.isPrimary === false || event.pointerType === 'touch' || (event.button !== 0 && event.button !== 1)) return;
       // 左键仍优先用于编辑元素和操作按钮，按住滚轮可以在元素上平移。
       if (event.button === 0 && (event.shiftKey || event.ctrlKey || event.metaKey ||
           event.target.closest?.('button, input, select, textarea, .row-handle, .element, [data-element-key], [data-station-id], [data-transfer-element]'))) return;
+      stopZoom();
       event.preventDefault();
       event.stopPropagation();
       viewport.setPointerCapture(event.pointerId);
@@ -302,6 +348,8 @@
     }
 
     lock.addEventListener('click', toggleLock);
+    smaller.addEventListener('click', () => chooseAdjacent(-1));
+    larger.addEventListener('click', () => chooseAdjacent(1));
     zoomMenu.addEventListener('change', () => {
       if (locked || !width || !height) return;
       if (zoomMenu.value === 'fit' || zoomStops.includes(Number(zoomMenu.value))) chooseZoom(zoomMenu.value);
@@ -321,20 +369,31 @@
       event.preventDefault();
       event.stopPropagation();
     }, true);
+    viewport.addEventListener('dblclick', event => {
+      if (locked || !width || !height || suppressClick || event.defaultPrevented || event.button !== 0 ||
+          event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target !== viewport && event.target !== stage) return;
+      // 指针捕获会把牌面内的单击也交给预览区，因此仍需按点击位置判断。
+      const bounds = paper.getBoundingClientRect();
+      if (event.clientX >= bounds.left && event.clientX < bounds.right && event.clientY >= bounds.top && event.clientY < bounds.bottom) return;
+      event.preventDefault();
+      chooseZoom('fit');
+    });
     viewport.addEventListener('auxclick', event => {
       if (event.button === 1) event.preventDefault();
     });
     viewport.addEventListener('wheel', event => {
-      if (!event.shiftKey || event.ctrlKey || event.metaKey || event.defaultPrevented || !event.cancelable || !width) return;
+      if (event.ctrlKey || event.metaKey || event.defaultPrevented || !event.cancelable || !width || !height) return;
       if (!event.deltaY && !event.deltaX) return;
       event.preventDefault();
-      if (locked || !height) return;
-      stopZoom();
-      const nextScale = scaleFromWheel(scale, event, viewport.clientHeight);
-      if (!fitting && nextScale === scale) return;
-      stopDrag();
-      fitting = false;
-      apply(nextScale, anchorAt(event));
+      if (locked) return;
+      if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+        scrollHorizontally(wheelDistance(event.deltaX || event.deltaY, event.deltaMode, viewport.clientWidth));
+        return;
+      }
+      const pendingScale = zoom?.targetScale ?? scale;
+      const nextScale = scaleFromWheel(pendingScale, event, viewport.clientHeight);
+      if (nextScale !== pendingScale) chooseZoom(nextScale * 100, event);
     }, { passive: false });
     if (global.ResizeObserver) new global.ResizeObserver(() => refresh()).observe(viewport);
     else global.addEventListener('resize', () => refresh());

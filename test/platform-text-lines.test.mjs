@@ -41,9 +41,10 @@ test('文字换乘与数字换乘同高，MiSans Regular，三种纵向版式和
     assert.ok(Math.abs(badge.attrs.height-2*circle.attrs.r)<1e-7);
   }
 });
-test('中国铁路图标在服务设施库中，边框无填充黑色1磅、圆角比例与其他图标一致',()=>{
+test('中国铁路图标在服务设施库中，圆角边框和图案采用独立路径',()=>{
   const ic=SignIcons.ALL.china_railway;assert.ok(ic);assert.equal(ic.name,'中国铁路');assert.equal(ic.cat,'service');assert.equal(ic.vb,'0 0 400 400');
-  assert.match(ic.body,/<rect[^>]*rx="40"/);assert.match(ic.body,/fill="none"/);assert.match(ic.body,/stroke="#000000"/);assert.match(ic.body,/stroke-width="1pt"/);assert.match(ic.body,/<path/);
+  assert.equal([...ic.body.matchAll(/<path fill="black"/g)].length, 2);
+  assert.doesNotMatch(ic.body, /vector-effect=/);
 });
 test('主线路名称使用MiSans Regular，文字换乘预设往返保留全部字段',()=>{
   let state=S.settings(createStationProject(S),{line:'机场线',lineName:'机场线'});
