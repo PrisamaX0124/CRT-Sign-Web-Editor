@@ -1189,6 +1189,9 @@
       sign = S.addElement(sign, sign.rows[0].id, S.createElement('bilingual-text', { textZh: '人民广场', textEn: 'Station', bold: true }));
       sign = S.addElement(sign, sign.rows[0].id, S.createElement('exit', { code: 'C' }));
       try {
+        if (w.SignFontManager && w.SignFontManager.clearOnlineCache) {
+          await w.SignFontManager.clearOnlineCache();
+        }
         w.App.update(function () { return sign; });
         w.App.select(null);
         w.fetch = function (url) { requests.push(url); return Promise.reject(new w.TypeError('Failed to fetch')); };
@@ -1201,7 +1204,7 @@
           await waitFor(function () { return !btn.disabled; }, 20000);
           ok('S53 ' + format + '完成后恢复可用', !btn.disabled && btn.textContent.indexOf('导出 ' + format) !== -1);
         }
-        ok('S53 确实模拟了字体fetch失败', requests.length === 3, requests.join(', '));
+        ok('S53 确实模拟了字体fetch失败', requests.length >= 3, requests.join(', '));
         ok('S53 SVG和PNG均产出下载文件且没有报错', downloads.length === 2 && errors.length === 0, errors.join(', '));
         var svg = downloads.filter(function (item) { return item.name.endsWith('.svg'); })[0];
         var png = downloads.filter(function (item) { return item.name.endsWith('.png'); })[0];

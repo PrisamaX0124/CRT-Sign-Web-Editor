@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>字体分片、持久缓存与本机导入测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1320px; height: 860px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>字体分片、持久缓存与本机导入测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  function load(path) {
+    return new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = path;
+    });
+  }
+  async function waitFor(check, message) {
+    const deadline = Date.now() + 15000;
+    while (!check()) {
+      assert(Date.now() < deadline, message);
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+  }
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try {
+      await run();
+      item.className = 'pass';
+      item.textContent = name;
+    } catch (error) {
+      item.className = 'fail';
+      item.textContent = name + '。' + error.message;
+    }
+    results.append(item);
+  }
+
+  try {
+    await load('../index.html');
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    await win.App.ready;
+
+    await test('导向编辑器首屏按需只加载核心 WOFF2 分片与 Frutiger，不拉取整包 MiSans TTF', () => {
+      const resources = win.performance.getEntriesByType('resource').map(entry => entry.name);
+      assert(resources.some(url => url.includes('fonts-subsets/MiSans-Regular/00.woff2')), '首屏应加载 MiSans-Regular 核心分片');
+      assert(!resources.some(url => /fonts\/MiSans-.*\.ttf/.test(url)), '首屏不应下载 7.5MB 完整 MiSans TTF');
+      assert(doc.fonts.check('400 32px "MiSans"', '人民广场 Station'), 'MiSans 常规分片应已载入');
+      assert(doc.fonts.check('400 32px Frutiger', '0123456789'), 'Frutiger 编号应已载入');
+    });
+
+    await test('WOFF2 分片字形墨区度量与原始 TTF 完全一致', async () => {
+      const rawBuffer = await fetch('../fonts/MiSans-Regular.ttf').then(r => r.arrayBuffer());
+      const refFace = new win.FontFace('MiSansRefTTF', rawBuffer, { weight: '400', style: 'normal' });
+      await refFace.load();
+      doc.fonts.add(refFace);
+      try {
+        const measure = win.SignCore.createCanvasMeasurer();
+        for (const text of ['人民广场', '虹桥火车站', 'Station 12', '出口']) {
+          const w1 = measure(text, "'MiSans'", 400, 64);
+          const w2 = measure(text, "'MiSansRefTTF'", 400, 64);
+          const a1 = measure.ascent(text, "'MiSans'", 400, 64);
+          const a2 = measure.ascent(text, "'MiSansRefTTF'", 400, 64);
+          const d1 = measure.descent(text, "'MiSans'", 400, 64);
+          const d2 = measure.descent(text, "'MiSansRefTTF'", 400, 64);
+          assert(Math.abs(w1 - w2) <= 0.5 && Math.abs(a1 - a2) <= 0.5 && Math.abs(d1 - d2) <= 0.5,
+            `${text} 墨区偏差过大：width=${w1}/${w2}, ascent=${a1}/${a2}, descent=${d1}/${d2}`);
+        }
+      } finally {
+        doc.fonts.delete(refFace);
+      }
+    });
+
+    await test('导向导出仅内嵌命中的 WOFF2 分片，写入持久缓存且 PNG 可清晰光栅化', async () => {
+      const S = win.SignState;
+      let sign = S.createSign();
+      sign = S.setSignWidthUnits(sign, 3);
+      sign = S.addElement(sign, sign.rows[0].id, S.createElement('bilingual-text', { textZh: '人民广场', textEn: 'Peoples Sq', bold: true }));
+      sign = S.addElement(sign, sign.rows[0].id, S.createElement('exit', { code: 'A' }));
+
+      const embed = await win.SignExporters.ensureFontData(sign);
+      assert(Array.isArray(embed['MiSans-Bold.ttf']) && embed['MiSans-Bold.ttf'].length === 1, '常见中文粗体应只内嵌 1 个核心分片');
+      const svg = win.SignExporters.buildExportSVGString(sign, win.App.measure, embed);
+      assert(svg.includes('data:font/woff2;base64,') && svg.includes('unicode-range:'), '导出 SVG 应内嵌 WOFF2 分片');
+      assert(svg.length < 512 * 1024, '导出 SVG 体积应远小于整包 TTF，实际：' + svg.length);
+
+      const png = await win.SignExporters.rasterizePNG(svg, win.SignRender.layoutSign(sign, win.App.measure), 1);
+      assert(png && png.size > 1000, '分片 SVG 应能正常光栅化为 PNG');
+
+      const stats = await win.SignFontManager.getCacheStats();
+      assert(stats.chunkCount >= 2, '导出后的分片应写入持久缓存，当前缓存数：' + stats.chunkCount);
+    });
+
+    await test('设置弹窗可导入和移除本机离线字体，导入后导出零网络请求', async () => {
+      const rawBuffer = await fetch('../fonts/MiSans-Regular.ttf').then(r => r.arrayBuffer());
+      const file = new win.File([rawBuffer], 'MiSans-Regular.ttf', { type: 'font/ttf' });
+
+      doc.querySelector('[data-editor-settings]').click();
+      const dialog = doc.getElementById('editor-settings');
+      assert(dialog.open, '设置弹窗应打开');
+      await waitFor(() => doc.querySelectorAll('#settings-font-list .settings-font-item').length === 4, '应渲染 4 个字体槽位');
+
+      await win.SignFontManager.importLocalFont('zh400', file, rawBuffer);
+      await waitFor(() => doc.querySelector('[data-font-slot="zh400"]').textContent.includes('MiSans-Regular.ttf'), '设置列表应显示已导入的本机字体');
+
+      const originalFetch = win.fetch;
+      const netCalls = [];
+      win.fetch = (...args) => { netCalls.push(args[0]); return originalFetch(...args); };
+      try {
+        let sign = win.SignState.createSign();
+        sign = win.SignState.addElement(sign, sign.rows[0].id, win.SignState.createElement('bilingual-text', { textZh: '人民广场', textEn: 'Square', bold: false }));
+        const embed = await win.SignExporters.ensureFontData(sign);
+        assert(netCalls.length === 0, '已导入本机常规字体时，导出不应发起网络请求：' + netCalls.join(', '));
+        assert(typeof embed['MiSans-Regular.ttf'] === 'string' && embed['MiSans-Regular.ttf'].startsWith('data:font/ttf;base64,'), '应直接使用本机导入字体数据');
+      } finally {
+        win.fetch = originalFetch;
+      }
+
+      doc.querySelector('[data-remove-font-slot="zh400"]').click();
+      await waitFor(() => doc.querySelector('[data-font-slot="zh400"]').textContent.includes('在线 WOFF2'), '点击移除后应恢复在线分片模式');
+      dialog.close();
+    });
+
+    await load('../platform.html');
+    const pWin = frame.contentWindow;
+    await pWin.App.ready;
+
+    await test('站台编辑器导出也按实际字符内嵌 WOFF2 分片并支持清晰光栅化', async () => {
+      const prepared = await pWin.PlatformExport.prepare(pWin.App.state);
+      const source = prepared.source;
+      assert(source.includes('data:font/woff2;base64,') && source.includes('unicode-range:'), '站台导出应内嵌 MiSans WOFF2 分片');
+      assert(source.length < 512 * 1024, '站台导出 SVG 体积应远小于整包 TTF，实际：' + source.length);
+      const blob = await pWin.PlatformExport.pngBlob(prepared.drawing, prepared.size, 1);
+      assert(blob && blob.size > 1000, '站台分片 SVG 应能正常光栅化为 PNG');
+    });
+  } finally {
+    const passed = results.querySelectorAll('.pass').length;
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = passed + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = summary;
+    document.title = (failed ? '✖ ' : '✔ ') + summary + ' 字体分片与缓存测试';
+  }
+})();
+</script>
+</html>

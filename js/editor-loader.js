@@ -151,8 +151,9 @@
 
     async function loadFonts(specs, options = {}) {
       const sampleText = options.sampleText;
-      const timeoutMs = options.timeoutMs ?? 30000;
-      const slowHintMs = options.slowHintMs ?? 8000;
+      const timeoutMs = options.timeoutMs ?? 12000;
+      const slowHintMs = options.slowHintMs ?? 4500;
+      const retries = options.retries ?? 2;
       const stageId = options.stageId || 'fonts';
       const total = specs.length || 1;
       let settled = 0;
@@ -168,29 +169,48 @@
 
       setStage(stageId, 'active', 0, `0 / ${total}`, '正在加载标识牌字体…');
 
+      if (global.SignFontManager && typeof global.SignFontManager.restoreLocalFonts === 'function') {
+        await global.SignFontManager.restoreLocalFonts().catch(() => {});
+      }
+
       const slowHint = global.setTimeout(() => {
         if (!hidden && settled < total) {
-          setSummary('字体加载较慢，仍在等待…（可检查网络后刷新）');
+          setSummary('字体加载较慢，仍在重试…（也可在「设置」导入本机字体）');
         }
       }, slowHintMs);
 
+      function loadSpecWithRetry(spec, maxRetries) {
+        const text = spec.sampleText !== undefined ? spec.sampleText : sampleText;
+        let attempt = 0;
+        function run() {
+          attempt += 1;
+          const loader = text
+            ? document.fonts.load(spec.css, text)
+            : document.fonts.load(spec.css);
+          return loader.then(faces => {
+            if (Array.isArray(faces) && faces.length > 0) return true;
+            if (document.fonts.check(spec.css, text || ' ')) return true;
+            throw new Error('empty font load result');
+          }).catch(() => {
+            if (attempt > maxRetries) return false;
+            return new Promise(resolve => global.setTimeout(resolve, 600 * attempt)).then(run);
+          });
+        }
+        return run();
+      }
+
       const tasks = specs.map(spec => {
         const name = spec.label || labels[spec.key] || spec.css;
-        const promise = sampleText
-          ? document.fonts.load(spec.css, sampleText)
-          : document.fonts.load(spec.css);
-        return promise.then(
-          () => true,
-          () => { failed += 1; return false; }
-        ).then(ok => {
+        return loadSpecWithRetry(spec, retries).then(ok => {
           settled += 1;
+          if (!ok) failed += 1;
           if (!timedOut) {
             const state = settled === total ? (failed ? 'warning' : 'done') : 'active';
             const detail = settled === total
-              ? (failed ? `已加载 ${total - failed}/${total}（部分回退）` : `${total} / ${total} 已就绪`)
+              ? (failed ? `已加载 ${total - failed}/${total}（后台继续重试）` : `${total} / ${total} 已就绪`)
               : `${settled} / ${total} · ${name}`;
             const summary = settled === total
-              ? (failed ? '部分字体加载超时或失败，将使用回退字体' : '标识牌字体已全部就绪')
+              ? (failed ? '部分字体暂未就绪，将在后台继续重试' : '标识牌字体已全部就绪')
               : `正在加载字体（${settled}/${total}）：${name}`;
             setStage(stageId, state, settled / total, detail, summary);
           }
@@ -209,7 +229,25 @@
       const ready = await Promise.race([all, timeout]);
       global.clearTimeout(slowHint);
       if (timedOut) {
-        setStage(stageId, 'warning', 1, '已超时，使用备用字体', '字体加载超时，使用备用字体继续');
+        setStage(stageId, 'warning', 1, '已先进入编辑器，后台继续加载', '字体加载较慢，已先打开编辑器并在后台继续加载');
+      }
+      if (!ready) {
+        // 超时或首轮失败时不放弃，在后台再做一次静默重试，就绪后触发重排。
+        all.then(completed => {
+          if (completed) {
+            global.SignFontManager?.notifyFontsUpdated({ reason: 'background-ready' });
+            if (typeof options.onLateReady === 'function') options.onLateReady();
+            return;
+          }
+          global.setTimeout(() => {
+            Promise.all(specs.map(spec => loadSpecWithRetry(spec, 1))).then(results => {
+              if (results.some(Boolean)) {
+                global.SignFontManager?.notifyFontsUpdated({ reason: 'background-retry-ready' });
+                if (typeof options.onLateReady === 'function') options.onLateReady();
+              }
+            });
+          }, 2000);
+        });
       }
       return ready;
     }

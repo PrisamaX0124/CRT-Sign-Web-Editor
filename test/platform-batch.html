@@ -457,9 +457,16 @@
       }
     });
 
-    await test('批量仅请求同源字体，每个字体只读取一次，界面只有本地打包下载', async () => {
-      assert(requests.every(request => request.method === 'GET' && request.address.origin === editor.location.origin &&
-        request.address.pathname.includes('/fonts/')), '批量生成发起了其他网络请求');
+    await test('批量只请求同源字体，每个文件只读取一次，压缩包在本机生成', async () => {
+      const fontDirectory = new URL('fonts/', editor.location.href).pathname;
+      const fontSubsetDirectory = new URL('fonts-subsets/', editor.location.href).pathname;
+      const isFontSubset = path => path.startsWith(fontSubsetDirectory) && path.endsWith('.woff2');
+      assert(requests.some(request => isFontSubset(request.address.pathname)), '批量生成应按需读取字体分片');
+      assert(requests.every(request => {
+        const path = request.address.pathname;
+        return request.method === 'GET' && request.address.origin === editor.location.origin &&
+          (isFontSubset(path) || (path.startsWith(fontDirectory) && path.endsWith('.ttf')));
+      }), '批量生成发起了字体以外的网络请求');
       assert(new Set(requests.map(request => request.address.href)).size === requests.length, '重复读取导出字体');
       assert(!control('dialog').querySelector('[data-open-image-upload]'), '批量窗口中出现图床上传入口');
       assert(find('[data-open-image-upload]'), '原有单张上传按钮丢失');

@@ -17,21 +17,24 @@
     };
   }
 
-  async function thumbnailFonts(usedFonts) {
+  async function thumbnailFonts(usedFonts, fontOptions) {
     const exporter = global.SignExporters;
-    const fonts = await exporter.ensureUsedFontData(usedFonts).catch(() => ({}));
+    const fonts = await exporter.ensureUsedFontData(usedFonts, fontOptions).catch(() => ({}));
     return Object.entries(fonts).map(([file, data]) => {
-      if (!fontStyles.has(file)) {
+      const cacheKey = Array.isArray(data)
+        ? file + ':' + data.map(item => item.url || item.unicodeRange || '').join('|')
+        : file + ':' + (typeof data === 'string' ? data.length : '');
+      if (!fontStyles.has(cacheKey)) {
         const rules = exporter.buildFontCSS(usedFonts, { [file]: data });
-        fontStyles.set(file, new Blob([rules]));
+        fontStyles.set(cacheKey, new Blob([rules]));
       }
-      return fontStyles.get(file);
+      return fontStyles.get(cacheKey);
     });
   }
 
-  async function rasterize({ drawing, size, usedFonts, cropVertical }, signal) {
+  async function rasterize({ drawing, size, usedFonts, fontOptions, cropVertical }, signal) {
     const thumbnail = thumbnailSize(size, cropVertical);
-    const rules = await thumbnailFonts(usedFonts);
+    const rules = await thumbnailFonts(usedFonts, fontOptions);
     signal.throwIfAborted();
     drawing.setAttribute('viewBox', thumbnail.viewBox);
     drawing.setAttribute('width', thumbnail.width);

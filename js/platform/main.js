@@ -860,7 +860,7 @@
     await App.ready;
     if (signal) signal.throwIfAborted();
     var scene = R.metrics(state, App.measure);
-    var fonts = await SignExporters.ensureUsedFontData(scene.usedFonts);
+    var fonts = await SignExporters.ensureUsedFontData(scene.usedFonts, { scene: scene });
     if (signal) signal.throwIfAborted();
     var drawing = drawExportSVG(scene, fonts);
     return {
@@ -916,15 +916,35 @@
     ],
   }) : null;
   render();
+  var platformUsedFonts = Object.assign({ zh400: true, num400: true }, App.scene && App.scene.usedFonts);
+  var platformSpecs = global.SignFontManager
+    ? global.SignFontManager.specsForUsedFonts(platformUsedFonts, Core.FONT_LOAD_SPECS)
+    : Core.FONT_LOAD_SPECS;
+  var platformSampleText = '新站点换乘列车行驶方向 Station Transfer 0123456789' +
+    (App.state.line || '') + (App.state.lineName || '') +
+    App.state.stations.map(function (s) { return (s.zh || '') + (s.en || '') + (s.code || ''); }).join('');
+  function refreshAfterFonts() {
+    App.measure = Core.createCanvasMeasurer();
+    render();
+    presetSignature = '';
+    if (library === 'presets') syncPresets();
+  }
   var fontsReady = loader
-    ? loader.loadFonts(Core.FONT_LOAD_SPECS, { sampleText: '新站点 Station 0123456789', stageId: 'fonts' }).then(function (ok) {
-        App.measure = Core.createCanvasMeasurer();
-        render();
-        presetSignature = '';
-        if (library === 'presets') syncPresets();
-        if (!ok) notice('部分字体未能加载，当前使用备用字体', 'warning');
+    ? loader.loadFonts(platformSpecs, {
+        sampleText: platformSampleText,
+        stageId: 'fonts',
+        onLateReady: function () {
+          refreshAfterFonts();
+          notice('标识牌字体已就绪，已按真实字形重新排版', 'success');
+        },
+      }).then(function (ok) {
+        refreshAfterFonts();
+        if (!ok) notice('部分字体加载较慢，将在后台继续重试；也可在「设置」导入本机字体', 'warning');
       })
-    : Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message, 'warning'); });
+    : Promise.all(platformSpecs.map(function (spec) { return document.fonts.load(spec.css, platformSampleText); })).then(refreshAfterFonts).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message, 'warning'); });
+  if (global.SignFontManager) {
+    global.SignFontManager.watchFontUpdates(refreshAfterFonts);
+  }
   global.PlatformBatchDialog.init(App, notice);
   if (loader) loader.setStage('projects', 'active', 0.3, '连接本地项目库');
   App.projectStorage = global.SignProjectDialog.init(App, {
@@ -943,7 +963,7 @@
       await App.ready;
       signal.throwIfAborted();
       const scene = R.metrics(state, App.measure);
-      return { drawing: drawExportSVG(scene), size: scene.output, usedFonts: scene.usedFonts, cropVertical: state.mode === 'vertical' };
+      return { drawing: drawExportSVG(scene), size: scene.output, usedFonts: scene.usedFonts, fontOptions: { scene: scene }, cropVertical: state.mode === 'vertical' };
     },
     formatDetails: function (project) { return (project.lineName || '未命名线路') + ' · ' + (project.stationCount || 0) + ' 站'; },
   });

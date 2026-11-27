@@ -7,8 +7,21 @@
 (function (global) {
   'use strict';
 
-  var FONT_TIMEOUT_MS = 30000;   // 字体面加载的兑底放行时限
-  var FONT_SLOW_HINT_MS = 8000;  // 超过此时长更新提示文案
+  var FONT_TIMEOUT_MS = 12000;   // 字体分片加载的兜底放行时限
+  var FONT_SLOW_HINT_MS = 4500;  // 超过此时长更新提示文案
+
+  function initialFontLoadPlan(state) {
+    var used = SignExporters.collectUsedFonts(state);
+    used.zh400 = true;
+    used.num400 = true;
+    var specs = global.SignFontManager
+      ? global.SignFontManager.specsForUsedFonts(used, SignCore.FONT_LOAD_SPECS)
+      : SignCore.FONT_LOAD_SPECS;
+    var chars = SignExporters.collectUsedCharacters(state);
+    var sample = '人民广场出口入口号线换乘 Station Exit Line 0123456789' +
+      Object.keys(chars).map(function (key) { return chars[key]; }).join('');
+    return { specs: specs, sampleText: sample };
+  }
 
   function wireStaticButtons() {
     document.getElementById('guidance-undo').addEventListener('click', App.undo);
@@ -41,13 +54,23 @@
       ],
     });
 
-    App.ready = loader.loadFonts(SignCore.FONT_LOAD_SPECS, {
+    var initialState = SignStorage.loadAutosave() || SignState.createSign();
+    var fontPlan = initialFontLoadPlan(initialState);
+
+    App.ready = loader.loadFonts(fontPlan.specs, {
+      sampleText: fontPlan.sampleText,
       timeoutMs: FONT_TIMEOUT_MS,
       slowHintMs: FONT_SLOW_HINT_MS,
       stageId: 'fonts',
+      onLateReady: function () {
+        if (!App.state) return;
+        App.measure = SignCore.createCanvasMeasurer();
+        App.renderAll();
+        SignUI.toast('标识牌字体已就绪，已按真实字形重新排版', 'success');
+      },
     }).then(async function (fontsReady) {
       loader.setStage('projects', 'active', 0.25, '读取偏好与存档', '正在读取本地项目…');
-      App.state = SignStorage.loadAutosave() || SignState.createSign();
+      App.state = initialState;
       App.prefs = SignStorage.loadPrefs();
 
       function serializeProject() { return SignState.serializeSign(App.state); }
@@ -90,7 +113,12 @@
           signal.throwIfAborted();
           const drawing = document.createElementNS(SignCore.SVG_NS, 'svg');
           const size = SignRender.renderSignInto(drawing, state, App.measure, { clean: true });
-          return { drawing, size, usedFonts: SignExporters.collectUsedFonts(state) };
+          return {
+            drawing,
+            size,
+            usedFonts: SignExporters.collectUsedFonts(state),
+            fontOptions: { characters: SignExporters.collectUsedCharacters(state) },
+          };
         },
         formatDetails: project => (project.rowCount ?? 0) + ' 行 · ' + (project.elementCount ?? 0) +
           ' 个元素 · ' + (project.presetCount ?? 0) + ' 个预设',
@@ -103,8 +131,14 @@
       App.renderAll();
       loader.setStage('workspace', 'done', 1, '界面已就绪');
       loader.finish('准备就绪');
-      if (!fontsReady) SignUI.toast('字体未能完全加载，文字尺寸可能不准，建议刷新重试', 'warning');
-      document.fonts.ready.then(function () { App.renderAll(); });
+      if (!fontsReady) SignUI.toast('部分字体加载较慢，将在后台继续重试；也可在「设置」导入本机字体', 'warning');
+      if (global.SignFontManager) {
+        global.SignFontManager.watchFontUpdates(function () {
+          App.measure = SignCore.createCanvasMeasurer();
+          App.renderAll();
+        });
+      }
+      document.fonts.ready.then(function () { App.measure = SignCore.createCanvasMeasurer(); App.renderAll(); });
     });
   }
 

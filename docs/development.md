@@ -6,7 +6,9 @@
 
 左右侧栏可以分别收起，给画布留出更多空间。收起后，可从预览栏边缘重新展开。添加站点或点击换乘牌面浮动栏的编辑按钮时，属性栏会展开并聚焦相应控件。
 
-页眉的「设置」在当前编辑器中打开弹窗，点右上角的关闭按钮或按退出键即可回到编辑区。可更改浅色或深色主题、画布背景、动态效果和首次教程提示。设置在同一浏览器的三个编辑器中共用，已打开的编辑器也会即时应用。主题和背景只用于编辑界面，牌面和导出的图片使用项目中的颜色。
+页眉的「设置」在当前编辑器中打开弹窗，点右上角的关闭按钮或按退出键即可回到编辑区。可更改浅色或深色主题、画布背景、动态效果、首次教程提示，以及管理离线本机字体与在线字体缓存。设置与本机导入的字体在同一浏览器的三个编辑器中共用，已打开的编辑器也会即时应用。主题和背景只用于编辑界面，牌面和导出的图片使用项目中的颜色。
+
+MiSans 字体由 `gen-font-subsets.py` 从 `fonts/MiSans-*.ttf` 切分为 WOFF2 分片并生成 `fonts-subsets/manifest.js` 与 `fonts.css`，页面预览和导出均按实际字符拉取命中的分片并持久化缓存。改动源字体后需重新运行 `uv run --with fonttools --with brotli python gen-font-subsets.py` 与 `node gen-export-fonts.mjs`。
 
 首次打开每个编辑器时会显示入门教程。开始后，四个气泡依次指向对应的控件。可以返回上一步、按退出键结束，也可以从页眉的「教程」重看。
 
@@ -71,6 +73,7 @@
 | [test/element-alignment.html](../test/element-alignment.html) | 导向标识的自动排版、跨行吸附、避让动画、多选、画布限位和左右移动，站台标识的牌面选择与位置微调 |
 | [test/image-upload.html](../test/image-upload.html) | 三个编辑器的原尺寸上传、密钥设置、两家上传进度、复制地址和单独重试 |
 | [test/platform-batch.html](../test/platform-batch.html) | 站台标识批量预览、逐站反向、单列和双列方向规则、逐张导出对比、压缩包内容、取消与本地处理 |
+| [test/font-delivery.html](../test/font-delivery.html) | MiSans WOFF2 分片加载、墨区一致性、按字符导出内嵌、持久缓存与本机离线字体导入 |
 
 已安装 Playwright 的测试环境可运行 `node test/run-browser-tests.mjs`，每个页面使用独立的浏览器环境。可用 `CRT_PLAYWRIGHT_MODULE` 指定 Playwright 安装位置，用 `CRT_BROWSER_PATH` 指定本地浏览器。脚本默认连接 `http://127.0.0.1:8000/`，可用 `CRT_TEST_ADDRESS` 修改。
 

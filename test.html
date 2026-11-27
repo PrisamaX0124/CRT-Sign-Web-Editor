@@ -25,6 +25,8 @@
   <div id="fixture"></div>
 
   <script src="js/core.js"></script>
+  <script src="fonts-subsets/manifest.js"></script>
+  <script src="js/font-manager.js"></script>
   <script src="js/palettes.js"></script>
   <script src="js/palette-manager.js"></script>
   <script src="js/icons.js"></script>
@@ -875,7 +877,7 @@
       assert(Math.abs(small.zhBase - small.zhAscent - SignRender.INK_TOP_LEADING * small.pad.size) < 0.001, '小号保持标签顶齐');
     });
 
-    test('MiSans实际字体导出：内嵌真实TTF，192px高度PNG可光栅化', function () {
+    test('MiSans实际字体导出：按字符内嵌真实WOFF2分片与Frutiger，192px高度PNG可光栅化', function () {
       var S = SignState;
       var sign = S.createSign();
       sign = S.setSignWidthUnits(sign, 3);
@@ -884,7 +886,9 @@
       return SignExporters.ensureFontData(sign).then(function (embed) {
         assert(embed['MiSans-Regular.ttf'] && embed['MiSans-Bold.ttf'] && embed['Frutiger-Regular.ttf'], '导出内嵌当前使用的真实字体');
         var str = SignExporters.buildExportSVGString(sign, measure, embed);
-        assert(str.indexOf("font-family:'MiSans'") !== -1 && str.indexOf('data:font/ttf;base64,') !== -1, 'SVG内嵌MiSans');
+        assert(str.indexOf("font-family:'MiSans'") !== -1 && str.indexOf('data:font/woff2;base64,') !== -1, 'SVG按字符内嵌MiSans WOFF2分片');
+        assert(str.indexOf('data:font/ttf;base64,') !== -1, 'SVG内嵌Frutiger编号字体');
+        assert(str.length < 1024 * 1024, '分片内嵌的导出SVG体积应远小于整包TTF（当前：' + str.length + '）');
         assert(str.indexOf('Source Han Sans') === -1 && str.indexOf('Helvetica') === -1, 'SVG不引用旧默认字体');
         var url = URL.createObjectURL(new Blob([str], { type: 'image/svg+xml' }));
         return new Promise(function (resolve, reject) {

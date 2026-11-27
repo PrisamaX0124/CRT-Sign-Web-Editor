@@ -4,7 +4,7 @@
    三栏布局：元素选择区(260) | SVG 编辑区(自适应) | 属性区(260)
    ═══════════════════════════════════════════════════════════ */
 
-@import url('fonts.css');
+@import url('fonts.css?v=ce79a2c4f627');
 
 /* Shared palette manager; scoped so both editor panels use the same layout. */
 dialog.pm-dialog { width: min(860px, calc(100vw - 32px)); height: min(660px, calc(100dvh - 48px)); max-width: none; max-height: none; margin: auto; padding: 0; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--panel-bg); box-shadow: 0 24px 80px #0004; overflow: hidden; }

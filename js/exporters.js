@@ -2,8 +2,8 @@
 /**
  * exporters.js — SVG / PNG 导出（issue 06）
  *
- * 导出的文件内嵌 @font-face（HTTP按需读取fonts；本地文件加载生成的字体数据脚本），
- * 保证导出产物在任意环境（Illustrator / 其他浏览器 / 图片查看器）视觉一致。
+ * 导出的文件内嵌 @font-face（优先离线本机字体，其次按实际字符读取命中的 WOFF2 分片，
+ * 本地 file:// 回退生成的字体数据脚本），保证导出产物在任意环境视觉一致且弱网下体积最小。
  * PNG 通过 SVG → Image → Canvas 光栅化为标识牌实际像素尺寸。
  */
 (function (global) {
@@ -25,9 +25,27 @@
     cond700: 'FrutigerCondensed-Bold.ttf',
   };
 
-  // ─── 字体内嵌数据（懒加载）─────────────────────────────────
+  // ─── 字体内嵌数据（懒加载与缓存）───────────────────────────
 
   var fontDataPromises = {};
+  var chunkDataPromises = {};
+
+  function blobToDataURL(blob, fallbackMime) {
+    return new Promise(function (resolve, reject) {
+      var typed = fallbackMime && blob && typeof blob.slice === 'function'
+        ? blob.slice(0, blob.size, fallbackMime)
+        : blob;
+      var reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = function () { reject(new Error('字体读取失败')); };
+      reader.readAsDataURL(typed);
+    });
+  }
+
+  function arrayBufferToDataURL(buffer, mime) {
+    var blob = new Blob([buffer], { type: mime || 'font/ttf' });
+    return blobToDataURL(blob, mime || 'font/ttf');
+  }
 
   // file://不能fetch本地字体，但可以加载同目录的经典脚本。
   // 数据由gen-export-fonts.mjs从原始TTF生成，不替换为旧字体或系统字体。
@@ -51,21 +69,47 @@
   }
 
   function fetchFontData(file) {
-    return fetch('fonts/' + file).then(function (response) {
-      if (!response.ok) throw new Error('字体加载失败：' + file);
-      return response.blob();
-    }).then(function (blob) {
-      return new Promise(function (resolve, reject) {
-        var reader = new FileReader();
-        reader.onload = function () { resolve(reader.result); };
-        reader.onerror = function () { reject(new Error('字体读取失败：' + file)); };
-        // 静态服务器可能将TTF标成font/sfnt或application/octet-stream。
-        reader.readAsDataURL(blob.slice(0, blob.size, 'font/ttf'));
-      });
+    var manager = global.SignFontManager;
+    var url = 'fonts/' + file;
+    var blobPromise = manager && typeof manager.fetchFontBlob === 'function'
+      ? manager.fetchFontBlob(url, { mime: 'font/ttf' })
+      : fetch(url).then(function (response) {
+          if (!response.ok) throw new Error('字体加载失败：' + file);
+          return response.blob();
+        });
+    return blobPromise.then(function (blob) {
+      // 静态服务器可能将TTF标成font/sfnt或application/octet-stream。
+      return blobToDataURL(blob, 'font/ttf');
     });
   }
 
-  function loadFontData(file) {
+  function loadChunkData(chunk) {
+    if (chunkDataPromises[chunk.url]) return chunkDataPromises[chunk.url];
+    var manager = global.SignFontManager;
+    var mime = chunk.mime || 'font/woff2';
+    var blobPromise = manager && typeof manager.fetchFontBlob === 'function'
+      ? manager.fetchFontBlob(chunk.url, { mime: mime })
+      : fetch(chunk.url).then(function (response) {
+          if (!response.ok) throw new Error('字体分片加载失败：' + chunk.url);
+          return response.blob();
+        });
+    chunkDataPromises[chunk.url] = blobPromise.then(function (blob) {
+      return blobToDataURL(blob, mime);
+    }).then(function (dataUrl) {
+      return {
+        url: chunk.url,
+        dataUrl: dataUrl,
+        format: chunk.format || 'woff2',
+        unicodeRange: chunk.unicodeRange,
+      };
+    }).catch(function (err) {
+      delete chunkDataPromises[chunk.url];
+      throw err;
+    });
+    return chunkDataPromises[chunk.url];
+  }
+
+  function loadFullFontData(file) {
     if (fontDataPromises[file]) return fontDataPromises[file];
     fontDataPromises[file] = Promise.resolve().then(function () {
       if (global.location && global.location.protocol === 'file:') return loadFontScript(file);
@@ -81,22 +125,146 @@
     return fontDataPromises[file];
   }
 
+  function loadFontForFile(file, characters) {
+    var manager = global.SignFontManager;
+    if (manager && typeof manager.getLocalFont === 'function') {
+      var local = manager.getLocalFont(file);
+      if (local && local.buffer) {
+        return arrayBufferToDataURL(local.buffer, local.mime || 'font/ttf');
+      }
+    }
+
+    var isFileProtocol = global.location && global.location.protocol === 'file:';
+    if (!isFileProtocol && characters && manager && typeof manager.resolveChunks === 'function') {
+      var chunks = manager.resolveChunks(file, characters);
+      if (Array.isArray(chunks)) {
+        if (!chunks.length) {
+          var info = manager.getFamilyManifest && manager.getFamilyManifest(file);
+          if (info && info.chunks && info.chunks.length) {
+            chunks = [{
+              file: info.chunks[0].file,
+              url: info.basePath + info.chunks[0].file,
+              unicodeRange: info.chunks[0].unicodeRange,
+              format: info.format,
+              mime: info.mime,
+            }];
+          }
+        }
+        if (chunks.length) {
+          return Promise.all(chunks.map(loadChunkData)).catch(function (err) {
+            // HTTP 分片 fetch 被浏览器或网络策略拦截时，回退到同源字体数据脚本。
+            if (global.document && err && err.name === 'TypeError') {
+              return loadFullFontData(file);
+            }
+            throw err;
+          });
+        }
+      }
+    }
+
+    return loadFullFontData(file);
+  }
+
+  // ─── 收集牌面用到的字体与字符 ──────────────────────────────
+
+  /** 扫描导向标识牌，收集每个字体键对应的实际文本，供按字符加载分片使用。 */
+  function collectUsedCharacters(sign) {
+    var chars = {};
+    function append(key, value) {
+      if (!value) return;
+      chars[key] = (chars[key] || '') + String(value);
+    }
+    if (!sign || !Array.isArray(sign.rows)) return chars;
+    sign.rows.forEach(function (row) {
+      row.elements.forEach(function (el) {
+        var p = el.props || {};
+        switch (el.type) {
+          case 'bilingual-text':
+          case 'small-bilingual-text':
+            append('zh' + (p.bold ? 700 : 400), p.textZh);
+            append('en' + (p.bold ? 700 : 400), p.textEn);
+            break;
+          case 'big-number':
+            if (p.text) {
+              append('num400', p.text);
+              if (/[^\x00-\x7F]/.test(p.text)) append('zh400', p.text);
+            }
+            break;
+          case 'number-line':
+            append('num400', p.number);
+            append('zh400', '号线');
+            append('en400', 'Line ' + (p.number || ''));
+            break;
+          case 'text-line':
+            append('zh400', (p.textZh || '') + '线');
+            append('en400', p.textEn);
+            break;
+          case 'entrance':
+          case 'exit':
+            if (p.code) append('num400', p.code);
+            append('zh400', el.type === 'entrance' ? '入口' : '出口');
+            append('en400', el.type === 'entrance' ? 'Entrance' : 'Exit');
+            break;
+        }
+      });
+    });
+    return chars;
+  }
+
+  /** 从站台/换乘渲染场景节点提取每个字体键用到的实际字符。 */
+  function collectSceneCharacters(scene) {
+    var chars = {};
+    function append(key, value) {
+      if (!value) return;
+      chars[key] = (chars[key] || '') + String(value);
+    }
+    if (!scene || !Array.isArray(scene.nodes)) return chars;
+    scene.nodes.forEach(function (node) {
+      if (node.tag !== 'text' || !node.text) return;
+      var attrs = node.attrs || node.attributes || {};
+      var family = String(attrs['font-family'] || '');
+      var weight = Number(attrs['font-weight']) || 400;
+      if (family === Core.FONT_NUM || family.indexOf('Frutiger') !== -1) {
+        append('num' + (weight === 700 ? 700 : 400), node.text);
+        if (/[^\x00-\x7F]/.test(node.text)) append('zh400', node.text);
+      } else {
+        append('zh' + weight, node.text);
+      }
+    });
+    return chars;
+  }
+
   function ensureFontData(sign) {
     var used = sign ? collectUsedFonts(sign) : { zh400: true, zh600: true, zh700: true, num400: true };
-    return ensureUsedFontData(used);
+    var characters = sign ? collectUsedCharacters(sign) : null;
+    return ensureUsedFontData(used, characters ? { characters: characters } : undefined);
   }
 
   /** Shared by independent SVG editors that already collect font keys from their metrics. */
-  function ensureUsedFontData(used) {
+  function ensureUsedFontData(used, options) {
+    options = options || {};
+    var characters = options.characters || (options.scene ? collectSceneCharacters(options.scene) : null);
+    var fileChars = {};
     var files = [];
-    Object.keys(used).forEach(function (key) {
+    Object.keys(used || {}).forEach(function (key) {
       var file = FONT_FILES[key];
-      if (used[key] && file && files.indexOf(file) === -1) files.push(file);
+      if (!used[key] || !file) return;
+      if (files.indexOf(file) === -1) files.push(file);
+      if (characters && characters[key]) {
+        fileChars[file] = (fileChars[file] || '') + characters[key];
+      }
     });
-    return Promise.all(files.map(loadFontData)).then(function (values) {
-      var data = {};
-      files.forEach(function (file, i) { data[file] = values[i]; });
-      return data;
+    var ready = global.SignFontManager && typeof global.SignFontManager.restoreLocalFonts === 'function'
+      ? global.SignFontManager.restoreLocalFonts().catch(function () {})
+      : Promise.resolve();
+    return ready.then(function () {
+      return Promise.all(files.map(function (file) {
+        return loadFontForFile(file, fileChars[file]);
+      })).then(function (values) {
+        var data = {};
+        files.forEach(function (file, i) { data[file] = values[i]; });
+        return data;
+      });
     });
   }
 
@@ -140,6 +308,15 @@
     return used;
   }
 
+  function formatFromDataURL(dataUrl, fallback) {
+    if (typeof dataUrl !== 'string') return fallback;
+    if (dataUrl.indexOf('data:font/woff2') === 0) return 'woff2';
+    if (dataUrl.indexOf('data:font/woff') === 0) return 'woff';
+    if (dataUrl.indexOf('data:font/otf') === 0) return 'opentype';
+    if (dataUrl.indexOf('data:font/ttf') === 0) return 'truetype';
+    return fallback;
+  }
+
   function buildFontCSS(used, embedData) {
     var rules = [];
     var faces = {
@@ -154,17 +331,30 @@
       cond700: ["'Frutiger Condensed'", 700, 'truetype'],
     };
     var emitted = {};
-    Object.keys(used).forEach(function (key) {
+    Object.keys(used || {}).forEach(function (key) {
       if (!used[key]) return;
       var file = FONT_FILES[key];
-      var data = embedData[file];
+      var data = embedData && embedData[file];
       if (!data || emitted[file]) return;
       emitted[file] = true;
       var face = faces[key];
-      rules.push(
-        "@font-face{font-family:" + face[0] + ";src:url(" + data + ") format('" +
-        face[2] + "');font-weight:" + face[1] + ";font-style:normal}"
-      );
+      if (Array.isArray(data)) {
+        data.forEach(function (chunk) {
+          if (!chunk || !chunk.dataUrl) return;
+          var fmt = chunk.format || formatFromDataURL(chunk.dataUrl, 'woff2');
+          rules.push(
+            "@font-face{font-family:" + face[0] + ";src:url(" + chunk.dataUrl + ") format('" +
+            fmt + "');font-weight:" + face[1] + ";font-style:normal" +
+            (chunk.unicodeRange ? ";unicode-range:" + chunk.unicodeRange : '') + "}"
+          );
+        });
+      } else {
+        var format = formatFromDataURL(data, face[2]);
+        rules.push(
+          "@font-face{font-family:" + face[0] + ";src:url(" + data + ") format('" +
+          format + "');font-weight:" + face[1] + ";font-style:normal}"
+        );
+      }
     });
     return rules.join('\n');
   }
@@ -281,6 +471,8 @@
     ensureFontData: ensureFontData,
     ensureUsedFontData: ensureUsedFontData,
     collectUsedFonts: collectUsedFonts,
+    collectUsedCharacters: collectUsedCharacters,
+    collectSceneCharacters: collectSceneCharacters,
     buildFontCSS: buildFontCSS,
     buildExportSVGString: buildExportSVGString,
     rasterizePNG: rasterizePNG,
