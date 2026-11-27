@@ -907,9 +907,26 @@
       notice: notice,
     });
   }
+  var loader = global.EditorLoader ? global.EditorLoader.createSession({
+    editor: 'platform',
+    stages: [
+      { id: 'fonts', label: '标识牌字体', weight: 65, detail: '等待中' },
+      { id: 'projects', label: '本地项目与存档', weight: 20, detail: '等待中' },
+      { id: 'workspace', label: '站台排版渲染', weight: 15, detail: '等待中' },
+    ],
+  }) : null;
   render();
-  App.ready = Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message, 'warning'); });
+  var fontsReady = loader
+    ? loader.loadFonts(Core.FONT_LOAD_SPECS, { sampleText: '新站点 Station 0123456789', stageId: 'fonts' }).then(function (ok) {
+        App.measure = Core.createCanvasMeasurer();
+        render();
+        presetSignature = '';
+        if (library === 'presets') syncPresets();
+        if (!ok) notice('部分字体未能加载，当前使用备用字体', 'warning');
+      })
+    : Promise.all(Core.FONT_LOAD_SPECS.map(function (spec) { return document.fonts.load(spec.css, '新站点 Station 0123456789'); })).then(function () { App.measure = Core.createCanvasMeasurer(); render(); presetSignature = ''; if (library === 'presets') syncPresets(); }).catch(function (err) { notice('字体加载失败，当前使用备用字体：' + err.message, 'warning'); });
   global.PlatformBatchDialog.init(App, notice);
+  if (loader) loader.setStage('projects', 'active', 0.3, '连接本地项目库');
   App.projectStorage = global.SignProjectDialog.init(App, {
     library: global.PlatformProjects,
     editor: 'platform',
@@ -930,5 +947,13 @@
     },
     formatDetails: function (project) { return (project.lineName || '未命名线路') + ' · ' + (project.stationCount || 0) + ' 站'; },
   });
-  App.ready = Promise.all([App.ready, App.projectStorage.ready]);
+  var projectReady = App.projectStorage.ready.then(function () {
+    if (loader) loader.setStage('projects', 'done', 1, '已同步本地项目');
+  });
+  App.ready = Promise.all([fontsReady, projectReady]).then(function () {
+    if (loader) {
+      loader.setStage('workspace', 'done', 1, '已渲染站台标识');
+      loader.finish('准备就绪');
+    }
+  });
 })(window);

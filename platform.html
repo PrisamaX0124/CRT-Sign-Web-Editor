@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=1100">
   <title>CRT标识编辑器 - 站台标识</title>
   <script src="js/editor-preferences.js?v=1"></script>
-  <link rel="stylesheet" href="style.css?v=restored-color-picker">
-  <link rel="stylesheet" href="platform.css?v=restored-editor">
-  <link rel="stylesheet" href="project-dialog.css?v=20261125">
-  <link rel="stylesheet" href="image-upload.css?v=39bea1cc93e6">
-  <link rel="stylesheet" href="editor-interface.css?v=restored-editor">
+  <link rel="stylesheet" href="style.css?v=ccaf18d70720">
+  <link rel="stylesheet" href="platform.css?v=490fb0504076">
+  <link rel="stylesheet" href="project-dialog.css?v=685cbb38be8f">
+  <link rel="stylesheet" href="image-upload.css?v=df210d5b0446">
+  <link rel="stylesheet" href="editor-interface.css?v=6b9699f48cf9">
 </head>
 <body class="editor-page platform-page" data-editor="platform">
+  <div id="loading-overlay" hidden></div>
   <header class="editor-header">
     <div class="editor-header-content">
       <div class="editor-heading-actions">
@@ -374,7 +375,9 @@
   <dialog id="preset-dialog"><form method="dialog"><div class="batch-heading"><h2>保存标识牌预设</h2><button type="button" class="dialog-close" data-control-icon="close" aria-label="关闭预设保存"></button></div><div class="field"><label for="preset-name">预设名称</label><input id="preset-name" type="text" maxlength="80" required autofocus></div><p class="field-help">保存当前版式、线路站点、本站、行车方向、尺寸、颜色与位置微调。</p><p id="preset-error" role="alert"></p><div class="batch-buttons"><button class="btn btn-primary" id="save-preset-confirm">保存预设</button></div></form></dialog>
   <script src="js/editor-navigation.js?v=1d320fdd7a32"></script>
   <script src="js/core.js?v=public-181a8c8b1a69"></script>
-  <script src="js/editor-motion.js?v=eb549798c2c0"></script>
+  <script src="js/editor-motion.js?v=4f0a9a2097e5"></script>
+  <script src="js/editor-loader.js?v=06cc49a2c709"></script>
+  <script src="js/editor-controls.js?v=bdf2008dfa43"></script>
   <script src="js/notifications.js?v=dcfdadac9cd7"></script>
   <script src="js/editor-panels.js?v=514d00f899e7"></script>
   <script src="js/property-tabs.js?v=558ddbc0ccc4"></script>
@@ -384,7 +387,7 @@
   <script src="js/color-picker.js?v=3dbf8c7bc912"></script>
   <script src="js/exporters.js?v=f439220b937f"></script>
   <script src="js/image-upload.js?v=cf47dc54578d"></script>
-  <script src="js/image-upload-dialog.js?v=259f5ac8c61a"></script>
+  <script src="js/image-upload-dialog.js?v=c2c10b20959b"></script>
   <script src="js/platform/state.js?v=0838e6342bae"></script>
   <script src="js/platform/reference.js?v=public-80b402bac929"></script>
   <script src="js/platform/vertical-reference.js?v=public-a036244575d0"></script>
@@ -405,8 +408,8 @@
   <script src="js/projects/thumbnails.js?v=35633448b66b"></script>
   <script src="js/projects/dialog.js?v=f8d4bc726807"></script>
   <script src="js/platform/projects.js?v=7415e8c7a872"></script>
-  <script src="js/platform/main.js?v=3a16779b13f4"></script>
+  <script src="js/platform/main.js?v=1a472072c2df"></script>
   <script src="js/editor-settings.js?v=3"></script>
-  <script src="js/editor-tutorial.js?v=2"></script>
+  <script src="js/editor-tutorial.js?v=409f736526e0"></script>
 </body>
 </html>

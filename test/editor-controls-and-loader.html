@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<title>加载进度、自定义控件与展开动效测试</title>
+<style>
+  body { font: 14px system-ui; }
+  iframe { display: block; width: 1320px; height: 860px; border: 1px solid #bbb; }
+  .pass { color: #087338; }
+  .fail { color: #bd2222; }
+</style>
+<h1>加载进度、自定义控件与展开动效测试</h1>
+<p id="summary" role="status">运行中…</p>
+<ol id="results"></ol>
+<iframe id="editor" title="测试用编辑器"></iframe>
+<script>
+(async function () {
+  const frame = document.getElementById('editor');
+  const results = document.getElementById('results');
+  function assert(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  function load(path) {
+    return new Promise(resolve => {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = path;
+    });
+  }
+  function repaint(win) {
+    return new Promise(resolve => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)));
+  }
+  async function waitFor(check, message) {
+    const deadline = Date.now() + 10000;
+    while (!check()) {
+      assert(Date.now() < deadline, message);
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+  async function test(name, run) {
+    const item = document.createElement('li');
+    try {
+      await run();
+      item.className = 'pass';
+      item.textContent = name;
+    } catch (error) {
+      item.className = 'fail';
+      item.textContent = name + '。' + error.message;
+    }
+    results.append(item);
+  }
+
+  try {
+    await load('../index.html');
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    await win.App.ready;
+
+    await test('编辑器界面保持使用系统字体，不将 MiSans 设为界面字体', () => {
+      const font = win.getComputedStyle(doc.body).fontFamily;
+      assert(!font.includes('MiSans'), '界面字体不应包含 MiSans：' + font);
+    });
+
+    await test('加载界面展示精确百分比、分步加载预览，并在完成后平滑退场', async () => {
+      const session = win.EditorLoader.createSession({
+        editor: 'guidance',
+        stages: [
+          { id: 'fonts', label: '标识牌字体', weight: 60 },
+          { id: 'projects', label: '本地项目', weight: 40 },
+        ],
+      });
+      const overlay = doc.getElementById('loading-overlay');
+      const bar = doc.getElementById('loading-bar');
+      const percent = doc.getElementById('loading-percent');
+      assert(!overlay.hidden && overlay.querySelectorAll('.loading-stage').length === 2, '加载界面应展示阶段列表');
+      assert(percent.textContent === '0%' && bar.style.width === '0%', '初始进度应为 0%');
+
+      session.setStage('fonts', 'active', 0.5, '2 / 4 · MiSans 中粗', '正在加载字体（2/4）');
+      assert(percent.textContent === '30%' && bar.style.width === '30%', '加权进度应精确更新为 30%，实际：' + percent.textContent);
+      assert(doc.querySelector('[data-stage-id="fonts"] .loading-stage-detail').textContent.includes('MiSans 中粗'), '应实时预览当前加载项');
+
+      session.setStage('fonts', 'done', 1, '4 / 4 已就绪');
+      session.setStage('projects', 'done', 1, '已同步本地项目');
+      assert(percent.textContent === '100%' && bar.style.width === '100%', '全部完成后进度应为 100%');
+
+      session.finish('准备就绪');
+      await waitFor(() => overlay.hidden, '加载完成后应自动隐藏遮罩');
+    });
+
+    await test('自定义下拉控件接管原生 select，支持弹窗选择、键盘关闭和程序改值同步', async () => {
+      const nativeSelect = doc.getElementById('guidance-png-scale');
+      const wrapper = nativeSelect.closest('.custom-select');
+      const trigger = wrapper?.querySelector('.custom-select-trigger');
+      assert(wrapper && trigger, 'PNG 倍率选择器应被自定义下拉接管');
+      assert(trigger.textContent.trim() === '1×', '触发按钮应显示当前选项');
+
+      trigger.click();
+      await repaint(win);
+      const menu = doc.querySelector('.custom-select-menu');
+      assert(menu && !menu.hidden, '点击触发按钮应打开自定义下拉浮层');
+      assert(menu.dataset.placement === 'top', '底栏的下拉浮层应自动向上展开');
+
+      const option4 = menu.querySelector('.custom-select-option[data-value="4"]');
+      assert(option4, '下拉菜单应渲染全部选项');
+      option4.click();
+      await repaint(win);
+      assert(nativeSelect.value === '4' && trigger.textContent.trim() === '4×', '选择后应同步原生 select 值与按钮文案');
+
+      nativeSelect.value = '2';
+      assert(trigger.textContent.trim() === '2×', '程序直接修改 select.value 时应同步自定义按钮');
+
+      trigger.click();
+      await repaint(win);
+      assert(!menu.hidden, '再次点击应打开下拉菜单');
+      doc.activeElement.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      assert(trigger.getAttribute('aria-expanded') === 'false', '按 Esc 应关闭下拉菜单');
+    });
+
+    await test('自定义滑块使用自定义外观并实时更新填充进度变量', () => {
+      const slider = doc.querySelector('#right-panel-body input[type="range"]');
+      assert(slider && slider.classList.contains('custom-range'), '右栏滑块应启用自定义样式');
+      assert(win.getComputedStyle(slider).appearance === 'none', '滑块不应使用原生外观');
+      slider.value = slider.min;
+      assert(parseFloat(slider.style.getPropertyValue('--range-progress')) === 0, '最小值时进度应为 0%');
+      slider.value = slider.max;
+      assert(parseFloat(slider.style.getPropertyValue('--range-progress')) === 100, '最大值时进度应为 100%');
+    });
+
+    await test('上传图床弹窗的图床设置支持优雅展开/收起动效并保留 open 状态', async () => {
+      const uploadButton = doc.querySelector('[data-open-image-upload]');
+      uploadButton.click();
+      const dialog = doc.getElementById('image-upload-dialog');
+      assert(dialog?.open, '上传图床弹窗应打开');
+      const settings = doc.getElementById('image-upload-settings');
+      const summary = settings.querySelector('summary');
+      const collapse = settings.querySelector('.details-collapse');
+      assert(settings.classList.contains('animated-details') && collapse, '图床设置应挂载折叠动画容器');
+
+      const wasOpen = settings.open;
+      summary.click();
+      const running = collapse.getAnimations();
+      const reduced = win.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      assert(reduced ? running.length === 0 : running.length > 0, '点击图床设置应播放展开/收起动画');
+      await Promise.allSettled(running.map(a => a.finished));
+      assert(settings.open === !wasOpen, '动画完成后 open 状态应正确翻转');
+
+      summary.click();
+      await Promise.allSettled(collapse.getAnimations().map(a => a.finished));
+      assert(settings.open === wasOpen, '再次点击应恢复原状态');
+      dialog.close();
+    });
+
+    await test('优雅动效曲线保持舒展时长且分段控制器具备滑块指示器', () => {
+      const rootStyle = win.getComputedStyle(doc.documentElement);
+      const revealMs = parseFloat(rootStyle.getPropertyValue('--motion-reveal-duration'));
+      const panelMs = parseFloat(rootStyle.getPropertyValue('--motion-panel-duration'));
+      assert(revealMs >= 260 && panelMs >= 300, '动效时长应优雅舒展（实际：' + revealMs + 'ms / ' + panelMs + 'ms）');
+      const tabs = doc.querySelector('.property-tabs');
+      assert(tabs.classList.contains('has-seg-indicator'), '右栏分段标签应具备滑动指示器');
+    });
+
+    await load('../platform.html');
+    const pWin = frame.contentWindow;
+    const pDoc = frame.contentDocument;
+    await pWin.App.ready;
+
+    await test('站台编辑器的下拉控件、剪贴板历史和滑块均已自定义化', async () => {
+      const directionSelect = pDoc.getElementById('travel-direction');
+      const directionTrigger = directionSelect.closest('.custom-select')?.querySelector('.custom-select-trigger');
+      assert(directionTrigger, '行车方向下拉应被自定义化');
+      directionTrigger.click();
+      await repaint(pWin);
+      const menu = pDoc.querySelector('.custom-select-menu');
+      assert(menu && !menu.hidden && menu.querySelectorAll('.custom-select-option').length === 2, '行车方向自定义菜单应显示两个选项');
+      menu.querySelector('.custom-select-option[data-value="1"]').click();
+      assert(directionSelect.value === '1', '选中项应同步至行车方向');
+
+      const lengthSlider = pDoc.getElementById('hanging-length');
+      assert(lengthSlider.classList.contains('custom-range') && parseFloat(lengthSlider.style.getPropertyValue('--range-progress')) >= 0,
+        '站台吊板长度滑块应使用自定义样式并计算进度');
+
+      const historyWrapper = pDoc.getElementById('platform-clipboard-history').closest('.custom-select-icon-only');
+      assert(historyWrapper, '剪贴板历史应使用图标化自定义下拉');
+    });
+
+    await test('站台批量生成弹窗的下拉选项可点击、可用键盘聚焦', async () => {
+      pDoc.querySelector('.tutorial-welcome[open]')?.close();
+      pDoc.getElementById('open-batch-generation').click();
+      const dialog = pDoc.getElementById('batch-generation-dialog');
+      try {
+        const layout = pDoc.getElementById('batch-generation-layout');
+        const trigger = layout.closest('.custom-select').querySelector('.custom-select-trigger');
+        trigger.click();
+        const menu = pDoc.querySelector('.custom-select-menu');
+        await repaint(pWin);
+        await Promise.allSettled(menu.getAnimations().map(animation => animation.finished));
+        const option = menu.querySelector('[data-value="station"]');
+        const bounds = option.getBoundingClientRect();
+        const target = pDoc.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+        assert(option.contains(target), '鼠标应点到下拉选项');
+        assert(menu.contains(pDoc.activeElement), '打开菜单后应聚焦选项');
+        pDoc.activeElement.dispatchEvent(new pWin.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+        assert(pDoc.activeElement === option, '按向下键应聚焦下一项');
+        option.click();
+        assert(layout.value === 'station' && pDoc.activeElement === trigger, '选择后应更新版式并把焦点移回下拉控件');
+      } finally {
+        dialog.close();
+      }
+    });
+  } finally {
+    const passed = results.querySelectorAll('.pass').length;
+    const failed = results.querySelectorAll('.fail').length;
+    const summary = passed + ' 通过 / ' + failed + ' 失败';
+    document.getElementById('summary').textContent = summary;
+    document.title = (failed ? '✖ ' : '✔ ') + summary + ' 加载进度与自定义控件测试';
+  }
+})();
+</script>
+</html>

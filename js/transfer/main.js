@@ -771,12 +771,35 @@
   global.addEventListener('sign-palettes-change', () => render());
   previewScroll.addEventListener('scroll', positionToolbar);
 
+  const loader = global.EditorLoader ? global.EditorLoader.createSession({
+    editor: 'transfer',
+    stages: [
+      { id: 'fonts', label: '换乘标识字体', weight: 75, detail: '等待中' },
+      { id: 'workspace', label: '版式与画布渲染', weight: 25, detail: '等待中' },
+    ],
+  }) : null;
   render();
-  App.ready = Promise.all([
-    document.fonts.load('400 20px MiSans', '换乘 号线 Transfer Line'),
-    document.fonts.load('400 20px Frutiger', '0123456789/'),
-  ]).then(() => {
+  const transferFontSpecs = [
+    { css: '400 20px MiSans', key: 'zh400', label: 'MiSans 常规' },
+    { css: '400 20px Frutiger', key: 'num400', label: 'Frutiger 编号' },
+  ];
+  App.ready = (loader
+    ? loader.loadFonts(transferFontSpecs, { sampleText: '换乘 号线 Transfer Line 0123456789/', stageId: 'fonts' })
+    : Promise.all([
+        document.fonts.load('400 20px MiSans', '换乘 号线 Transfer Line'),
+        document.fonts.load('400 20px Frutiger', '0123456789/'),
+      ]).then(() => true)
+  ).then(fontsReady => {
+    if (loader) loader.setStage('workspace', 'active', 0.6, '重新测量并绘制', '正在渲染换乘标识…');
     App.measure = global.SignCore.createCanvasMeasurer();
     render();
-  }).catch(() => notice('字体加载失败，预览使用备用字体', 'warning'));
+    if (loader) {
+      loader.setStage('workspace', 'done', 1, '界面已就绪');
+      loader.finish('准备就绪');
+    }
+    if (!fontsReady) notice('字体加载失败，预览使用备用字体', 'warning');
+  }).catch(() => {
+    loader?.finish('使用备用字体继续');
+    notice('字体加载失败，预览使用备用字体', 'warning');
+  });
 })(window);

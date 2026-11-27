@@ -10,35 +10,6 @@
   var FONT_TIMEOUT_MS = 30000;   // 字体面加载的兑底放行时限
   var FONT_SLOW_HINT_MS = 8000;  // 超过此时长更新提示文案
 
-  function showLoading(text) {
-    var el = document.getElementById('loading-overlay');
-    el.hidden = false;
-    if (text) document.getElementById('loading-text').textContent = text;
-  }
-
-  function hideLoading() {
-    document.getElementById('loading-overlay').hidden = true;
-  }
-
-  /**
-   * 预加载全部字体面（度量依赖，未就绪不进界面）。
-   * 超过 FONT_TIMEOUT_MS 仍不齐则带系统回退放行（resolve(false)），
-   * 单面失败继续等其余面，最终返回 false 提示度量可能不准。
-   */
-  function loadFonts() {
-    var all = Promise.all(SignCore.FONT_LOAD_SPECS.map(function (s) {
-      return document.fonts.load(s.css).then(function () { return true; }, function () { return false; });
-    })).then(function (loaded) { return loaded.every(function (ready) { return ready; }); });
-    var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(false); }, FONT_TIMEOUT_MS); });
-    var slowHint = setTimeout(function () {
-      showLoading('字体加载较慢，仍在等待…（可检查网络后刷新）');
-    }, FONT_SLOW_HINT_MS);
-    return Promise.race([all, timeout]).then(function (ready) {
-      clearTimeout(slowHint);
-      return ready;
-    });
-  }
-
   function wireStaticButtons() {
     document.getElementById('guidance-undo').addEventListener('click', App.undo);
     document.getElementById('guidance-redo').addEventListener('click', App.redo);
@@ -61,9 +32,21 @@
 
   function boot() {
     if (document.getElementById('app').hidden) return;
-    showLoading('正在加载 MiSans 与编号字体…');
+    var loader = global.EditorLoader.createSession({
+      editor: 'guidance',
+      stages: [
+        { id: 'fonts', label: '标识牌字体', weight: 65, detail: '等待中' },
+        { id: 'projects', label: '本地项目与存档', weight: 20, detail: '等待中' },
+        { id: 'workspace', label: '排版与元素库', weight: 15, detail: '等待中' },
+      ],
+    });
 
-    App.ready = loadFonts().then(async function (fontsReady) {
+    App.ready = loader.loadFonts(SignCore.FONT_LOAD_SPECS, {
+      timeoutMs: FONT_TIMEOUT_MS,
+      slowHintMs: FONT_SLOW_HINT_MS,
+      stageId: 'fonts',
+    }).then(async function (fontsReady) {
+      loader.setStage('projects', 'active', 0.25, '读取偏好与存档', '正在读取本地项目…');
       App.state = SignStorage.loadAutosave() || SignState.createSign();
       App.prefs = SignStorage.loadPrefs();
 
@@ -113,10 +96,13 @@
           ' 个元素 · ' + (project.presetCount ?? 0) + ' 个预设',
       });
       await App.autosave.ready;
+      loader.setStage('projects', 'done', 1, '已同步本地项目');
+      loader.setStage('workspace', 'active', 0.5, '构建元素库与画布', '正在渲染标识牌…');
       App.measure = SignCore.createCanvasMeasurer();
       SignPanel.buildPalette();
       App.renderAll();
-      hideLoading();
+      loader.setStage('workspace', 'done', 1, '界面已就绪');
+      loader.finish('准备就绪');
       if (!fontsReady) SignUI.toast('字体未能完全加载，文字尺寸可能不准，建议刷新重试', 'warning');
       document.fonts.ready.then(function () { App.renderAll(); });
     });

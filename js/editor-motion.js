@@ -28,7 +28,7 @@
 
   function revealGraphic(graphic) {
     stopGraphicTransition(graphic);
-    const animation = play(graphic, [{ opacity: .52 }, { opacity: 1 }], 'reveal');
+    const animation = play(graphic, [{ opacity: .8 }, { opacity: 1 }], 'reveal');
     if (!animation) return;
     function clear() {
       if (graphicTransitions.get(graphic) === clear) graphicTransitions.delete(graphic);
@@ -80,7 +80,7 @@
     const previous = sectionAnimations.get(section);
     const start = previous?.playState === 'running'
       ? { opacity: style.opacity, transform: style.transform }
-      : { opacity: .46, transform: direction ? 'translateX(' + direction * 12 + 'px)' : 'translateY(5px)' };
+      : { opacity: .72, transform: direction ? 'translateX(' + direction * 12 + 'px)' : 'translateY(5px)' };
     previous?.cancel();
     if (duration > 0 && typeof section.animate === 'function') {
       const animation = section.animate([start, { opacity: 1, transform: 'none' }], {

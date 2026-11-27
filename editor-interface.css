@@ -1,23 +1,24 @@
 .editor-header .project-header-actions { gap: 6px; }
-.editor-help-actions { display: flex; align-items: center; gap: 4px; }
+.editor-help-actions { display: flex; align-items: center; gap: 3px; }
 .editor-header-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-width: 36px;
+  min-width: 34px;
   min-height: 36px;
-  padding: 0 8px;
+  padding: 0 9px;
   border: 1px solid transparent;
   border-radius: 8px;
   color: var(--text-dim);
   font-size: 12px;
+  font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
 }
 .editor-header-action svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -26,7 +27,7 @@
   flex: none;
 }
 .editor-header-action circle { fill: var(--panel-bg); }
-.editor-header-action:hover, .editor-header-action:focus-visible { border-color: var(--border); color: var(--text); background: var(--surface-soft); }
+.editor-header-action:hover, .editor-header-action:focus-visible { border-color: var(--border-subtle); color: var(--text); background: var(--surface-soft); }
 .editor-header-action:focus-visible { outline: 2px solid var(--selection); outline-offset: 2px; }
 [data-canvas-background="grid"] .preview-zoom-viewport {
   background-image: linear-gradient(to right, var(--canvas-dot) 1px, transparent 1px), linear-gradient(to bottom, var(--canvas-dot) 1px, transparent 1px);
@@ -34,13 +35,13 @@
 }
 [data-canvas-background="plain"] .preview-zoom-viewport { background-image: none; }
 .editor-footer-controls { display: flex; align-items: center; gap: 8px; }
-.editor-footer .preview-zoom { gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
-.editor-footer .preview-zoom > :is(button, select) { height: 27px; border: 1px solid transparent; border-radius: 6px; background: transparent; }
-.editor-footer .preview-zoom > button { width: 27px; font-size: 17px; line-height: 1; }
-.editor-footer .preview-zoom > select { width: 120px; text-align: center; }
-.editor-footer .preview-zoom > :enabled:is(:hover, :focus-visible) { color: var(--text); background: var(--control-bg); border-color: var(--border); }
-.editor-footer .preview-position-lock[aria-pressed="true"] { background: var(--selection-soft); border-color: var(--selection); }
-.editor-footer .preview-zoom > button:disabled { opacity: .38; cursor: default; }
+.editor-footer .preview-zoom { gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--tab-surface); }
+.editor-footer .preview-zoom > :is(button, select) { height: 26px; border: 1px solid transparent; border-radius: 6px; background: transparent; }
+.editor-footer .preview-zoom > button { width: 26px; font-size: 16px; line-height: 1; }
+.editor-footer .preview-zoom > select { width: 120px; text-align: center; font-variant-numeric: tabular-nums; }
+.editor-footer .preview-zoom > :enabled:is(:hover, :focus-visible) { color: var(--text); background: var(--tab-selected); border-color: var(--border-subtle); box-shadow: var(--tab-shadow); }
+.editor-footer .preview-position-lock[aria-pressed="true"] { background: var(--tab-selected); border-color: var(--selection); color: var(--text); }
+.editor-footer .preview-zoom > button:disabled { opacity: .35; cursor: default; }
 .editor-settings-dialog .project-dialog-heading { padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 
 :root[data-editor-motion="reduced"] {
@@ -49,10 +50,14 @@
   --motion-dismiss-duration: 0ms;
   --motion-panel-duration: 0ms;
 }
-[data-editor-motion="reduced"] :is(.editor-choices, .editor-choices a, .toast, .toast.leaving, .loading-spinner),
-[data-editor-motion="reduced"] .project-save[data-save-state="saving"] > [role="status"]::before,
-[data-editor-motion="reduced"] .editor-repository::before { animation: none; }
-[data-editor-motion="reduced"] :is(button:enabled:active, .editor-repository:is(:hover, :focus-visible) .repository-arrow) { translate: none; }
+[data-editor-motion="reduced"] :is(.editor-choices, .editor-choices a, .toast, .toast.leaving, .loading-spinner, .loading-card, .loading-dot, .loading-stage-indicator, .custom-select-menu, .custom-select-menu.is-closing, .footer-shortcuts[open] > .shortcut-hints, .project-card-menu[open] > div),
+[data-editor-motion="reduced"] .project-save[data-save-state="saving"] > [role="status"]::before { animation: none; }
+[data-editor-motion="reduced"] .has-seg-indicator::before,
+[data-editor-motion="reduced"] .loading-bar,
+[data-editor-motion="reduced"] .tutorial-bubble { transition: none; }
+[data-editor-motion="reduced"] .editor-repository::before { content: none; animation: none; }
+[data-editor-motion="reduced"] :is(.btn:enabled:active, .palette-card:enabled:active, .preset-card:enabled:active) { transform: none; }
+[data-editor-motion="reduced"] .editor-repository:is(:hover, :focus-visible) .repository-arrow { translate: none; }
 [data-editor-motion="reduced"] .cp-swatch:hover { transform: none; }
 
 .tutorial-welcome {
@@ -64,9 +69,10 @@
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 14px;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 24%);
   overflow: auto;
 }
-.tutorial-welcome::backdrop { background: rgb(0 0 0 / 48%); }
+.tutorial-welcome::backdrop { background: rgb(0 0 0 / 42%); backdrop-filter: blur(4px); }
 .tutorial-art {
   display: grid;
   place-items: center;
@@ -88,13 +94,16 @@
   inset: auto;
   margin: 0;
   width: min(300px, calc(100vw - 24px));
-  padding: 13px 15px 15px;
+  padding: 14px 16px 15px;
   overflow: visible;
   border: 1px solid var(--selection);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--panel-bg);
   color: var(--text);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 16%);
+  box-shadow: var(--elevated-shadow);
+}
+.tutorial-bubble[data-positioned="true"] {
+  transition: left var(--motion-panel-duration) var(--motion-enter), top var(--motion-panel-duration) var(--motion-enter);
 }
 .tutorial-bubble::before {
   content: '';

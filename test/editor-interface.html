@@ -174,16 +174,18 @@
       assert(find(settings, '[name="theme"][value="system"]').checked && !find(settings, '[name="motion"]').checked, '恢复默认设置有遗漏');
     });
 
-    await test('开关两端为半圆、拨钮为正圆，滑条恢复原生样式且可聚焦和步进', async function () {
+    await test('开关两端为半圆、拨钮为正圆，滑条使用自定义外观且可聚焦和步进', async function () {
       const platform = opened[2];
       const range = find(platform, '#hanging-length');
-      assert(range && platform.getComputedStyle(range).appearance !== 'none', '滑条应使用原生样式');
+      assert(range && platform.getComputedStyle(range).appearance === 'none' && range.classList.contains('custom-range'), '滑条应使用自定义外观');
       range.focus();
       assert(platform.document.activeElement === range, '滑条应可用键盘聚焦');
       const initial = range.valueAsNumber;
+      const beforeProgress = parseFloat(range.style.getPropertyValue('--range-progress'));
       range.stepUp();
       range.dispatchEvent(new platform.Event('input', { bubbles: true }));
-      assert(range.valueAsNumber > initial, '滑条应保留原生步进');
+      const afterProgress = parseFloat(range.style.getPropertyValue('--range-progress'));
+      assert(range.valueAsNumber > initial && afterProgress > beforeProgress, '滑条应保留步进并同步自定义进度条');
 
       const panelSwitch = find(platform, '#line-pattern-enabled > span');
       const trigger = find(platform, '[data-editor-settings]');

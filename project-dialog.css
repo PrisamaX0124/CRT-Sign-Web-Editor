@@ -1,6 +1,6 @@
 .project-header-actions { grid-area: 1 / 3; display: flex; justify-content: flex-end; align-items: center; gap: 10px; min-width: 0; }
 .project-header-actions > .editor-repository { flex: none; }
-.project-entry.btn { width: auto; min-height: 42px; margin: 0; padding-inline: 12px; white-space: nowrap; }
+.project-entry.btn { width: auto; min-height: 36px; margin: 0; padding-inline: 12px; white-space: nowrap; }
 .project-entry[hidden] { display: none; }
 .preview-toolbar:has(.project-preview-title) { flex-wrap: wrap; }
 .preview-toolbar:has(.project-preview-title) .preview-toolbar-actions { margin-inline-start: auto; }
@@ -52,7 +52,7 @@
   box-shadow: 0 16px 56px #0004;
 }
 .project-dialog-small { width: min(420px, calc(100vw - 36px)); }
-:is(.project-dialog, .editor-settings-dialog)::backdrop { background: #0007; }
+:is(.project-dialog, .editor-settings-dialog)::backdrop { background: #0007; backdrop-filter: blur(4px); }
 :is(.project-dialog, .editor-settings-dialog):not([open]),
 :is(.project-dialog, .editor-settings-dialog):not([open])::backdrop { pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) {
@@ -118,10 +118,12 @@
   min-width: 0;
   padding: 14px 48px 14px 14px;
   border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-soft);
+  border-radius: 10px;
+  background: var(--control-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 3%);
 }
 .project-card[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.project-card:not([aria-current="true"]):hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); box-shadow: 0 4px 14px rgb(0 0 0 / 6%); }
 .project-list[data-view="cards"] .project-card { padding: 10px; }
 .project-card-preview {
   position: relative;

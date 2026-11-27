@@ -122,10 +122,19 @@
       return { key: settings.key(provider), relay: settings.relay };
     }
 
+    function setSettingsOpen(open) {
+      if (settingsPanel.open === open) return;
+      if (dialog.open && typeof settingsPanel.setOpenAnimated === 'function') {
+        settingsPanel.setOpenAnimated(open);
+      } else {
+        settingsPanel.open = open;
+      }
+    }
+
     function openMissingSettings() {
       for (const provider of selectedProviders()) {
         try { upload.checkSettings(provider, providerSettings(provider)); }
-        catch { settingsPanel.open = true; return; }
+        catch { setSettingsOpen(true); return; }
       }
     }
 
@@ -242,7 +251,7 @@
       cancelUploads();
       const batch = currentBatch = { createImage, image: null, triedFirstCopy: false, controller: new AbortController() };
       results.replaceChildren();
-      settingsPanel.open = false;
+      setSettingsOpen(false);
       openMissingSettings();
       const rows = selectedProviders().map(makeResult);
       batch.results = rows;
@@ -253,6 +262,7 @@
     });
 
     document.body.append(dialog);
+    global.EditorControls?.scan(dialog);
     return {
       open(generateImage) {
         if (dialog.open) return;

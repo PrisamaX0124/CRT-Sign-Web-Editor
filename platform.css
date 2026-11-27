@@ -29,15 +29,15 @@
   background: var(--accent-soft);
   pointer-events: none;
 }
-.station-item { display: flex; align-items: center; width: 100%; padding: 7px; gap: 7px; border: 1px solid transparent; border-radius: 8px; text-align: left; margin: 3px 0; min-height: 48px; }
+.station-item { display: flex; align-items: center; width: 100%; padding: 7px 8px; gap: 7px; border: 1px solid transparent; border-radius: 8px; text-align: left; margin: 2px 0; min-height: 46px; }
 .station-item:hover { background: var(--surface-soft); }
 .station-item:has(.station-current:disabled) { background: var(--surface-soft); }
 .station-item:has(.station-select[aria-pressed="true"]) { border-color: var(--selection); background: var(--selection-soft); }
-.station-select { display: flex; flex: 1; min-width: 0; align-items: center; gap: 7px; text-align: left; }
+.station-select { display: flex; flex: 1; min-width: 0; align-items: center; gap: 8px; text-align: left; }
 .station-current {
-  flex: none; width: 28px; height: 28px; border-radius: 5px; --control-icon-size: 17px;
+  flex: none; width: 26px; height: 26px; border-radius: 6px; --control-icon-size: 15px;
   color: var(--text-dim); opacity: 0; pointer-events: none;
-  transition: opacity var(--motion-control-duration) var(--motion-enter);
+  transition: opacity var(--motion-control-duration) var(--motion-enter), background-color var(--motion-control-duration) var(--motion-enter);
 }
 .station-item:hover .station-current, .station-item:has(:focus-visible) .station-current, .station-current:disabled {
   opacity: 1; pointer-events: auto;
@@ -47,10 +47,10 @@
 @media (hover: none) {
   .station-item:has(.station-select[aria-pressed="true"]) .station-current { opacity: 1; pointer-events: auto; }
 }
-.station-item-code { min-width: 27px; height: 27px; padding: 0 4px; border-radius: 6px; display: grid; place-items: center; border: 1px solid var(--border); color: var(--text-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+.station-item-code { min-width: 26px; height: 24px; padding: 0 5px; border-radius: 6px; display: grid; place-items: center; background: var(--control-bg); border: 1px solid var(--border-subtle); color: var(--text-dim); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; font-variant-numeric: tabular-nums; }
 .station-item-text { flex: 1; min-width: 0; }
-.station-item-text strong { display: block; font-size: 12px; font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.station-item-text small { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.station-item-text strong { display: block; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.station-item-text small { display: block; font-size: 11px; color: var(--text-dim); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .station-list-actions { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); }
 .station-list-actions .btn { margin: 0; padding: 8px; }
 .platform-preview { min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
@@ -113,24 +113,24 @@
 .transfer-add-number .btn { margin: 0; white-space: nowrap; }
 #add-text-transfer { margin-bottom: 10px; }
 #transfer-colors:not(:empty) { display: grid; gap: 8px; margin-bottom: 8px; }
-.transfer-color { display: grid; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); }
+.transfer-color { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-soft); }
 .transfer-color-label { color: var(--text); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .transfer-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.transfer-remove { width: 28px; height: 28px; border-radius: 5px; --control-icon-size: 16px; }
+.transfer-remove { width: 28px; height: 28px; border-radius: 6px; --control-icon-size: 15px; }
 .transfer-color .field { margin: 0; }
 #transfer-bulk { margin-top: 10px; font-size: 11px; color: var(--text-dim); }
 #transfer-bulk summary { cursor: pointer; }
 #transfer-bulk .field { margin: 6px 0 0; }
 #move-selection { margin-bottom: 8px; }
 #font-scale-label { float: right; }
-#batch-dialog { margin: auto; width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 24px; background: var(--panel-bg); color: var(--text); border: 1px solid var(--border); border-radius: 12px; overflow: auto; }
-#batch-dialog::backdrop { background: rgba(0,0,0,.4); }
+#batch-dialog { margin: auto; width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 24px; background: var(--panel-bg); color: var(--text); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 80px rgb(0 0 0 / 24%); overflow: auto; }
+#batch-dialog::backdrop { background: rgba(0,0,0,.4); backdrop-filter: blur(4px); }
 .batch-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .batch-heading h2 { font-size: 16px; }
 #batch-dialog p { font-size: 12px; line-height: 1.7; }
 .batch-label { display: block; font-size: 12px; margin: 16px 0 7px; }
-#batch-text { width: 100%; min-height: 220px; resize: vertical; background: var(--control-bg); color: var(--text); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font: 12px/1.8 Consolas, 'Microsoft YaHei', monospace; }
-.batch-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 15px; }
+#batch-text { width: 100%; min-height: 220px; resize: vertical; background: var(--control-bg); color: var(--text); border: 1px solid var(--border); padding: 12px; border-radius: 8px; font: 12px/1.8 ui-monospace, SFMono-Regular, Consolas, 'Microsoft YaHei', monospace; }
+.batch-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
 .batch-buttons .btn { width: auto; min-width: 90px; margin: 0; }
 #batch-error { color: var(--danger); margin-top: 8px; }
 #batch-generation-dialog, #batch-generation-detail {
@@ -140,12 +140,13 @@
   background: var(--panel-bg);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 24%);
   overflow: auto;
 }
 #batch-generation-dialog { width: min(780px, calc(100vw - 32px)); font-size: 13px; }
 #batch-generation-detail { width: min(1060px, calc(100vw - 32px)); }
-#batch-generation-dialog::backdrop, #batch-generation-detail::backdrop { background: rgba(0, 0, 0, .4); }
+#batch-generation-dialog::backdrop, #batch-generation-detail::backdrop { background: rgba(0, 0, 0, .4); backdrop-filter: blur(4px); }
 .batch-generation-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 #batch-generation-settings select {
   min-width: 0;
@@ -214,28 +215,28 @@
 #element-multi-outlines { position: absolute; inset: 0; pointer-events: none; }
 .platform-element-outline { position: absolute; pointer-events: none; border: 1px dashed var(--selection); border-radius: 3px; background: var(--selection-soft); z-index: 10; }
 .platform-element-outline.selected { border: 2px solid var(--selection); background: transparent; }
-#platform-element-toolbar { position: absolute; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px; max-width: calc(100% - 16px); background: var(--panel-bg); border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 3px 16px rgba(0,0,0,.14); z-index: 20; }
-#platform-element-toolbar button { min-width: 26px; height: 27px; padding: 4px 5px; font-size: 11px; border-radius: 4px; }
+#platform-element-toolbar { position: absolute; display: flex; flex-wrap: wrap; align-items: center; gap: 3px; padding: 5px; max-width: calc(100% - 16px); background: color-mix(in srgb, var(--panel-bg) 92%, transparent); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--elevated-shadow); z-index: 20; }
+#platform-element-toolbar button { min-width: 26px; height: 28px; padding: 4px 6px; font-size: 11px; border-radius: 6px; }
 #platform-element-toolbar button:not([data-control-icon="delete"]):hover { background: var(--surface-soft); }
 .platform-tool-group { display: flex; align-items: center; gap: 2px; }
 .platform-tool-group + .platform-tool-group { border-left: 1px solid var(--border); padding-left: 4px; }
 #platform-element-toolbar button { display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
 .tool-group-label { color: var(--text-dim); font-size: 10px; margin: 0 3px; }
-#toolbar-element-label { font-size: 10px; color: var(--text-dim); max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-inline: 4px; }
+#toolbar-element-label { font-size: 10.5px; color: var(--text-dim); max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-inline: 4px; }
 .toolbar-separator { width: 1px; height: 17px; background: var(--border); margin-inline: 3px; }
 #preset-list { overflow-y: auto; flex: 1; padding: 10px; }
 .preset-empty { font-size: 11px; line-height: 1.8; padding: 12px 4px; color: var(--text-dim); }
-.platform-preset { position: relative; margin-bottom: 9px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.platform-preset { position: relative; margin-bottom: 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--control-bg); overflow: hidden; box-shadow: 0 1px 2px rgb(0 0 0 / 3%); }
 .preset-load { display: block; width: 100%; text-align: left; padding: 8px; }
 .preset-load:hover { background: var(--surface-soft); }
-.preset-load svg { display: block; width: 100%; height: 55px; margin-bottom: 8px; background: white; }
+.preset-load svg { display: block; width: 100%; height: 55px; margin-bottom: 8px; background: white; border-radius: 5px; }
 .preset-load strong { display: block; font-size: 12px; padding-right: 17px; word-break: break-word; }
 .preset-load small { display: block; font-size: 10px; color: var(--text-dim); margin-top: 4px; }
-.preset-remove { position: absolute; right: 4px; bottom: 17px; width: 24px; height: 24px; border-radius: 4px; --control-icon-size: 14px; }
-#save-preset { margin: 8px 10px 12px; width: auto; font-size: 11px; }
-#preset-dialog { margin: auto; width: min(420px, calc(100vw - 32px)); padding: 22px; background: var(--panel-bg); color: var(--text); border: 1px solid var(--border); border-radius: 10px; }
-#preset-dialog::backdrop { background: rgba(0,0,0,.4); }
+.preset-remove { position: absolute; right: 5px; bottom: 16px; width: 24px; height: 24px; border-radius: 5px; --control-icon-size: 14px; }
+#save-preset { margin: 8px 10px 12px; width: auto; font-size: 12px; }
+#preset-dialog { margin: auto; width: min(420px, calc(100vw - 32px)); padding: 22px; background: var(--panel-bg); color: var(--text); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 80px rgb(0 0 0 / 24%); }
+#preset-dialog::backdrop { background: rgba(0,0,0,.4); backdrop-filter: blur(4px); }
 #preset-name { width: 100%; }
 #preset-error { color: var(--danger); font-size: 12px; margin-top: 8px; }
-.platform-stations { --editor-panel-width: 224px; }
+.platform-stations { --editor-panel-width: 244px; }
 .platform-workspace .platform-properties { --editor-panel-width: 272px; }

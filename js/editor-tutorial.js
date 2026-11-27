@@ -116,6 +116,10 @@
     bubble.style.top = top + 'px';
     bubble.style.setProperty('--tutorial-pointer', pointer + 'px');
     bubble.dataset.side = side;
+    if (!bubble.dataset.positioned) {
+      bubble.getBoundingClientRect();
+      bubble.dataset.positioned = 'true';
+    }
   }
 
   function clearTarget() {
@@ -160,6 +164,7 @@
 
   function endGuide() {
     guideOpen = false;
+    delete bubble.dataset.positioned;
     clearTarget();
     bubble.hidePopover();
     trigger.focus({ preventScroll: true });
